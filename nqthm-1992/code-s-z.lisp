@@ -234,7 +234,7 @@
 
 ;   This function is FUNCALLed and therefore may not be made a MACRO.
 
-  (EXECUTE (QUOTE SETTLED-DOWN-CLAUSE)
+  (EXECUTE-PROCESS (QUOTE SETTLED-DOWN-CLAUSE)
            CL HIST (QUOTE SIMPLIFY-SENT)
            (QUOTE ELIMINATE-DESTRUCTORS-SENT)))
 
@@ -584,7 +584,7 @@
 
 ;   This function is FUNCALLed and therefore may not be made a MACRO.
 
-  (EXECUTE (QUOTE SIMPLIFY-CLAUSE)
+  (EXECUTE-PROCESS (QUOTE SIMPLIFY-CLAUSE)
            CL HIST (QUOTE SIMPLIFY-SENT)
            (QUOTE SETTLED-DOWN-SENT)))
 
