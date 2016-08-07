@@ -1,0 +1,120 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    STORE-RESULTP.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  An inverting 7-to-1 mux, with an implied F for the 8th data input.
+
+(defn store-resultp-mux (s0 s1 s2 d0 d1 d2 d3 d4 d5 d6)
+  (let ((s0- (b-not s0))
+        (s1- (b-not s1))
+        (s2- (b-not s2)))
+    (let ((x01 (ao2 s0- d0 s0 d1))
+          (x23 (ao2 s0- d2 s0 d3))
+          (x45 (ao2 s0- d4 s0 d5))
+          (x67 (b-nand s0- d6)))
+      (let ((x0123 (ao2 s1- x01 s1 x23))
+            (x4567 (ao2 s1- x45 s1 x67)))
+        (ao2 s2- x0123 s2 x4567)))))
+
+(defn-to-module store-resultp-mux)
+
+;;; Alternate definition of store-resultp.
+
+(defn b-store-resultp (store-cc flags)
+  (let ((s0 (car store-cc))
+        (s1 (cadr store-cc))
+        (s2 (caddr store-cc))
+        (s3 (cadddr store-cc))
+        (z (car flags))
+        (n (cadr flags))
+        (v (caddr flags))
+        (c (cadddr flags)))
+    (b-xor s0 (store-resultp-mux
+               s1 s2 s3
+               c v n z
+               (b-or c z) (b-xor n v) (b-or z (b-xor n v))))))
+
+(disable b-store-resultp)
+
+(defn f$b-store-resultp (store-cc flags)
+  (let ((s0 (car store-cc))
+        (s1 (cadr store-cc))
+        (s2 (caddr store-cc))
+        (s3 (cadddr store-cc))
+        (z (car flags))
+        (n (cadr flags))
+        (v (caddr flags))
+        (c (cadddr flags)))
+    (f-xor s0 (f$store-resultp-mux
+               s1 s2 s3
+               c v n z
+               (f-or c z) (f-xor n v) (f-or z (f-xor n v))))))
+
+(disable f$b-store-resultp)
+
+(prove-lemma f$b-store-resultp=b-store-resultp (rewrite)
+  (implies
+   (and
+    (bvp store-cc) (equal (length store-cc) 4)
+    (bvp flags) (equal (length flags) 4))
+  (equal (f$b-store-resultp store-cc flags)
+         (b-store-resultp store-cc flags)))
+  ;;Hint
+  ((enable f$b-store-resultp b-store-resultp boolp-b-gates bvp-length)
+   (disable-theory f-gates)))
+
+(defn b-store-resultp* ()
+  '(b-store-resultp (s0 s1 s2 s3 z n v c) (result)
+                    ((g0 (cz) b-or (c z))
+                     (g1 (nv) b-xor (n v))
+                     (g2 (znv) b-or (z nv))
+                     (g3 (mux) store-resultp-mux (s1 s2 s3 c v n z cz nv znv))
+                     (g4 (result) b-xor (s0 mux)))
+                    nil))
+
+(module-predicate b-store-resultp*)
+
+(module-netlist b-store-resultp*)
+
+;;;  Proof of equivalence.
+
+(prove-lemma b-store-resultp=store-resultp$help (rewrite)
+  (implies
+   (and
+    (boolp s0) (boolp s1) (boolp s2) (boolp s3)
+    (boolp s4) (boolp s5) (boolp s6) (boolp s7))
+   (equal (b-store-resultp (list s0 s1 s2 s3) (list s4 s5 s6 s7))
+          (store-resultp (list s0 s1 s2 s3) (list s4 s5 s6 s7))))
+  ;;Hint
+  ((enable b-store-resultp store-resultp boolp)))
+
+(prove-lemma b-store-resultp=store-resultp (rewrite)
+  (implies
+   (and
+    (bvp store-cc) (equal (length store-cc) 4)
+    (bvp flags) (equal (length flags) 4))
+   (equal (b-store-resultp store-cc flags)
+          (store-resultp store-cc flags)))
+  ;;Hint
+  ((enable bvp equal-length-add1)))
+
+(prove-lemma b-store-resultp$value (rewrite)
+  (implies
+   (and (b-store-resultp& netlist)
+        (properp store-cc) (equal (length store-cc) 4)
+        (properp store-cc) (equal (length flags) 4))
+   (equal (dual-eval 0 'b-store-resultp
+                     (append store-cc flags)
+                     state netlist)
+          (list (f$b-store-resultp store-cc flags))))
+  ;;Hint
+  ((enable b-store-resultp& f$b-store-resultp
+           store-resultp-mux$value b-or$value b-xor$value
+           equal-length-add1)
+   (disable-theory f-gates)))

@@ -1,0 +1,122 @@
+The files in this subdirectory are the work of Misao Nagayama and
+Carolyn Talcott.  This directory contains event files for the events
+described in An NQTHM Mechanization of ``An Exercise in the
+Verification of Multi-Process Programs'' by Misao Nagayama and Carolyn
+Talcott, which is described in the following message.
+
+   Date: Fri, 1 Nov 91 09:00:20 -0800
+   From: Carolyn Talcott <clt@sail.stanford.edu>
+   Message-Id: <9111011700.AA16816@SAIL.Stanford.EDU>
+   To: nqthm-users@cli.com
+   Subject: abstract
+   Reply-To: clt@sail.stanford.edu
+
+
+   The following report is available  upon request to clt@sail.stanford.edu
+
+   @techreport{nagayama-talcott-91bmp,
+   author = {Nagayama, Misao and Talcott, Carolyn},
+   title = {An NQTHM Mechanization of
+      ``An Exercise in the Verification of Multi-Process Programs''},
+   institution = {Computer Science Department,  Stanford University},
+   number = {STAN-CS-91-1370},
+   year = 1991
+   }
+   Abstract:
+
+   This report presents a formal verification of the local correctness of
+   a mutex algorithm using the Boyer-Moore theorem prover.  The
+   formalization follows closely an informal proof of Manna and Pnueli.
+   The proof method of Manna and Pnueli is to first extract from the
+   program a set of states and induced transition system.  One then
+   proves suitable invariants There are two variants of the proof.  In
+   the first (atomic) variant, compound tests involving quantification
+   over a finite set are viewed as atomic operations.  In the second
+   (molecular) variant, this assumption is removed, making the details of
+   the transitions and proof somewhat more complicated.
+
+   The original Manna-Pnueli proof was formulated in terms of finite
+   sets.  This led to a concise and elegant informal proof, however one
+   that is not easy to mechanize in the Boyer-Moore logic.  In the
+   mechanized version we use a dual isomorphic representation of program
+   states based on finite sequences.  Our approach was to outline the
+   formal proof of each invariant, making explicit the case analyses,
+   assumptions and properties of operations used.  The outline served as
+   our guide in developing the formal proof.  The resulting sequence of
+   events follows the informal plan quite closely.  The main difficulties
+   encountered were in discovering the precise form of the lemmas and
+   hints necessary to guide the theorem prover.
+
+   The complete formal proofs (input to the Boyer-Moore prover) appear as
+   appendices.  Some comments on formalization techniques, difficulties,
+   and alternatives are included as comments in the theorem prover input.
+
+The events are grouped in two files mutex-atomic.events for the atomic
+case and mutex-molecular.events for the non-atomic case.    The composite files
+are segmented with page marks corresponding to the original files, and the 
+contents of each `page' is describe below.  
+
+;;;;;;;;;;;;;;;;;;;;;;   mutex-atomic.events    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+com.ev
+Definitions and lemmas common to atomic and molecular cases---manipulation
+of finite sets and arrays, flag invariants.
+
+defn.ev
+Definitions of transition relation and invariants.
+
+basic.ev
+Properties of well-formed states are turned into rewrite rules.   
+Several formulations of the rho! lemma
+are proved for use in different circumstances.
+Basic properties of the A-invariants are proved.
+
+ws.ev
+Proof that transitions preserve the well-formedness invariant Ws.
+
+lg.ev
+Proof that transitions preserve the flag invariant Lg.
+
+a0.ev
+Proof that transitions preserve Azero.
+
+a1.ev
+Proof that transitions preserve Aone.
+
+a2.ev
+Proof that transitions preserve Atwo.
+
+a3.ev
+Proof that transitions preserve Athree.
+
+
+;;;;;;;;;;;;;;;;;;;;;;   mutex-molecular.events    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+com.ev
+Definitions and lemmas common to atomic and molecular cases---manipulation
+of finite sets and arrays, flag invariants.
+
+moldefn.ev
+Definitions of molecular transition relation and invariants.
+
+molbasic.ev
+More properties of finite sets.
+Properties of well-formed  states are turned into rewrite rules.   
+Several formulations of the molecular rho! lemma
+are proved for use in different circumstances.
+
+mollg.ev
+Proof that molecular transitions preserve the flag invariant Lg.
+
+b0.ev
+Proof that  molecular transitions preserve Bzeroa, Bzerob.
+
+b1.ev
+Proof that molecular transitions preserve   Bonea, Boneb, Bonec, Boned.
+
+b2.ev
+Proof that molecular transitions preserve Btwoa, Btwob.
+
+b3.ev
+Proof that molecular transitions preserve Bthreea, Bthreeb.
+

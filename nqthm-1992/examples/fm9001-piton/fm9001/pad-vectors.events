@@ -1,0 +1,447 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PAD-VECTORS.EVENTS
+;;;
+;;;    Vector modules of I/O pads.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+;;;  It greatly simplifies the proofs at the CHIP level to package the pads
+;;;  into the modules defined in this file.  However, LSI logic requires
+;;;  every module to contain at least 1 "interior gate", i.e., a gate that is
+;;;  not a pad.  Therefore, in some places we introduce redundant buffers.
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    TTL-INPUT-PADS
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn ttl-input-pads-body (m n pi)
+  (if (zerop n)
+      nil
+    (cons
+     (list #i(g m)                              ; Occurrence name
+           (list #i(out m)                      ; Outputs
+                 #i(po m))
+           'TTL-INPUT                           ; Type TTL-INPUT
+           (list #i(in m) pi))                  ; Inputs
+     (cons
+      (list #i(b m)             ; Useless buffers for LSI's "lpace".
+            (list #i(b-out m))
+            'B-BUF
+            (list #i(out m)))
+      (ttl-input-pads-body (add1 m) (sub1 n) #i(po m))))))
+
+(disable ttl-input-pads-body)
+
+(defn ttl-input-pads-body$induction
+  (m n pi bindings state-bindings netlist)
+  (if (zerop n)
+      t
+    (ttl-input-pads-body$induction
+     (add1 m)
+     (sub1 n)
+     #i(po m)
+     (dual-eval-body-bindings 2
+                              (ttl-input-pads-body m
+                                                   n
+                                                   pi)
+                              bindings
+                              state-bindings
+                              netlist)
+     state-bindings netlist)))
+
+(defn ttl-input-pads* (n)
+  (list #i(ttl-input-pads n)
+        (cons 'pi #i(in 0 n))
+        (cons #i(po (sub1 n)) #i(b-out 0 n))
+        (ttl-input-pads-body 0 n 'pi)
+        nil))
+
+(destructuring-lemma ttl-input-pads*)
+
+(defn ttl-input-pads& (netlist n)
+    (and (equal (lookup-module #i(ttl-input-pads n) netlist)
+              (ttl-input-pads* n))
+       (let ((netlist (delete-module (index 'ttl-input-pads n) netlist)))
+         (and (ttl-input& netlist)
+              (b-buf& netlist)))))
+
+(disable ttl-input-pads&)       
+
+(defn ttl-input-pads$netlist (n)
+  (cons (ttl-input-pads* n)
+        (union (ttl-input$netlist)
+               (b-buf$netlist))))
+
+(prove-lemma ttl-input-pads-body$unbound-in-body (rewrite)
+  (implies
+   (lessp l m)
+   (unbound-in-body #i(b-out l)
+                    (ttl-input-pads-body m n pi)))
+  ;;Hint
+  ((enable unbound-in-body ttl-input-pads-body)))
+
+(disable ttl-input-pads-body$unbound-in-body)
+
+(prove-lemma ttl-input-pads-body$value (rewrite)
+  (implies
+   (and (ttl-input& netlist)
+        (b-buf& netlist))
+   (equal (collect-value
+           #i(b-out m n)
+           (dual-eval 1 (ttl-input-pads-body m n pi)
+                      bindings state-bindings netlist))
+          (v-threefix (collect-value #i(in m n) bindings))))
+  ;;Hint
+  ((enable ttl-input-pads-body ttl-input-pads-body$unbound-in-body
+           v-threefix ttl-input$value b-buf$value)
+   (induct (ttl-input-pads-body$induction m n pi
+                                          bindings state-bindings netlist))))
+
+(disable ttl-input-pads-body$value)
+
+(prove-lemma ttl-input-pads$value (rewrite)
+  (implies
+   (and (ttl-input-pads& netlist n)
+        (equal (length inputs) n)
+        (properp inputs))
+   (equal (cdr
+           (dual-eval 0 #i(ttl-input-pads n) (cons pi inputs) state netlist))
+          (v-threefix inputs)))
+  ;;Hint
+  ((enable ttl-input-pads& ttl-input-pads-body$value
+           ttl-input-pads*$destructure)
+   (disable v-threefix open-indices)))
+
+(disable ttl-input-pads$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    TTL-OUTPUT-PADS
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn ttl-output-pads-body (m n)
+  (if (zerop n)
+      nil
+    (cons
+     (list #i(b m)                      ; Useless buffers for LSI's "lpace".
+           (list #i(b-in m))
+           'B-BUF
+           (list #i(in m))) 
+     (cons
+      (list #i(g m)                     ; Occurrence name
+            (list #i(out m))            ; Outputs
+            'TTL-OUTPUT                 ; Type TTL-OUTUT
+            (list #i(b-in m)))          ; Inputs
+      (ttl-output-pads-body (add1 m) (sub1 n))))))
+
+(disable ttl-output-pads-body)
+
+(defn ttl-output-pads-body$induction
+  (m n bindings state-bindings netlist)
+  (if (zerop n)
+      t
+    (ttl-output-pads-body$induction
+     (add1 m)
+     (sub1 n)
+     (dual-eval-body-bindings 2
+                              (ttl-output-pads-body m n)
+                              bindings
+                              state-bindings
+                              netlist)
+     state-bindings netlist)))
+
+(defn ttl-output-pads* (n)
+  (list #i(ttl-output-pads n)
+        #i(in 0 n)
+        #i(out 0 n)
+        (ttl-output-pads-body 0 n)
+        nil))
+
+(destructuring-lemma ttl-output-pads*)
+
+(defn ttl-output-pads& (netlist n)
+    (and (equal (lookup-module #i(ttl-output-pads n) netlist)
+              (ttl-output-pads* n))
+       (let ((netlist (delete-module (index 'ttl-output-pads n) netlist)))
+         (and (ttl-output& netlist)
+              (b-buf& netlist)))))
+
+(disable ttl-output-pads&)      
+
+(defn ttl-output-pads$netlist (n)
+  (cons (ttl-output-pads* n)
+        (union (ttl-output$netlist)
+               (b-buf$netlist))))
+
+(prove-lemma ttl-output-pads-body$unbound-in-body (rewrite)
+  (implies
+   (lessp l m)
+   (unbound-in-body #i(out l)
+                    (ttl-output-pads-body m n)))
+  ;;Hint
+  ((enable unbound-in-body ttl-output-pads-body)))
+
+(disable ttl-output-pads-body$unbound-in-body)
+
+(prove-lemma ttl-output-pads-body$value (rewrite)
+  (implies
+   (and (ttl-output& netlist)
+        (b-buf& netlist))
+   (equal (collect-value
+           #i(out m n)
+           (dual-eval 1 (ttl-output-pads-body m n)
+                      bindings state-bindings netlist))
+          (v-threefix (collect-value #i(in m n) bindings))))
+  ;;Hint
+  ((enable ttl-output-pads-body ttl-output-pads-body$unbound-in-body
+           v-threefix ttl-output$value b-buf$value)
+   (induct (ttl-output-pads-body$induction m n 
+                                          bindings state-bindings netlist))))
+
+(disable ttl-output-pads-body$value)
+
+(prove-lemma ttl-output-pads$value (rewrite)
+  (implies
+   (and (ttl-output-pads& netlist n)
+        (equal (length inputs) n)
+        (properp inputs))
+   (equal (dual-eval 0 #i(ttl-output-pads n)
+                     inputs state netlist)
+          (v-threefix inputs)))
+  ;;Hint
+  ((enable ttl-output-pads& ttl-output-pads*$destructure
+           ttl-output-pads-body$value)
+   (disable v-threefix open-indices)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    TTL-TRI-OUTPUT-PADS
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn ttl-tri-output-pads-body (m n)
+  (if (zerop n)
+      nil
+    (cons
+     (list #i(g m)                      ; Occurrence name
+           (list #i(out m))             ; Outputs
+           'TTL-TRI-OUTPUT              ; Type TTL-TRI-OUTPUT
+           (list #i(in m) 'enable-buf)) ; Inputs
+     (ttl-tri-output-pads-body (add1 m) (sub1 n)))))
+
+(disable ttl-tri-output-pads-body)
+
+(generate-body-induction-scheme ttl-tri-output-pads-body)
+
+(defn ttl-tri-output-pads* (n)
+  (list #i(ttl-tri-output-pads n)
+        (cons 'enable #i(in 0 n))
+        #i(out 0 n)
+        (cons (list 'enable-buffer '(enable-buf)
+                    (if (lessp n 8) 'B-BUF 'B-BUF-PWR)
+                    '(enable))
+              (ttl-tri-output-pads-body 0 n))
+        nil))
+
+(destructuring-lemma ttl-tri-output-pads*)
+
+(defn ttl-tri-output-pads& (netlist n)
+    (and (equal (lookup-module #i(ttl-tri-output-pads n) netlist)
+              (ttl-tri-output-pads* n))
+       (let ((netlist (delete-module (index 'ttl-tri-output-pads n) netlist)))
+         (and (ttl-tri-output& netlist)
+              (if (lessp n 8)
+                  (b-buf& netlist)
+                  (b-buf-pwr& netlist))))))
+
+(disable ttl-tri-output-pads&)  
+
+(defn ttl-tri-output-pads$netlist (n)
+  (cons (ttl-tri-output-pads* n)
+        (union (if (lessp n 8)
+                   (b-buf$netlist)
+                   (b-buf-pwr$netlist))
+               (ttl-tri-output$netlist))))
+
+(prove-lemma ttl-tri-output-pads-body$unbound-in-body (rewrite)
+  (implies
+   (lessp l m)
+   (unbound-in-body #i(out l)
+                    (ttl-tri-output-pads-body m n)))
+  ;;Hint
+  ((enable unbound-in-body ttl-tri-output-pads-body)))
+
+(disable ttl-tri-output-pads-body$unbound-in-body)
+
+(prove-lemma ttl-tri-output-pads-body$value (rewrite)
+  (implies
+   (ttl-tri-output& netlist)
+   (equal (collect-value
+           #i(out m n)
+           (dual-eval 1 (ttl-tri-output-pads-body m n)
+                      bindings state-bindings netlist))
+          (vft-buf (f-not (value 'enable-buf bindings))
+                   (collect-value #i(in m n) bindings))))
+  ;;Hint
+  ((enable ttl-tri-output-pads-body
+           ttl-tri-output-pads-body$unbound-in-body
+           v-threefix ttl-tri-output$value make-list
+           vft-buf-rewrite)
+   (induct
+    (ttl-tri-output-pads-body$induction m n
+                                        bindings state-bindings netlist))))
+
+(disable ttl-tri-output-pads-body$value)
+
+(prove-lemma ttl-tri-output-pads$value (rewrite)
+  (implies
+   (and (ttl-tri-output-pads& netlist n)
+        (equal (length inputs) n)
+        (properp inputs))
+   (equal (dual-eval 0 #i(ttl-tri-output-pads n)
+                     (cons enable inputs)
+                     state netlist)
+          (vft-buf (f-not enable) inputs)))
+  ;;Hint
+  ((enable ttl-tri-output-pads&
+           ttl-tri-output-pads*$destructure
+           ttl-tri-output-pads-body$value
+           b-buf$value b-buf-pwr$value)
+   (disable v-threefix open-indices)))
+
+(disable ttl-tri-output-pads$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    TTL-BIDIRECT-PADS
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn ttl-bidirect-pads-body (m n pi)
+  (if (zerop n)
+      nil
+    (cons
+     (list #i(g m)                              ; Occurrence name
+           (list #i(data m)                     ; Outputs
+                 #i(out m)
+                 #i(po m))
+           'TTL-BIDIRECT                        ; Type TTL-OUTUT
+           (list #i(data m)                     ; Inputs
+                 #i(in m)
+                 'buf-enable pi))
+     (ttl-bidirect-pads-body (add1 m) (sub1 n) #i(po m)))))
+
+(disable ttl-bidirect-pads-body)
+
+(generate-body-induction-scheme ttl-bidirect-pads-body)
+
+(defn ttl-bidirect-pads* (n)
+  (list #i(ttl-bidirect-pads n)
+        (list* 'enable 'pi (append #i(data 0 n) #i(in 0 n)))
+        (list* #i(po (sub1 n)) (append #i(data 0 n) #i(out 0 n)))
+        (cons (list 'enable-buf '(buf-enable)
+                    (if (lessp n 8) 'B-BUF 'B-BUF-PWR)
+                    '(enable))
+              (ttl-bidirect-pads-body 0 n 'pi))
+        nil))
+
+(destructuring-lemma ttl-bidirect-pads*)
+
+(defn ttl-bidirect-pads& (netlist n)
+    (and (equal (lookup-module #i(ttl-bidirect-pads n) netlist)
+              (ttl-bidirect-pads* n))
+       (let ((netlist (delete-module (index 'ttl-bidirect-pads n) netlist)))
+         (and (ttl-bidirect& netlist)
+              (if (lessp n 8)
+                  (b-buf& netlist)
+                  (b-buf-pwr& netlist))))))
+
+(disable ttl-bidirect-pads&)    
+
+(defn ttl-bidirect-pads$netlist (n)
+  (cons (ttl-bidirect-pads* n)
+        (union (ttl-bidirect$netlist)
+               (if (lessp n 8)
+                   (b-buf$netlist)
+                   (b-buf-pwr$netlist)))))
+
+(prove-lemma ttl-bidirect-pads-body$unbound-in-body (rewrite)
+  (implies
+   (lessp l m)
+   (and
+    (unbound-in-body #i(data l) (ttl-bidirect-pads-body m n pi))
+    (unbound-in-body #i(out l) (ttl-bidirect-pads-body m n pi))
+    (unbound-in-body #i(po l) (ttl-bidirect-pads-body m n pi))
+    (unbound-in-body #i(in l) (ttl-bidirect-pads-body m n pi))))
+  ;;Hint
+  ((enable unbound-in-body ttl-bidirect-pads-body)))
+
+(disable ttl-bidirect-pads-body$unbound-in-body)
+
+(prove-lemma ttl-bidirect-pads-body$value (rewrite)
+  (implies
+   (ttl-bidirect& netlist)
+   (and
+    (equal (collect-value
+            #i(data m n)
+            (dual-eval 1 (ttl-bidirect-pads-body m n pi)
+                       bindings state-bindings netlist))
+           (if (equal (value 'buf-enable bindings) f)
+               (v-threefix (collect-value #i(in m n) bindings))
+             (if (equal (value 'buf-enable bindings) t)
+                 (make-list n (z))
+               (make-list n (x)))))
+
+    (equal (collect-value
+            #i(out m n)
+            (dual-eval 1 (ttl-bidirect-pads-body m n pi)
+                       bindings state-bindings netlist))
+           (if (equal (value 'buf-enable bindings) f)
+               (v-threefix
+                (v-wire (collect-value #i(data m n) bindings)
+                        (v-threefix (collect-value #i(in m n)
+                                                   bindings))))
+             (if (equal (value 'buf-enable bindings) t)
+                 (v-threefix (collect-value #i(data m n) bindings))
+               (make-list n (x)))))))
+  ;;Hint
+  ((enable ttl-bidirect-pads-body ttl-bidirect-pads-body$unbound-in-body
+           v-threefix v-wire ttl-bidirect$value make-list
+           f-buf f-not threefix=x ft-buf-rewrite ft-wire-rewrite)
+   (disable-theory f-gates)
+   (disable threefix)
+   (induct
+    (ttl-bidirect-pads-body$induction m n pi
+                                      bindings state-bindings netlist))))
+
+(disable ttl-bidirect-pads-body$value)
+
+(prove-lemma ttl-bidirect-pads$value (rewrite)
+  (implies
+   (and (ttl-bidirect-pads& netlist n)
+        (equal (length data) n)
+        (properp data)
+        (equal (length inputs) n)
+        (properp inputs))
+   (equal
+    (cdr (dual-eval 0 #i(ttl-bidirect-pads n)
+                    (list* enable pi (append data inputs))
+                    state-bindings netlist))
+    (append
+     (vft-buf (f-not enable) inputs)
+     (v-threefix (v-wire data (vft-buf (f-not enable) inputs))))))
+  ;;Hint
+  ((enable ttl-bidirect-pads& ttl-bidirect-pads-body$value
+           ttl-bidirect-pads*$destructure
+           b-buf-pwr$value b-buf$value vft-buf-rewrite)
+   (disable v-threefix open-indices append-v-threefix)))
+
+(disable ttl-bidirect-pads$value)

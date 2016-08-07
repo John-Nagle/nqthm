@@ -1,0 +1,265 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    VALUE.EVENTS -- Lemmas about VALUE and COLLECT-VALUE
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   VALUE -- The ALIST accessor used by DUAL-EVAL.  Like ASSOC, but returns 0
+;;;   if the key is not present, rather than F.  The 0 will be interpreted by
+;;;   most of our primitives as the unknown value (X).  This makes it easier to
+;;;   debug module definitions.
+
+(defn value (name alist)
+  (if (nlistp alist)
+      0
+    (if (listp (car alist))
+        (if (equal (caar alist) name)
+            (cdar alist)
+          (value name (cdr alist)))
+      (value name (cdr alist)))))
+
+(disable value)
+
+;;;   COLLECT-VALUE -- Maps VALUE over a list of names.
+
+(defn collect-value (args alist)
+  (if (nlistp args)
+      nil
+    (cons (value (car args) alist)
+          (collect-value (cdr args) alist))))
+
+(disable collect-value)
+
+;;;   Proofs about VALUE
+
+(prove-lemma rewrite-value (rewrite)
+  (equal (value a (cons (cons b c) d))
+         (if (equal a b)
+             c
+           (value a d)))
+  ;;Hint
+  ((enable value)))
+
+;;;  Necessary for some proofs with lots of signals, otherwise stack overflow
+;;;  occurs from deeply nested rewriting!  This lemma also speeds up proofs
+;;;  significantly if the modules have lots of single output gates.
+
+(prove-lemma rewrite-value-4x (rewrite)
+  (equal (value a
+                (cons (cons b c) 
+                      (cons (cons d e) 
+                            (cons (cons g h)
+                                  (cons (cons i j)
+                                        k)))))
+         (if (equal a b)
+             c
+           (if (equal a d)
+               e
+             (if (equal a g)
+                 h
+               (if (equal a i)
+                   j
+                 (value a k))))))
+  ;;Hint
+  ((enable value)))
+
+(prove-lemma value-append-pairlist (rewrite)
+  (equal (value a (append (pairlist b c) d))
+         (if (member a b)
+             (value a (pairlist b c))
+           (value a d)))
+  ;;Hint
+  ((enable value append pairlist)))
+
+;;;  Not sure we always want this one firing
+(prove-lemma value-pairlist (rewrite)
+  (implies
+   (member name names)
+   (equal (value name (pairlist names values))
+          (car (restn (position name names) values))))
+  ;;Hint
+  ((enable value pairlist restn position)))
+
+(disable value-pairlist)
+
+(prove-lemma value-indices-hack (rewrite)
+  (implies
+   (and (member the-name (indices name n m))
+        (leq m (length values)))
+   (equal (value the-name (pairlist (indices name n m) values))
+          (nth (difference (i-num the-name) n) values)))
+  ;;Hint
+  ((enable value-pairlist nth-restn)
+   (disable open-indices)))
+
+;;;   Proofs about COLLECT-VALUE
+
+(prove-lemma collect-value-nlistp (rewrite)
+  (implies
+   (nlistp args)
+   (equal (collect-value args alist)
+          nil))
+  ;;Hint
+  ((enable collect-value)))
+
+(prove-lemma listp-collect-value (rewrite)
+  (equal (listp (collect-value args alist))
+         (listp args))
+  ;;Hint
+  ((enable collect-value)))
+
+(prove-lemma collect-value-append (rewrite)
+  (equal (collect-value (append a b) alist)
+         (append (collect-value a alist)
+                 (collect-value b alist)))
+  ;;Hint
+  ((enable collect-value append)))
+         
+(prove-lemma length-collect-value (rewrite)
+  (equal (length (collect-value args alist))
+         (length args))
+  ;;Hint
+  ((enable length collect-value)))
+
+(prove-lemma collect-value-append-pairlist-when-subset (rewrite)
+  (implies
+   (subset args1 args2)
+   (equal (collect-value args1 (append (pairlist args2 answer)
+                                           x))
+          (collect-value args1 (pairlist args2 answer))))
+  ;;Hint
+  ((enable subset collect-value append pairlist)))
+
+(prove-lemma collect-value-append-pairlist-when-disjoint (rewrite)
+  (implies
+   (disjoint args1 args2)
+   (equal (collect-value args1 (append (pairlist args2 a)
+                                           b))
+          (collect-value args1 b)))
+  ;;Hint
+  ((enable disjoint collect-value append pairlist)))
+
+(prove-lemma collect-value-disjoint-pairlist (rewrite)
+  (implies
+   (not (member a args))
+   (equal (collect-value args (cons (cons a b) c))
+          (collect-value args c)))
+  ;;Hint
+  ((enable collect-value)))
+
+;;  Avoids the MEMBER check in the above lemma.
+(prove-lemma collect-value-litatom-indices-speedup (rewrite)
+  (implies
+   (litatom a)
+   (equal (collect-value (indices name from to) (cons (cons a b) c))
+          (collect-value (indices name from to) c)))
+  ;;Hint
+  ((enable collect-value)))
+
+(prove-lemma equal-collect-value-promote-alists (rewrite)
+  (implies
+   (equal alist1 alist2)
+   (equal (equal (collect-value args alist1)
+                 (collect-value args alist2))
+          t)))
+
+(prove-lemma collect-value-firstn (rewrite)
+  (implies
+   (not (duplicates? args))
+   (equal (collect-value (firstn n args)
+                             (pairlist args answer))
+          (collect-value (firstn n args)
+                             (pairlist (firstn n args) (firstn n answer)))))
+  ;;Hint
+  ((enable duplicates? collect-value firstn pairlist)))
+
+(prove-lemma collect-value-restn (rewrite)
+  (implies
+   (not (duplicates? args))
+   (equal (collect-value (restn n args)
+                             (pairlist args answer))
+          (collect-value (restn n args)
+                             (pairlist (restn n args) (restn n answer)))))
+  ;;Hint
+  ((enable duplicates? collect-value restn pairlist)))
+
+(prove-lemma collect-value-cons (rewrite)
+  (equal (collect-value (cons a b) alist)
+         (cons (value a alist)
+               (collect-value b alist)))
+  ;;Hint
+  ((enable collect-value)))
+
+(prove-lemma singleton-collect-value (rewrite)
+  (implies
+   (equal (length a) 1)
+   (equal (collect-value a alist)
+          (list (value (car a) alist))))
+  ;;Hint
+  ((enable collect-value)))
+
+(prove-lemma properp-collect-value (rewrite)
+  (properp (collect-value args alist))
+  ;;Hint
+  ((enable collect-value properp)))
+
+(prove-lemma collect-value-args-pairlist-args (rewrite)
+  (implies
+   (and (not (duplicates? args))
+        (equal (length args) (length list))
+        (properp list))
+   (equal (collect-value args (pairlist args list))
+          list))
+  ;;Hint
+  ((enable collect-value pairlist)))
+
+;;;  COLLECT-VALUE-SPLITTING-CROCK is used to force a rewrite which goes
+;;;  "against the grain" of the normal rewriting direction of
+;;;  COLLECT-VALUE-APPEND. 
+
+(prove-lemma collect-value-splitting-crock-helper ()
+  (equal (collect-value (append (firstn n l) (restn n l)) alist)
+         (append (collect-value (firstn n l) alist)
+                 (collect-value (restn n l) alist)))
+  ;;Hint
+  ((disable append-firstn-restn)))
+
+(prove-lemma collect-value-splitting-crock ()
+  (equal (collect-value l alist)
+         (append (collect-value (firstn n l) alist)
+                 (collect-value (restn n l) alist)))
+  ;;Hint
+  ((use (collect-value-splitting-crock-helper))))
+
+(prove-lemma collect-value-make-list (rewrite)
+  (equal (collect-value (make-list n name) alist)
+         (make-list n (value name alist)))
+  ;;Hint
+  ((enable collect-value make-list)))
+
+;;;  A weird induction scheme for the following lemma.
+
+(defn cdr-cdr-sub1-sub1-induction (l1 n m l2)
+  (if (lessp m n)
+      t
+    (if (zerop n)
+        (if (zerop m)
+            t
+          (cdr-cdr-sub1-sub1-induction (cdr l1) 0 (sub1 m) (cdr l2)))
+      (cdr-cdr-sub1-sub1-induction (cdr l1) (sub1 n) (sub1 m) (cdr l2)))))
+
+(prove-lemma collect-value-subrange-args-pairlist-args (rewrite)
+  (implies
+   (and (not (duplicates? args))
+        (equal (length args) (length list))
+        (properp list)
+        (lessp n (length args)))
+   (equal (collect-value (subrange args m n) (pairlist args list))
+          (subrange list m n)))
+  ;;Hint
+  ((enable collect-value pairlist subrange)
+   (induct (cdr-cdr-sub1-sub1-induction args m n list))))

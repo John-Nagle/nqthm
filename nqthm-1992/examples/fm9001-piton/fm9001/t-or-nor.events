@@ -1,0 +1,274 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    T-OR-NOR.EVENTS -- A tree based, reducing OR-NOR.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn t-or-nor-body (tree parity)
+  (let ((a-names (indices 'a 0 (tree-size tree))))
+    (let ((left-a-names (tfirstn a-names tree))
+          (right-a-names (trestn a-names tree)))
+      (if (nlistp tree)
+          (list (list 'leaf
+                      (list 'out)
+                      (if parity 'b-not 'b-buf)
+                      (list (index 'a 0))))
+
+        (if (and (nlistp (car tree))
+                 (nlistp (cdr tree)))
+            (list (list 'leaf
+                        (list 'out)
+                        (if parity 'b-nor 'b-or)
+                        (list (index 'a 0) (index 'a 1))))
+          (list
+           ;;  The LHS tree.
+           (list 'left
+                 (list 'left-out)
+                 (index (if parity 't-or 't-nor) (tree-number (car tree)))
+                 left-a-names)
+           ;;  The RHS tree.
+           (list 'right
+                 (list 'right-out)
+                 (index (if parity 't-or 't-nor) (tree-number (cdr tree)))
+                 right-a-names)
+           (list 'output
+                 (list 'out)
+                 (if parity 'b-nor 'b-nand)
+                 (list 'left-out 'right-out))))))))
+
+
+(defn t-or-nor* (tree parity)
+  (let ((a-names (indices 'a 0 (tree-size tree))))
+    (list
+     ;;  Name
+     (index (if parity 't-nor 't-or) (tree-number tree))
+     ;;  Inputs
+     a-names
+     ;;  Outputs
+     (list 'out)
+     ;;  Occurrences
+     (t-or-nor-body tree parity)
+     ;;  States
+     nil)))
+
+(destructuring-lemma t-or-nor*)
+
+(defn t-or-nor& (netlist tree parity)
+  (let ((delete-result (delete-module (index (if parity 't-nor 't-or)
+                                             (tree-number tree))
+                                      netlist))
+        (lookup-okp (equal (lookup-module (index (if parity 't-nor 't-or)
+                                                 (tree-number tree))
+                                          netlist)
+                           (t-or-nor* tree parity))))
+    (let ((primitive& (and (b-not& delete-result)
+                           (b-buf& delete-result)
+                           (b-nor& delete-result)
+                           (b-or& delete-result)
+                           (b-nand& delete-result))))
+
+      (if (or (nlistp tree)
+              (and (nlistp (car tree))
+                   (nlistp (cdr tree))))
+          (and lookup-okp primitive&)
+             
+        (and lookup-okp
+             (t-or-nor& delete-result (car tree) (not parity))
+             (t-or-nor& delete-result (cdr tree) (not parity))
+             primitive&)))))
+
+(disable t-or-nor&)
+
+(defn t-or-nor$netlist (tree parity)
+  (if (or (nlistp tree)
+          (and (nlistp (car tree))
+               (nlistp (cdr tree))))
+      (cons (t-or-nor* tree parity)
+            (union (union (union (b-not$netlist) (b-buf$netlist))
+                          (union (b-nor$netlist) (b-or$netlist)))
+                   (b-nand$netlist)))
+    (cons (t-or-nor* tree parity)
+          (union (t-or-nor$netlist (car tree) (not parity))
+                 (t-or-nor$netlist (cdr tree) (not parity))))))
+
+(defn t-or-nor-induction (tree parity call-name a state netlist)
+  (if (or (nlistp tree)
+          (and (nlistp (car tree))
+               (nlistp (cdr tree))))
+      t
+    (and (t-or-nor-induction (car tree) (not parity)
+                             (if (not parity) 't-nor 't-or)
+                             (tfirstn a tree) 0
+                             (delete-module (index (if parity 't-nor 't-or)
+                                                   (tree-number tree))
+                                            netlist))
+         (t-or-nor-induction (cdr tree) (not parity)
+                             (if (not parity) 't-nor 't-or)
+                             (trestn a tree) 0
+                             (delete-module (index (if parity 't-nor 't-or)
+                                                   (tree-number tree))
+                                            netlist)))))
+       
+(defn tr-or-nor (a parity tree)
+  (if (nlistp tree)
+      (if parity (f-not (car a)) (f-buf (car a)))
+    (if (and (nlistp (car tree))
+             (nlistp (cdr tree)))
+        (if parity
+            (f-nor (car a) (cadr a))
+          (f-or (car a) (cadr a)))
+      (if parity
+          (f-nor (tr-or-nor (tfirstn a tree) (not parity) (car tree))
+                 (tr-or-nor (trestn a tree) (not parity) (cdr tree)))
+        (f-nand (tr-or-nor (tfirstn a tree) (not parity) (car tree))
+                (tr-or-nor (trestn a tree) (not parity) (cdr tree)))))))
+  
+(disable tr-or-nor)
+
+(prove-lemma t-or-nor$value (rewrite)
+  (implies
+   (and (t-or-nor& netlist tree parity)
+        (equal call-name (if parity 't-nor 't-or))
+        (properp a)
+        (equal (length a) (tree-size tree)))
+   (equal (dual-eval 0 (index call-name (tree-number tree))
+                     a state netlist)
+          (list (tr-or-nor a parity tree))))
+  ;;Hint
+  ((induct (t-or-nor-induction tree parity call-name a state netlist))
+   (enable t-or-nor*$destructure
+           b-buf$value b-nand$value b-not$value b-or$value
+           b-nor$value tr-or-nor)
+   (disable tree-size-nlistp)
+   (disable-theory f-gates)
+   (expand (t-or-nor& netlist tree f)
+           (t-or-nor& netlist tree parity)
+           (tr-or-nor a f tree)
+           (tr-or-nor a parity tree))))
+
+(disable t-or-nor$value)
+
+(defn btr-or-nor (a parity tree)
+  (if (nlistp tree)
+      (if parity (b-not (car a)) (b-buf (car a)))
+    (if (and (nlistp (car tree))
+             (nlistp (cdr tree)))
+        (if parity
+            (b-nor (car a) (cadr a))
+          (b-or (car a) (cadr a)))
+      (if parity
+          (b-nor (btr-or-nor (tfirstn a tree) (not parity) (car tree))
+                 (btr-or-nor (trestn a tree) (not parity) (cdr tree)))
+        (b-nand (btr-or-nor (tfirstn a tree) (not parity) (car tree))
+                (btr-or-nor (trestn a tree) (not parity) (cdr tree)))))))
+
+(disable btr-or-nor)
+
+(prove-lemma tr-or-nor=btr-or-nor (rewrite)
+  (implies (and (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (tr-or-nor a parity tree)
+                  (btr-or-nor a parity tree)))
+  ((disable tree-size-nlistp)
+   (enable firstn restn
+           expand-f-functions
+           btr-or-nor tr-or-nor bvp)))
+
+(prove-lemma btr-or-is-v-nzerop (rewrite)
+  (implies
+   (equal (length a) (tree-size tree))
+   (equal (btr-or-nor a parity tree)
+          (if parity
+              (v-zerop a)
+            (v-nzerop a))))
+  ;;Hint
+  ((induct (btr-or-nor a parity tree))
+   (enable btr-or-nor v-nzerop tree-size)
+   (expand (btr-or-nor a parity tree))))
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;   TV-ZEROP* tree
+;;;
+;;;   A zero-detector module built from T-OR-NOR*.  The choice of
+;;;   implementation is optimized for balanced trees.  
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn tv-zerop* (tree)
+  (let ((in-names (indices 'in 0 (tree-size tree)))
+        (odd-height (equal (remainder (tree-height tree) 2) 1)))
+    (list
+     ;; Name
+     (index 'tv-zerop (tree-number tree))
+     ;; Inputs
+     in-names
+     ;; Output
+     '(out)
+     ;; Body
+     (if odd-height
+         (list
+          (list 'g0 '(out-) (index 't-or (tree-number tree)) in-names)
+          (list 'g1 '(out)  'b-not                            '(out-)))
+       (list
+        (list 'g0 '(out) (index 't-nor (tree-number tree)) in-names)))
+     ;; States
+     nil)))
+
+(destructuring-lemma tv-zerop*)
+
+(defn tv-zerop& (netlist tree)
+  (let ((in-names (indices 'in 0 (tree-size tree)))
+        (odd-height (equal (remainder (tree-height tree) 2) 1)))
+    (and (equal (lookup-module (index 'tv-zerop (tree-number tree)) netlist)
+                (tv-zerop* tree))
+         (let ((netlist
+                (delete-module (index 'tv-zerop (tree-number tree)) netlist)))
+           (and (t-or-nor& netlist tree (not odd-height))
+                (b-not& netlist))))))
+       
+(disable tv-zerop&)
+
+(defn tv-zerop$netlist (tree)
+  (let ((odd-height (equal (remainder (tree-height tree) 2) 1)))
+    (cons (tv-zerop* tree)
+          (union (t-or-nor$netlist tree (not odd-height))
+                 (b-not$netlist)))))
+
+
+(defn f$tv-zerop (a tree)
+  (let ((odd-height (equal (remainder (tree-height tree) 2) 1)))
+    (if odd-height
+        (f-not (tr-or-nor a f tree))
+      (tr-or-nor a t tree))))
+
+(disable f$tv-zerop)
+
+(prove-lemma tv-zerop$value (rewrite)
+  (implies
+   (and (tv-zerop& netlist tree)
+        (equal (length a) (tree-size tree))
+        (properp a))
+   (equal (dual-eval 0 (index 'tv-zerop (tree-number tree)) a state netlist)
+          (list (f$tv-zerop a tree))))
+  ;;Hint
+  ((enable tv-zerop& tv-zerop*$destructure b-not$value t-or-nor$value
+           f$tv-zerop)
+   (disable-theory f-gates)))
+        
+(disable tv-zerop$value)
+
+(prove-lemma f$tv-zerop=v-zerop (rewrite)
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (bvp a))
+   (equal (f$tv-zerop a tree)
+          (v-zerop a)))
+  ;;Hint
+  ((enable f$tv-zerop)
+   (disable-theory f-gates)))

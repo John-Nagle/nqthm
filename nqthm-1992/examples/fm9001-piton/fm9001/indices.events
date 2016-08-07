@@ -1,0 +1,127 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    INDICES.EVENTS -- Index name generators, and lemmas.
+;;;
+;;;  The shell INDEX is used for indexed names in our DUAL-EVAL netlists, where
+;;;  we expect the I-NAME of the INDEX to be a LITATOM, and the I-NUM to be the
+;;;  index (a number).  We chose to use a paired name, rather than a naming
+;;;  convention (e.g., G_0, G_1 ...) to represent indexed names because it is
+;;;  much easier to reason about paired names.  
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(add-shell index nil indexp
+  ((i-name (one-of numberp litatom) zero)
+   (i-num  (one-of numberp) zero)))
+
+(defn lnfix (x)
+  (if (or (numberp x) (litatom x))
+      x
+    0))
+
+
+;;;    INDICES -- A list of N indexed names.
+
+(defn indices (name from n)
+  (if (zerop n)
+      nil
+    (cons (index name from)
+          (indices name (add1 from) (sub1 n)))))
+
+(disable indices)
+
+(prove-lemma indices-zerop (rewrite)
+  (implies
+   (zerop n)
+   (equal (indices name from n)
+          nil))
+  ;;Hint
+  ((enable indices)))
+
+(prove-lemma open-indices (rewrite)
+  (implies
+   (not (zerop n))
+   (equal (indices name from n)
+          (cons (index name from)
+                (indices name (add1 from) (sub1 n)))))
+  ;;Hint
+  ((enable indices)))
+
+;;;   INDICES-AS-APPEND is an alternate way to look at the structure of the
+;;;   indices.
+
+(prove-lemma indices-as-append (rewrite)
+  (implies
+   (not (zerop n))
+   (equal (indices name from n)
+          (append (indices name from (sub1 n))
+                  (list (index name (plus (sub1 n) from))))))
+  ;;Hint
+  ((enable indices)))
+
+(disable indices-as-append)
+
+(prove-lemma length-indices (rewrite)
+  (equal (length (indices name from n))
+         (fix n))
+  ;;Hint
+  ((enable length indices)))
+
+(prove-lemma listp-indices (rewrite)
+  (equal (listp (indices name from n))
+         (not (zerop n)))
+  ;;Hint
+  ((enable indices)))
+
+(prove-lemma properp-indices (rewrite)
+  (properp (indices name from n))
+  ;;Hint
+  ((enable properp indices)))
+
+(prove-lemma member-indices (rewrite)
+  (equal (member x (indices name from n))
+         (and (not (zerop n))
+              (indexp x)
+              (equal (i-name x) (lnfix name))
+              (leq from (i-num x))
+              (lessp (i-num x) (plus from n))))
+  ;;Hint
+  ((enable member indices lessp)))
+
+(prove-lemma disjoint-indices-different-names (rewrite)
+  (implies
+   (not (equal (lnfix name1) (lnfix name2)))
+   (disjoint (indices name1 from1 n1) (indices name2 from2 n2)))
+  ;;Hint
+  ((enable disjoint indices)))
+
+(prove-lemma no-duplicates-in-indices (rewrite)
+  (not (duplicates? (indices name from n)))
+  ;;Hint
+  ((enable duplicates? indices)))
+
+;;;  For some reason, OPEN-INDICES interferes with these proofs.
+
+(prove-lemma position-name-indices (rewrite)
+  (implies
+   (member index (indices name from n))
+   (equal (position index (indices name from n))
+          (difference (i-num index) from)))
+  ;;Hint
+  ((induct (indices name from n))
+   (enable position indices)
+   (disable open-indices)))
+
+(prove-lemma nth-indices (rewrite)
+  (implies
+   (lessp n m)
+   (equal (nth n (indices name from m))
+          (index name (plus n from))))
+  ;;Hint
+  ((enable nth indices)))
+
+(disable nth-indices)

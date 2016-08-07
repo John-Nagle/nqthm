@@ -1,0 +1,725 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    TV-ALU-HELP.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  P-CELL
+
+(defn p-cell (a an b pa pan pb)
+  (b-nand3 (b-nand a pa)
+           (b-nand an pan)
+           (b-nand b pb)))
+
+(defn-to-module p-cell)
+
+(prove-lemma p-cell$value-zero (rewrite)
+  (implies
+   (p-cell& netlist)
+   (equal (dual-eval 0 'p-cell (list a an b f f f) state netlist)
+          (list f)))
+  ;;Hint
+  ((enable p-cell& b-nand3$value b-nand$value)))
+
+;;;  G-CELL
+
+(defn g-cell (a an bn ga gan gbn)
+  (b-and3 (b-nand a ga)
+          (b-nand an gan)
+          (b-nand bn gbn)))
+
+(defn-to-module g-cell)
+
+(prove-lemma g-cell$value-zero (rewrite)
+  (implies
+   (g-cell& netlist)
+   (equal (dual-eval 0 'g-cell (list a an bn f f f) state netlist)
+          (list t)))
+  ;;Hint
+  ((enable g-cell& b-and3$value b-nand$value)))
+
+;;;   ALU-CELL
+
+(defn alu-cell (c a b mpg)
+  (let ((gbn (car mpg))
+        (gan (cadr mpg))
+        (ga  (caddr mpg))
+        (pb  (cadddr mpg))
+        (pan (caddddr mpg))
+        (pa  (cadddddr mpg))
+        (m   (caddddddr mpg)))
+    (let ((an (b-not a))
+          (bn (b-not b)))
+      (let ((p (p-cell a an b pa pan pb))
+            (g (g-cell a an bn ga gan gbn))
+            (mc (b-nand c m)))
+        (let ((z (b-equv3 mc p g)))
+          (list p g z))))))
+
+(defn f$alu-cell (c a b mpg)
+  (let ((gbn (car mpg))
+        (gan (cadr mpg))
+        (ga  (caddr mpg))
+        (pb  (cadddr mpg))
+        (pan (caddddr mpg))
+        (pa  (cadddddr mpg))
+        (m   (caddddddr mpg)))
+    (let ((an (f-not a))
+          (bn (f-not b)))
+      (let ((p (f$p-cell a an b pa pan pb))
+            (g (f$g-cell a an bn ga gan gbn))
+            (mc (f-nand c m)))
+        (let ((z (f-equv3 mc p g)))
+          (list p g z))))))
+
+(disable f$alu-cell)
+
+(prove-lemma f$alu-cell=alu-cell (rewrite)
+  (implies
+   (and (boolp c)
+        (boolp a)
+        (boolp b)
+        (bvp mpg)
+        (equal (length mpg) 7))
+   (equal (f$alu-cell c a b mpg)
+          (alu-cell c a b mpg)))
+  ;;Hint
+  ((enable f$alu-cell bvp-length boolp-b-gates)
+   (disable-theory f-gates b-gates)))
+
+(defn alu-cell* ()
+  '(alu-cell (c a b gbn gan ga pb pan pa m)
+             (p g z)
+             ((n0 (an) b-not (a))
+              (n1 (bn) b-not (b))
+              (p0 (p)  p-cell (a an b pa pan pb))
+              (g0 (g)  g-cell (a an bn ga gan gbn))
+              (m0 (mc) b-nand (c m))
+              (z0 (z)  b-equv3 (mc p g)))
+             nil))
+
+(module-predicate alu-cell*)
+
+(module-netlist alu-cell*)       
+
+(prove-lemma alu-cell$value (rewrite)
+  (implies
+   (alu-cell& netlist)
+   (equal (dual-eval 0 'alu-cell (list* c a b mpg) state netlist)
+          (f$alu-cell c a b mpg)))
+  ;;Hint
+  ((enable f$alu-cell alu-cell& b-not$value p-cell$value g-cell$value
+           b-nand$value b-equv3$value bvp-length)
+   (disable-theory f-gates)))
+
+(disable alu-cell$value)
+
+(prove-lemma alu-cell$value-zero (rewrite)
+  (implies
+   (and (alu-cell& netlist)
+        (equal mpg #v1000000))
+   (equal (dual-eval 0 'alu-cell (list* t a b mpg) state netlist)
+          (list f t f)))
+  ;;Hint
+  ((enable alu-cell& bvp-length
+           p-cell$value-zero g-cell$value-zero b-nand$value b-equv3$value)))
+
+(disable alu-cell$value-zero)
+
+(prove-lemma f$alu-cell-v-threefix-mpg (rewrite)
+  (implies
+   (equal (length mpg) 7)
+   (equal (f$alu-cell c a b (v-threefix mpg))
+          (f$alu-cell c a b mpg)))
+  ;;Hint
+  ((enable f$alu-cell f$p-cell f$g-cell v-threefix equal-length-add1
+           f-gate-threefix-congruence-lemmas)
+   (disable threefix)
+   (disable-theory f-gates)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;  TV-ALU-HELP
+;;;
+;;;  The Boolean specification of the main component of the ALU.  The TREE
+;;;  specifies the structure of the carry-lookahead tree of the ALU.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn tv-alu-help (c a b mpg tree)
+  (if (nlistp tree)
+      (alu-cell c (car a) (car b) mpg)
+    (let ((a-car (tfirstn a tree))
+          (b-car (tfirstn b tree))
+          (a-cdr (trestn  a tree))
+          (b-cdr (trestn  b tree)))
+      (let ((lhs (tv-alu-help c a-car b-car mpg (car tree))))
+        (let ((p-car (car lhs))
+              (g-car (cadr lhs))
+              (sum-car (cddr lhs)))
+          (let ((c-car (t-carry c p-car g-car)))
+            (let ((rhs (tv-alu-help c-car a-cdr b-cdr mpg (cdr tree))))
+              (let ((p-cdr (car rhs))
+                    (g-cdr (cadr rhs))
+                    (sum-cdr (cddr rhs)))
+                (cons (b-and p-car p-cdr)
+                      (cons (t-carry g-car p-cdr g-cdr)
+                            (append sum-car sum-cdr)))))))))))
+
+(disable tv-alu-help)
+
+(prove-lemma cddr-tv-alu-help-length (rewrite)
+  (equal (length (cddr (tv-alu-help c a b mpg tree)))
+         (tree-size tree))
+  ;;Hint
+  ((enable tv-alu-help length tree-size)))
+
+(prove-lemma tv-alu-help-length (rewrite)
+  (equal (length (tv-alu-help c a b mpg tree))
+         (add1 (add1 (tree-size tree))))
+  ;;Hint
+  ((enable length tv-alu-help tree-size)))
+
+(prove-lemma bvp-cddr-tv-alu-help (rewrite)
+  (bvp (cddr (tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((enable bvp tv-alu-help)))
+
+(prove-lemma bvp-tv-alu-help (rewrite)
+  (bvp (tv-alu-help c a b mpg tree))
+  ;;Hint
+  ((enable bvp tv-alu-help)))
+
+(prove-lemma bvp-length-tv-alu-help (rewrite)
+  (equal (bvp-length (tv-alu-help c a b mpg tree) n)
+         (leq n (add1 (add1 (tree-size tree)))))
+  ;;Hint
+  ((enable bvp-length)))
+         
+;;;  Proofs that TV-ALU-HELP "does the right thing."
+
+;;;  ZERO
+
+(prove-lemma tv-alu-help-zero (rewrite)
+  (implies
+   (and (equal mpg #v1000000)
+        (equal (length a) (tree-size tree))
+        (equal c t))
+   (equal (tv-alu-help c a b mpg tree)
+          (list* f t (make-list (length a) f))))
+  ;;Hint
+  ((induct (tv-alu-help c a b mpg tree))
+   (enable tv-alu-help make-list make-list-append-tree-crock)
+   (expand (tv-alu-help t a b #v1000000 tree))))
+
+(disable tv-alu-help-zero)
+
+;;;  V-AND
+
+(prove-lemma tv-alu-help-v-and-works (rewrite)
+  (implies (and (bv2p a b)
+                (equal (length a) (tree-size tree))
+                (equal mpg #v0000011))
+           (equal (cddr (tv-alu-help c a b mpg tree))
+                  (v-and a b)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v0000011 tree))
+   (enable v-and)))
+
+(disable tv-alu-help-v-and-works)
+
+;;;  V-OR
+
+(prove-lemma tv-alu-help-v-or-works (rewrite)
+  (implies (and (equal mpg #v0101110)
+                (bv2p a b)
+                (equal (length a) (tree-size tree)))
+           (equal (cddr (tv-alu-help c a b mpg tree))
+                  (v-or a b)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v0101110 tree))
+   (enable v-or)))
+
+(disable tv-alu-help-v-or-works)
+
+;;;  V-XOR
+
+(prove-lemma tv-alu-help-v-xor-works (rewrite)
+  (implies (and (equal mpg #v0100001)
+                (bv2p a b)
+                (equal (length a) (tree-size tree)))
+           (equal (cddr (tv-alu-help c a b mpg tree))
+                  (v-xor a b)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v0100001 tree))
+   (enable v-xor)))
+
+(disable tv-alu-help-v-xor-works)
+
+;;;  V-NOT
+
+(prove-lemma tv-alu-help-v-not-works (rewrite)
+  (implies (and (equal mpg #v0010110)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (cddr (tv-alu-help c a b mpg tree))
+                  (v-not a)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v0010110 tree))
+   (enable v-not)))
+
+(disable tv-alu-help-v-not-works)
+
+;;;  V-BUF
+
+(prove-lemma tv-alu-help-v-buf-works (rewrite)
+  (implies (and (equal mpg #v0100110)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (cddr (tv-alu-help c a b mpg tree))
+                  (v-buf a)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v0100110 tree))
+   (enable v-buf)))
+
+(disable tv-alu-help-v-buf-works)
+
+;;;  TV-ADDER
+
+(prove-lemma tv-alu-help-tv-adder-works (rewrite)
+  (implies (and (equal mpg #v1101011)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c a b tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v1101011 tree)
+           (tv-adder c a b tree))))
+
+(disable tv-alu-help-tv-adder-works)
+
+;;;  Subtracter
+
+(prove-lemma tv-alu-help-tv-subtracter-works (rewrite)
+  (implies (and (equal mpg #v1011101)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c (v-not a) b tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v1011101 tree)
+           (tv-adder c (v-not a) b tree))
+   (enable v-not)))
+
+(disable tv-alu-help-tv-subtracter-works)
+
+;;;  INC a
+
+(prove-lemma tv-alu-help-tv-inc-a-works (rewrite)
+  (implies (and (equal mpg #v1100110)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c a (nat-to-v 0 (length a)) tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v1100110 tree)
+           (tv-adder c a (nat-to-v 0 (length a)) tree))))
+
+(disable tv-alu-help-tv-inc-a-works)
+
+;;;  INC b
+
+(prove-lemma tv-alu-help-tv-inc-b-works (rewrite)
+  (implies (and (equal mpg #v1001110)
+                (bvp b)
+                (equal (length b) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c b (nat-to-v 0 (length b)) tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v1001110 tree)
+           (tv-adder c b (nat-to-v 0 (length b)) tree))))
+
+(disable tv-alu-help-tv-inc-b-works)
+
+;;;  DEC a
+           
+(prove-lemma tv-alu-help-tv-dec-a-works (rewrite)
+  (implies (and (equal mpg #v1110010)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c (v-not (nat-to-v 0 (length a))) a tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (disable v-not-firstn v-not-restn)
+   (enable firstn-v-not restn-v-not)
+   (expand (tv-alu-help c a b #v1110010 tree)
+           (tv-adder c (v-not (nat-to-v 0 (length a))) a tree))))
+
+(disable tv-alu-help-tv-dec-a-works)
+
+;;;  DEC b
+           
+(prove-lemma tv-alu-help-tv-dec-b-works (rewrite)
+  (implies (and (equal mpg #v1110001)
+                (bvp b)
+                (equal (length b) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c (v-not (nat-to-v 0 (length b))) b tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (disable v-not-firstn v-not-restn)
+   (enable firstn-v-not restn-v-not)
+   (expand (tv-alu-help c a b #v1110001 tree)
+           (tv-adder c (v-not (nat-to-v 0 (length b))) b tree))))
+
+(disable tv-alu-help-tv-dec-b-works)
+
+;;;  NEG
+
+(prove-lemma tv-alu-help-tv-neg-works (rewrite)
+  (implies (and (equal mpg #v1010110)
+                (bvp a)
+                (equal (length a) (tree-size tree)))
+           (equal (tv-alu-help c a b mpg tree)
+                  (tv-adder c (v-not a) (nat-to-v 0 (length a)) tree)))
+  ((induct (tv-alu-help c a b mpg tree))
+   (expand (tv-alu-help c a b #v1010110 tree)
+           (tv-adder c (v-not a) (nat-to-v 0 (length a)) tree))
+   (enable v-not)))
+
+(disable tv-alu-help-tv-neg-works)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;   F$TV-ALU-HELP
+;;;
+;;;   The 4-valued ALU specification equivalent to TV-ALU-HELP.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$tv-alu-help (c a b mpg tree)
+  (if (nlistp tree)
+      (f$alu-cell c (car a) (car b) mpg)
+    (let ((a-car (tfirstn a tree))
+          (b-car (tfirstn b tree))
+          (a-cdr (trestn  a tree))
+          (b-cdr (trestn  b tree)))
+      (let ((lhs (f$tv-alu-help c a-car b-car mpg (car tree))))
+        (let ((p-car (car lhs))
+              (g-car (cadr lhs))
+              (sum-car (cddr lhs)))
+          (let ((c-car (f$t-carry c p-car g-car)))
+            (let ((rhs (f$tv-alu-help c-car a-cdr b-cdr mpg (cdr tree))))
+              (let ((p-cdr (car rhs))
+                    (g-cdr (cadr rhs))
+                    (sum-cdr (cddr rhs)))
+                (cons (f-and p-car p-cdr)
+                      (cons (f$t-carry g-car p-cdr g-cdr)
+                            (append sum-car sum-cdr)))))))))))
+
+(disable f$tv-alu-help)
+
+(prove-lemma cddr-f$tv-alu-help-length (rewrite)
+  (equal (length (cddr (f$tv-alu-help c a b mpg tree)))
+         (tree-size tree))
+  ;;Hint
+  ((enable f$tv-alu-help f$alu-cell length tree-size)))
+
+(prove-lemma f$tv-alu-help-length (rewrite)
+  (equal (length (f$tv-alu-help c a b mpg tree))
+         (add1 (add1 (tree-size tree))))
+  ;;Hint
+  ((enable length f$tv-alu-help f$alu-cell tree-size)))
+
+(prove-lemma properp-cddr-f$tv-alu-help (rewrite)
+  (properp (cddr (f$tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((enable properp f$alu-cell)
+   (induct (f$tv-alu-help c a b mpg tree))
+   (expand (f$tv-alu-help c a b mpg tree))
+   (disable-theory f-gates b-gates)))
+
+(prove-lemma properp-f$tv-alu-help (rewrite)
+   (properp (f$tv-alu-help c a b mpg tree))
+  ;;Hint
+  ((enable properp f$alu-cell)
+   (expand (f$tv-alu-help c a b mpg tree))
+   (disable-theory f-gates b-gates)))
+
+(prove-lemma boolp-car-f$tv-alu-help (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a) (equal (length a) (tree-size tree))
+        (bvp b) (equal (length b) (tree-size tree))
+        (bvp mpg) (equal (length mpg) 7))
+   (and (boolp (car (f$tv-alu-help c a b mpg tree)))
+        (boolp (cadr (f$tv-alu-help c a b mpg tree)))))
+  ;;Hint
+  ((induct (f$tv-alu-help c a b mpg tree))
+   (expand (f$tv-alu-help c a b mpg tree))
+   (disable-theory f-gates b-gates)
+   (enable boolp-b-gates)))
+
+(prove-lemma bvp-cddr-f$tv-alu-help (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a) (equal (length a) (tree-size tree))
+        (bvp b) (equal (length b) (tree-size tree))
+        (bvp mpg) (equal (length mpg) 7))
+   (bvp (cddr (f$tv-alu-help c a b mpg tree))))
+  ;;Hint
+  ((enable bvp boolp-b-gates)
+   (induct (f$tv-alu-help c a b mpg tree))
+   (expand (f$tv-alu-help c a b mpg tree))
+   (disable-theory f-gates b-gates)))
+
+(prove-lemma bvp-f$tv-alu-help (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a) (equal (length a) (tree-size tree))
+        (bvp b) (equal (length b) (tree-size tree))
+        (bvp mpg) (equal (length mpg) 7))
+   (bvp (f$tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((enable bvp boolp-b-gates)
+   (expand (f$tv-alu-help c a b mpg tree))
+   (disable-theory f-gates b-gates)))
+
+(prove-lemma f$tv-alu-help=tv-alu-help (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a) (equal (length a) (tree-size tree))
+        (bvp b) (equal (length b) (tree-size tree))
+        (bvp mpg) (equal (length mpg) 7))
+   (equal (f$tv-alu-help c a b mpg tree)
+          (tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((induct (tv-alu-help c a b mpg tree))
+   (enable boolp-b-gates bvp-length)
+   (expand (f$tv-alu-help c a b mpg tree)
+           (tv-alu-help c a b mpg tree))
+   (disable-theory f-gates b-gates)
+   (disable alu-cell mpg t-carry)))
+        
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;   TV-ALU-HELP-BODY
+;;;   
+;;;   The hardware version of TV-ALU-HELP.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  TV-ALU-HELP-BODY
+
+(defn tv-alu-help-body (tree)
+  (let ((a-names (indices 'a 0 (tree-size tree)))
+        (b-names (indices 'b 0 (tree-size tree)))
+        (out-names (indices 'out 0 (tree-size tree)))
+        (mpgnames (indices 'mpg 0 7))
+        (mpgnames- (indices 'mpg- 0 7)))
+    (let ((left-a-names (tfirstn a-names tree))
+          (right-a-names (trestn a-names tree))
+          (left-b-names (tfirstn b-names tree))
+          (right-b-names (trestn b-names tree))
+          (left-out-names (tfirstn out-names tree))
+          (right-out-names (trestn out-names tree)))
+      (let ((buffer? (equal (remainder (sub1 (tree-height tree)) 3) 0)))
+        (let ((mpgnames? (if buffer? mpgnames- mpgnames)))
+          (if (nlistp tree)
+              (list
+               (list 'leaf
+                     (list 'p 'g (index 'out 0))
+                     'alu-cell
+                     (cons 'c (cons (index 'a 0)
+                                    (cons (index 'b 0) mpgnames)))))
+            ;;  We buffer MPG whenever appropriate.
+            (append
+             (if buffer?
+                 (list
+                  (list 'buffermpg mpgnames- (index 'v-buf 7) mpgnames))
+               nil)
+             (list
+              ;;  The LHS ALU result.
+              (list 'lhs
+                    (cons 'pl (cons 'gl left-out-names))
+                    (index 'tv-alu-help (tree-number (car tree)))
+                    (cons 'c
+                          (append left-a-names
+                                  (append left-b-names
+                                          mpgnames?))))
+              ;;  The LHS carry.
+              '(lhs-carry (cl) t-carry (c pl gl))
+              ;;  The RHS ALU result.
+              (list 'rhs
+                    (cons 'pr (cons 'gr right-out-names))
+                    (index 'tv-alu-help (tree-number (cdr tree)))
+                    (cons 'cl
+                          (append right-a-names
+                                  (append right-b-names
+                                          mpgnames?))))
+              ;;  The propagate output.
+              '(p (p) b-and (pl pr))
+              ;;  The generate output.
+              '(g (g) t-carry (gl pr gr))))))))))
+
+(defn tv-alu-help* (tree)
+  (let ((a-names (indices 'a 0 (tree-size tree)))
+        (b-names (indices 'b 0 (tree-size tree)))
+        (out-names (indices 'out 0 (tree-size tree)))
+        (mpgnames (indices 'mpg 0 7)))
+      (list
+       ;;  Name
+       (index 'tv-alu-help (tree-number tree))
+       ;;  Inputs
+       (cons 'c (append a-names (append b-names mpgnames)))
+       ;;  Outputs
+       (cons 'p (cons 'g out-names))
+       ;;  Occurrences
+       (tv-alu-help-body tree)
+       ;;  States
+       nil)))
+
+(destructuring-lemma tv-alu-help*)
+
+(defn tv-alu-help& (netlist tree)
+  (if (nlistp tree)
+      (and (equal (lookup-module (index 'tv-alu-help (tree-number tree))
+                                 netlist)
+                  (tv-alu-help* tree))
+           (alu-cell& (delete-module (index 'tv-alu-help (tree-number tree))
+                                   netlist)))
+    (and (equal (lookup-module (index 'tv-alu-help (tree-number tree)) netlist)
+                (tv-alu-help* tree))
+         (t-carry& (delete-module (index 'tv-alu-help (tree-number tree))
+                                  netlist))
+         (b-and& (delete-module (index 'tv-alu-help (tree-number tree))
+                                netlist))
+         (v-buf& (delete-module (index 'tv-alu-help (tree-number tree))
+                                netlist)
+                 7)
+         (tv-alu-help& (delete-module (index 'tv-alu-help (tree-number tree))
+                                      netlist)
+                       (car tree))
+         (tv-alu-help& (delete-module (index 'tv-alu-help (tree-number tree))
+                                      netlist)
+                       (cdr tree)))))
+
+(disable tv-alu-help&)
+
+(defn tv-alu-help$netlist (tree)
+  (if (nlistp tree)
+      (cons (tv-alu-help* tree) (alu-cell$netlist))
+    (cons (tv-alu-help* tree)
+          (union (tv-alu-help$netlist (car tree))
+                 (union (tv-alu-help$netlist (cdr tree))
+                        (union (t-carry$netlist)
+                               (union (b-and$netlist)
+                                      (v-buf$netlist 7))))))))
+
+(defn tv-alu-help-induction (tree c a b mpg state netlist)
+  (let ((left-a (tfirstn a tree))
+        (left-b (tfirstn b tree))
+        (right-a (trestn a tree))
+        (right-b (trestn b tree))
+        (buffer? (equal (remainder (sub1 (tree-height tree)) 3) 0)))
+    (let ((mpg (if buffer? (v-threefix mpg) mpg)))
+      (if (nlistp tree)
+          t
+        (and
+         (tv-alu-help-induction
+          (car tree)
+          c
+          left-a
+          left-b
+          mpg
+          0
+          (delete-module (index 'tv-alu-help (tree-number tree)) netlist))
+         (tv-alu-help-induction
+          (cdr tree)
+          (f$t-carry c
+                     (car (f$tv-alu-help c left-a left-b mpg (car tree)))
+                     (cadr (f$tv-alu-help c left-a left-b mpg (car tree))))
+          right-a
+          right-b
+          mpg
+          0
+          (delete-module (index 'tv-alu-help (tree-number tree)) netlist)))))))
+
+(prove-lemma tv-alu-help-lemma-crock (rewrite)
+  (implies
+   (tv-alu-help& (delete-module (index 'tv-alu-help (tree-number tree))
+                                netlist)
+                 (car tree))
+   (equal (collect-value (indices 'out 0 n) bindings)
+          (append (collect-value (firstn (tree-size (car tree))
+                                         (indices 'out 0 n))
+                                     bindings)
+                  (collect-value (restn (tree-size (car tree))
+                                        (indices 'out 0 n))
+                                     bindings))))
+  ;;Hint
+  ((use (collect-value-splitting-crock
+         (l (indices 'out 0 n))
+         (n (tree-size (car tree)))
+         (alist bindings)))))
+
+(disable tv-alu-help-lemma-crock)
+
+(prove-lemma tv-alu-help$value-base-case (rewrite)
+  (implies
+   (and (nlistp tree)
+        (tv-alu-help& netlist tree)
+        (equal (length a) 1) (properp a)
+        (equal (length b) 1) (properp b)
+        (equal (length mpg) 7) (properp mpg))
+   (equal (dual-eval 0 (index 'tv-alu-help (tree-number tree))
+                     (cons c (append a (append b mpg)))
+                     state netlist)
+          (f$tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((disable f-and *1*indices open-indices)
+   (enable  alu-cell$value f$alu-cell tv-alu-help*$destructure)
+   (expand (tv-alu-help& netlist tree)
+           (f$tv-alu-help c a b mpg tree)
+           (append b mpg)
+           (append a (cons (car b) mpg))
+           (indices 'out 0 1)
+           (indices 'a 0 1)
+           (indices 'b 0 1))))
+
+(disable tv-alu-help$value-base-case)
+
+(prove-lemma f$tv-alu-help-v-threefix-mpg (rewrite)
+  (implies
+   (equal (length mpg) 7)
+   (equal (f$tv-alu-help c a b (v-threefix mpg) tree)
+          (f$tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((induct (f$tv-alu-help c a b mpg tree))
+   (expand (f$tv-alu-help c a b mpg tree)
+           (f$tv-alu-help c a b (v-threefix mpg) tree))
+   (disable-theory f-gates)))
+
+(prove-lemma tv-alu-help$value (rewrite)
+  (implies
+   (and (tv-alu-help& netlist tree)
+        (properp a) (equal (length a) (tree-size tree))
+        (properp b) (equal (length b) (tree-size tree))
+        (properp mpg) (equal (length mpg) 7))
+   (equal (dual-eval 0 (index 'tv-alu-help (tree-number tree))
+                     (cons c (append a (append b mpg)))
+                     state netlist)
+          (f$tv-alu-help c a b mpg tree)))
+  ;;Hint
+  ((induct (tv-alu-help-induction tree c a b mpg state netlist))
+   (enable tv-alu-help-lemma-crock t-carry$value b-and$value v-buf$value
+           tv-alu-help$value-base-case tv-alu-help*$destructure)
+   (disable indices *1*indices open-indices f-and tree-number
+            t-carry-p-g-carry)
+   (expand (tv-alu-help& netlist tree)
+           (f$tv-alu-help c a b mpg tree))))
+
+(disable tv-alu-help$value)

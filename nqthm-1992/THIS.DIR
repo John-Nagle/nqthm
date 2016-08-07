@@ -1,0 +1,27 @@
+README                        Introduction
+THIS.DIR                      Brief explanations of files
+basis.lisp                    An Nqthm-1992 source file
+code-1-a.lisp                 An Nqthm-1992 source file
+code-b-d.lisp                 An Nqthm-1992 source file
+code-e-m.lisp                 An Nqthm-1992 source file
+code-n-r.lisp                 An Nqthm-1992 source file
+code-s-z.lisp                 An Nqthm-1992 source file
+defn-sk.lisp                  Kaufmann's skolemizer
+doc                           A subdirectory with documentation
+events.lisp                   An Nqthm-1992 source file
+examples                      Subdirectory with the example files
+genfact.lisp                  An Nqthm-1992 source file
+gnu-general-public-license.text Gnu license
+infix.lisp                    A conventional notation pretty printer for Nqthm
+io.lisp                       An Nqthm-1992 source file
+make                          A directory for building an Nqthm-1992 save image
+make.nqthm-1992.tar           A csh source file to make a tar file
+makefile                      A Unix makefile for building Nqthm-1992
+mcl-nqthm-startup.lisp        A startup file for use with MCL on a Macintosh
+nqthm-public-software-license.doc        The Nqthm-1992 license
+nqthm-public-software-license.ps         Postscript form of above
+nqthm.lisp                    An Nqthm-1992 source file
+ppr.lisp                      An Nqthm-1992 source file
+sinfix                        A Scribe/TeX version of infix
+sloop.lisp                    Schelter's loop, used by Nqthm-1992
+

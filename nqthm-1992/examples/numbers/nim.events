@@ -1,0 +1,1622 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+; Nim game proof            Matt Wilding                   November 1991
+
+; Requires the naturals library.
+
+(note-lib "naturals" t)
+
+#|
+(Part of internal note 249)
+
+CLI note #249:  A Verified NIM Strategy   Matt Wilding  Nov 1991
+
+Introduction
+------------
+
+NIM is a two player game played with matches distributed into piles.
+Players alternate removing at least one match from exactly one pile.
+The player who removes the last match loses.  
+
+NIM is particularly interesting because it would appear to make a good
+FM9001 stack demo program.  The game has nice mathematical properties
+that can be verified, it's a real game that people have played for
+hundreds of years, and it's not I/O intensive.  (In fact, no input is
+required to watch a game played between a "smart" player and his
+"random" opponent.)
+
+A simple strategy that guarantees a win for most initial game setups
+has been discovered, and an NQTHM proof constructed that proves the
+strategy works.  Subsequently, a reference to a 1901 paper by Charles
+Bouton that proves this same NIM strategy correct has been discovered
+in "Mathematical Puzzles and Diversions" by Martin Gardner.
+
+An outline of the strategy and proof
+------------------------------------
+Let n be the number of piles.  Let p(i) be the number of matches in
+pile i.  Let b(x) be the base 2 representation of x to some large
+number of bits. Let XOR-BV(x,y) be the bitwise exclusive or of b(x)
+and b(y).  Let XOR-BVS(x0, x1, ... xn) be XOR-BV(x0, XOR-BV(x1, ...)).
+
+A state is a LOSER state if
+
+  XOR-BVS(p(0),...,p(n)) = b(0) and there is an i such that P(i)>1
+or
+  XOR-BVS(P(0),...,p(n)) = b(1) and there is no i such that P(i)>1.
+
+  Consider the following strategy:
+
+  If no pile has 2 matches, remove the match in one pile.
+
+  If there is exactly one pile with at least 2 matches, remove all the
+  matches in that pile if there are an even number of non-empty piles
+  and all but one match if there are an odd number of non-empty piles.
+
+  Otherwise, find the highest bit position n such that there is an odd
+  number of 1 bits in the binary representation of the piles.  Replace
+  a pile with a 1 in bit position n with the "exclusive-or" of the
+  other piles.
+
+If not in a loser state and there are no piles with at least 2
+matches, then clearly removing a non-empty pile is a valid move that
+will make the state a loser state.
+
+If not in a loser state and there is exactly one pile with at least 2
+matches, removing the matches in that pile if there is an even number
+of non-empty piles or all but one of the matches if an odd number of
+non-empty piles is a valid move that will make a loser state.
+
+Otherwise, again if not in a loser state, there must be at least 2
+piles with at least 2 matches and a highest bit position n such with
+an odd number of 1 bits.  Replacing a pile with a 1 bit in bit
+position n in the manner described will reduce the number in that
+pile, so this constitutes a valid move.  Also, the exclusive-or of
+resulting piles will be all zeros, and there will still be at least 1
+pile remaining with at least 2 matches, so the resulting state will be
+a loser state.
+
+Thus, the strategy transforms any non-losing state into a losing state
+with a valid move.  Since any move from a loser state is a non-loser
+state, and the empty state is not a loser state, the strategy above
+will always yield a win if the game is in a non-losing state
+immediately before a turn or if the game is in a losing state
+immediately before the opponent's turn.
+
+An example game
+---------------
+
+We get the theorem prover to print the evolving game state, and use
+r-loop to evaluate an example:
+
+      >(bm-trace (game-with-stupid-move :entry 
+          (list (if (car arglist) 'computer 'player) 
+                (bv-to-nat-state (cadr arglist)))))
+
+      >(r-loop)
+
+      Abbreviated Output Mode:  On
+      Type ? for help.
+      *(loser-state (nat-to-bv-state '(3 5 8) 5) 5)
+       F
+      *(reasonable-game-statep (nat-to-bv-state '(3 5 8) 5) 5)
+       T
+      *(game-with-stupid-move t (nat-to-bv-state '(3 5 8) 5) 5)
+        1> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (3 5 8)))
+        2> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (3 5 6)))
+        3> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (2 5 6)))
+        4> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (2 4 6)))
+        5> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (1 4 6)))
+        6> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (1 4 5)))
+        7> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (0 4 5)))
+        8> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (0 4 4)))
+        9> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (0 3 4)))
+       10> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (0 3 3)))
+       11> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (0 2 3)))
+       12> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (0 2 2)))
+       13> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (0 1 2)))
+       14> (<<GAME-WITH-STUPID-MOVE>> '(PLAYER (0 1 0)))
+       15> (<<GAME-WITH-STUPID-MOVE>> '(COMPUTER (0 0 0)))
+       T
+      *
+
+|#
+
+(defn put (place value state)
+  (if (zerop place)
+      (cons value (cdr state))
+    (cons (car state) (put (sub1 place) value (cdr state)))))
+
+(defn get (place state)
+  (if (zerop place)
+      (car state)
+    (get (sub1 place) (cdr state))))
+
+
+(prove-lemma get-put (rewrite)
+             (equal
+              (get a1 (put a2 value state))
+              (if (equal (fix a1) (fix a2))
+                  value
+                (get a1 state))))
+
+(defn length (list)
+  (if (listp list)
+      (add1 (length (cdr list)))
+    0))
+
+(dcl bv-size ())
+
+(defn bitp (bit)
+  (or (equal bit 0) (equal bit 1)))
+
+(defn bvp (bv)
+  (if (listp bv)
+      (and (bitp (car bv)) (bvp (cdr bv)))
+    (equal bv nil)))
+
+(defn bvsp (bvs)
+  (if (listp bvs)
+      (and (bvp (car bvs)) (bvsp (cdr bvs)))
+    (equal bvs nil)))
+
+(defn good-state-of-size (state size)
+  (if (listp state)
+      (and
+       (bvp (car state))
+       (equal (length (car state)) (fix size))
+       (good-state-of-size (cdr state) size))
+    (equal state nil)))
+
+(defn good-state (state)
+  (good-state-of-size state (bv-size)))
+
+(defn lessp-bv (bv1 bv2)
+  (if (and (listp bv1) (listp bv2))
+      (or
+       (lessp (car bv1) (car bv2))
+       (and
+        (equal (car bv1) (car bv2))
+        (lessp-bv (cdr bv1) (cdr bv2))))
+    f))
+
+;; high order bit first
+(defn nat-to-bv (nat size)
+  (if (zerop size)
+      nil
+    (if (lessp nat (exp 2 (sub1 size)))
+        (cons 0 (nat-to-bv nat (sub1 size)))
+      (cons 1 (nat-to-bv (difference nat (exp 2 (sub1 size))) 
+                         (sub1 size))))))
+
+;; most significant bit first
+(defn bv-to-nat (bv)
+  (if (listp bv)
+      (plus (times (car bv) (exp 2 (length (cdr bv)))) 
+            (bv-to-nat (cdr bv)))
+    0))
+
+(prove-lemma length-nat-to-bv (rewrite)
+             (equal (length (nat-to-bv nat size)) (fix size)))
+
+(prove-lemma bv-to-nat-nat-to-bv (rewrite)
+              (equal (bv-to-nat (nat-to-bv nat size)) 
+                     (if (lessp nat (exp 2 size))
+                         (fix nat)
+                       (sub1 (exp 2 size)))))
+
+(prove-lemma lessp-bv-length (rewrite)
+             (implies
+              (bvp x)
+              (lessp (bv-to-nat x) (exp 2 (length x)))))
+
+(prove-lemma lessp-bv-to-nat-bv-to-nat (rewrite)
+             (implies
+              (and
+               (equal (length x) (length y))
+               (bvp x) (bvp y))
+             (equal
+              (lessp (bv-to-nat x) (bv-to-nat y))
+              (lessp-bv x y))))
+
+(prove-lemma lessp-bv-nat-to-bv-nat-to-bv (rewrite)
+             (implies
+              (and (lessp x (exp 2 size)) (lessp y (exp 2 size)))
+              (equal
+               (lessp-bv (nat-to-bv x size) (nat-to-bv y size))
+               (lessp x y))))
+
+;; return the number of columns with value at least min
+(defn number-with-at-least (state min size)
+  (if (listp state)
+      (if (not (lessp-bv (car state) (nat-to-bv min size)))
+          (add1 (number-with-at-least (cdr state) min size))
+        (number-with-at-least (cdr state) min size))
+    0))
+        
+;; return a column number with value at least min
+(defn col-with-at-least (state min size)
+  (if (listp state)
+      (if (not (lessp-bv (car state) (nat-to-bv min size)))
+          0
+        (add1 (col-with-at-least (cdr state) min size)))
+    f))
+
+(defn xor (bit1 bit2)
+  (if (equal (zerop bit1) (zerop bit2)) 0 1))
+
+(defn xor-bv (bv1 bv2)
+  (if (and (listp bv1) (listp bv2))
+      (cons (xor (car bv1) (car bv2)) 
+            (xor-bv (cdr bv1) (cdr bv2)))
+    nil))
+
+(defn fix-bit (x)
+  (if (zerop x) 0 1))
+
+(defn fix-xor-bv (bv)
+  (if (listp bv)
+      (cons (fix-bit (car bv)) (fix-xor-bv (cdr bv)))
+    nil))
+
+(defn xor-bvs (bvs)
+  (if (listp bvs)
+      (if (listp (cdr bvs))
+        (xor-bv (car bvs) (xor-bvs (cdr bvs)))
+        (fix-xor-bv (car bvs)))
+    nil)
+  ((lessp (length bvs))))
+
+(prove-lemma bvp-fix-xor-bv (rewrite)
+             (bvp (fix-xor-bv x)))
+
+(prove-lemma bvp-fix-xor-bv-identity (rewrite)
+             (implies
+              (bvp x)
+              (equal (fix-xor-bv x) x)))
+
+(prove-lemma commutativity-of-xor (rewrite)
+             (equal (xor a b) (xor b a)))
+
+(prove-lemma associativity-of-xor (rewrite)
+             (equal (xor (xor a b) c) (xor a (xor b c))))
+
+(prove-lemma commutativity2-of-xor (rewrite)
+             (equal (xor c (xor a b)) (xor a (xor c b))))
+
+(prove-lemma commutativity-of-xor-bv (rewrite)
+             (equal (xor-bv a b) (xor-bv b a)))
+
+(prove-lemma associativity-of-xor-bv (rewrite)
+             (equal (xor-bv (xor-bv a b) c) (xor-bv a (xor-bv b c))))
+
+(prove-lemma commutativity2-of-xor-bv (rewrite)
+             (equal (xor-bv c (xor-bv a b)) (xor-bv a (xor-bv c b))))
+
+;; return number of first vector with high bit on
+(defn high-bit-on (bvs)
+  (if (listp bvs)
+      (if (equal (caar bvs) 1) 
+          0
+        (add1 (high-bit-on (cdr bvs))))
+    f))
+  
+(defn delete-pile (place state)
+  (if (not (listp state))
+      state
+    (if (zerop place) 
+        (cdr state)
+      (cons (car state) (delete-pile (sub1 place) (cdr state))))))
+
+(defn delete-high-bits (state)
+  (if (listp state)
+      (cons (cdar state) (delete-high-bits (cdr state)))
+    nil))
+
+(prove-lemma find-high-out-of-sync-rewrite (rewrite)
+             (implies (and (listp state)
+                           (listp (car state)))
+               (lessp (length (car (delete-high-bits state)))
+                      (length (car state)))))
+
+(defn find-high-out-of-sync (state)
+  (if (listp state)
+      (if (listp (car state))
+          (if (equal (car (xor-bvs state)) 1)
+              (high-bit-on state)
+            (find-high-out-of-sync (delete-high-bits state)))
+        f)
+    f)
+  ((lessp (length (car state)))))
+
+(defn smart-move (state size)
+  (cond
+   ((equal (number-with-at-least state 2 size) 0)
+    (cons (col-with-at-least state 1 size) (nat-to-bv 0 size)))
+   ((equal (number-with-at-least state 2 size) 1) 
+    (cons (col-with-at-least state 2 size)
+          (if (equal (remainder (number-with-at-least state 1 size) 
+                                2) 0)
+              (nat-to-bv 0 size)
+            (nat-to-bv 1 size))))
+   (t (let ((badcol (find-high-out-of-sync state)))
+          (cons badcol (xor-bvs (delete-pile badcol state)))))))
+
+(defn apply-move (move state)
+  (put (car move) (cdr move) state))
+
+(defn all-zeros (bv)
+  (if (listp bv)
+      (and (equal (car bv) 0) (all-zeros (cdr bv)))
+    t))
+
+(defn loser-state (state size)
+  (or
+   (and
+    (equal (number-with-at-least state 2 size) 0)
+    (equal (remainder (number-with-at-least state 1 size) 2) 1))
+   (and
+    (lessp 0 (number-with-at-least state 2 size))
+    (all-zeros (xor-bvs state)))))
+
+(defn movep (move state size)
+  (and
+   (lessp-bv (cdr move) (get (car move) state))
+   (equal (length (cdr move)) size)
+   (bvp (cdr move))
+   (lessp (car move) (length state))))
+
+;; the column of place has a 1 bit at the highest position 
+;; whose xors are not 0
+(defn high-bit-out-of-sync (place state)
+  (if (listp state)
+      (if (listp (car state))
+          (or
+           (and 
+            (equal (car (get place state)) 1)
+            (equal (car (xor-bvs state)) 1))
+           (and
+            (equal (car (xor-bvs state)) 0)
+            (high-bit-out-of-sync place (delete-high-bits state))))
+        f)
+    f)
+  ((lessp (length (car state)))))
+
+(defn lessp-when-high-bit-recursion (state size)
+  (if (zerop size)
+      t
+    (lessp-when-high-bit-recursion 
+     (delete-high-bits state) (sub1 size))))
+
+(prove-lemma equal-length-0 (rewrite)
+             (equal
+              (equal (length x) 0)
+              (not (listp x))))
+
+(prove-lemma equal-length-1 (rewrite)
+             (equal
+              (equal (length x) 1)
+              (and (listp x) (not (listp (cdr x))))))
+
+(prove-lemma good-state-of-size-delete-high-bits (rewrite)
+             (implies
+              (good-state-of-size state (add1 x))
+              (good-state-of-size (delete-high-bits state) x)))
+
+(prove-lemma high-bit-out-of-sync-empty (rewrite)
+             (implies
+              (and 
+               (good-state-of-size state size)
+               (zerop size))
+              (not (high-bit-out-of-sync place state))))
+
+(prove-lemma get-of-bad-place (rewrite)
+             (implies
+              (not (lessp place (length state)))
+              (equal (get place state) 0)))
+
+(prove-lemma listp-delete-high-bits (rewrite)
+             (equal (listp (delete-high-bits x)) (listp x)))
+
+
+(defn bv-not (x)
+  (if (equal x 0) 1 0))
+
+(prove-lemma bvp-xor-bv (rewrite)
+             (bvp (xor-bv x y)))
+
+(prove-lemma bvp-xor-bvs (rewrite)
+             (bvp (xor-bvs state)))
+
+(prove-lemma equal-bitp-simplify (rewrite)
+             (implies
+              (and
+               (bitp x)
+               (not (equal x 0)))
+              (equal (equal x y) (equal y 1))))
+
+;; make all bit equality constants into 0
+(prove-lemma equal-bit-1 (rewrite)
+             (implies
+              (bitp x)
+              (equal (equal x 1) (not (equal x 0)))))
+
+(prove-lemma bitp-car-bvp (rewrite)
+             (implies
+              (bvp x)
+              (bitp (car x))))
+
+(prove-lemma good-state-of-size-means-bvsp (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (bvsp state)))
+
+(prove-lemma listp-xor-bv (rewrite)
+             (equal 
+              (listp (xor-bv x y))
+              (and (listp x) (listp y))))
+
+(prove-lemma listp-xor-bvs (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (equal
+               (listp (xor-bvs state))
+               (and (listp state) (lessp 0 size)))))
+
+(prove-lemma bvp-get (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (equal
+               (bvp (get place state))
+               (lessp place (length state)))))
+
+(prove-lemma listp-get (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (equal
+               (listp (get place state))
+               (and (lessp place (length state)) (lessp 0 size)))))
+
+(prove-lemma car-xor-bv (rewrite)
+             (implies
+              (and (listp x) (listp y))
+             (equal
+              (car (xor-bv x y))
+              (xor (car x) (car y)))))
+
+(defn lessp-bv-recursion (list size)
+  (if (zerop size) t
+    (lessp-bv-recursion (cdr list) (sub1 size))))
+
+(defn firstn (list n)
+  (if (not (listp list))
+      list
+    (if (zerop n)
+        nil
+      (cons (car list) (firstn (cdr list) (sub1 n))))))
+
+(defn min (x y) 
+  (if (lessp x y) (fix x) (fix y)))
+
+(prove-lemma xor-bv-inverse (rewrite)
+             (equal (xor-bv a (xor-bv a b)) 
+                    (firstn (fix-xor-bv b) 
+                            (min (length a) (length b)))))
+
+(prove-lemma xor-bv-fix-xor-bv (rewrite)
+             (and
+              (equal (xor-bv (fix-xor-bv x) y) (xor-bv x y))
+              (equal (xor-bv y (fix-xor-bv x)) (xor-bv y x))))
+
+(prove-lemma firstn-noop (rewrite)
+             (implies
+              (not (lessp x (length list)))
+              (equal (firstn list x) list)))
+
+(prove-lemma xor-bvs-delete-high-bits (rewrite)
+             (implies
+               (good-state-of-size state size)
+              (equal
+               (xor-bvs (delete-high-bits state))
+               (if (or (not (listp state)) (not (lessp 1 size))) 
+                   nil
+                 (cdr (xor-bvs state))))))
+
+(prove-lemma length-xor-bvs (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (equal (length (xor-bvs state)) 
+                     (if (listp state) (fix size) 0)))
+             ((induct (lessp-when-high-bit-recursion state size))))
+
+(prove-lemma listp-delete-pile (rewrite)
+             (equal
+              (listp (delete-pile place state))
+              (and
+               (listp state)
+               (not (and (zerop place) (not (listp (cdr state))))))))
+
+(prove-lemma xor-bvs-delete-pile (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp place (length state)))
+              (equal
+               (xor-bvs (delete-pile place state))
+               (if (lessp 1 (length state))
+                   (xor-bv (get place state) (xor-bvs state))
+                 nil)))
+             ((induct (lessp-bv-recursion state place))))
+
+(prove-lemma listp-delete-pile-delete-high-bits (rewrite)
+             (equal
+              (listp (delete-pile place (delete-high-bits state)))
+              (listp (delete-pile place state))))
+
+(prove-lemma get-delete-high-bits (rewrite)
+             (equal
+              (get place (delete-high-bits state))
+              (cdr (get place state))))
+
+(prove-lemma delete-pile-delete-high-bits (rewrite)
+             (equal
+              (delete-pile place (delete-high-bits state))
+              (delete-high-bits (delete-pile place state))))
+
+(prove-lemma good-state-of-size-delete-pile (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (good-state-of-size (delete-pile place state) size)))
+
+(prove-lemma silly-listp-cdr (rewrite)
+             (implies
+              (lessp 1 (length x))
+              (listp (cdr x))))
+
+(prove-lemma numberp-car-bv (rewrite)
+             (implies 
+              (bvp bv)
+              (numberp (car bv))))
+
+(prove-lemma length-delete-high-bits (rewrite)
+             (equal (length (delete-high-bits x)) (length x)))
+
+;; special version to help with free variable problem of next lemma
+(prove-lemma xor-bvs-delete-high-bits-2 (rewrite)
+             (implies
+              (and
+               (not (equal size 0))
+               (good-state-of-size state size))
+              (equal
+               (xor-bvs (delete-high-bits state))
+               (if (or (not (listp state)) (not (lessp 1 size))) 
+                   nil
+                 (cdr (xor-bvs state))))))
+
+(prove-lemma lessp-when-high-bit-out-of-sync-helper nil
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp place (length state))
+               (lessp 1 (length state))
+               (high-bit-out-of-sync place state))
+               (lessp-bv 
+                (xor-bvs (delete-pile place state))
+                (get place state)))
+             ((induct (lessp-when-high-bit-recursion state size))))
+
+(disable xor-bvs-delete-high-bits-2)
+
+(prove-lemma high-bit-out-of-sync-trivial (rewrite)
+              (implies
+               (not (lessp place (length state)))
+               (not (high-bit-out-of-sync place state))))
+
+(prove-lemma lessp-when-high-bit-out-of-sync (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp 1 (length state))
+               (high-bit-out-of-sync place state))
+               (lessp-bv 
+                (xor-bvs (delete-pile place state))
+                (get place state)))
+             ((use (lessp-when-high-bit-out-of-sync-helper))))
+
+(prove-lemma bitp-car-xor-bvs (rewrite)
+             (bitp (car (xor-bvs bvs))))
+
+(prove-lemma high-bit-on-works (rewrite)
+             (implies
+              (and
+               (equal (car (xor-bvs state)) 1)
+               (bvsp state))
+              (equal (car (get (high-bit-on state) state)) 1)))
+
+(prove-lemma all-zeros-length-1 (rewrite)
+             (implies
+              (equal (length x) 1)
+              (equal (all-zeros x) (equal (car x) 0))))
+
+(prove-lemma all-zeros-xor-bvs-simple (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp size 2))
+               (equal 
+                (all-zeros (xor-bvs state))
+                (or (zerop size) (not (listp state))
+                    (equal (car (xor-bvs state)) 0))))
+             ((induct (lessp-when-high-bit-recursion state size))))
+             
+(prove-lemma find-high-out-of-sync-works (rewrite)
+             (implies
+              (and
+               (not (all-zeros (xor-bvs state)))
+               (good-state-of-size state size))
+              (high-bit-out-of-sync (find-high-out-of-sync state)
+                                    state))
+             ((induct (lessp-when-high-bit-recursion state size))))
+
+(prove-lemma bvp-nat-to-bv (rewrite)
+             (bvp (nat-to-bv nat size)))
+
+(prove-lemma silly-lessp-sub1-exp-length nil
+             (implies
+              (and
+               (not (lessp nat (exp 2 (length bv))))
+               (bvp bv))
+              (not (lessp nat (bv-to-nat bv)))))
+
+(defn all-ones (size)
+  (if (zerop size)
+      nil
+    (cons 1 (all-ones (sub1 size)))))
+
+(prove-lemma nat-to-bv-is-all-ones (rewrite)
+             (implies
+              (not (lessp nat (exp 2 size)))
+              (equal (nat-to-bv nat size) (all-ones size))))
+
+(prove-lemma length-all-ones (rewrite)
+             (equal (length (all-ones size)) (fix size)))
+
+(prove-lemma bvp-all-ones (rewrite)
+             (bvp (all-ones size)))
+      
+(prove-lemma lessp-bv-all-ones-arg1 (rewrite)
+             (implies
+              (bvp bv)
+              (not (lessp-bv (all-ones size) bv)))
+             ((induct (lessp-bv-recursion bv size))))
+
+(prove-lemma lessp-bv-all-ones-arg2 (rewrite)
+             (implies
+              (and
+               (equal (length bv) size)
+               (bvp bv))
+             (equal
+              (lessp-bv bv (all-ones size))
+              (lessp (bv-to-nat bv) (sub1 (exp 2 size))))))
+
+(prove-lemma lessp-bv-nat-to-bv (rewrite)
+             (implies
+              (and
+               (equal (length bv) (fix size))
+               (lessp nat (exp 2 size))  ; not needed?
+               (bvp bv))
+              (and
+               (equal
+                (lessp-bv (nat-to-bv nat size) bv)
+                (lessp nat (bv-to-nat bv)))
+               (equal
+                (lessp-bv bv (nat-to-bv nat size) )
+                (lessp (bv-to-nat bv) nat))))
+             ((use 
+               (silly-lessp-sub1-exp-length)
+               (lessp-bv-to-nat-bv-to-nat
+                (x bv) (y (nat-to-bv nat size)))
+               (lessp-bv-to-nat-bv-to-nat
+                (y bv) (x (nat-to-bv nat size))))))
+
+(prove-lemma length-car-state (rewrite)
+             (implies
+              (good-state-of-size state size)
+              (equal (length (car state)) 
+                     (if (listp state) (fix size) 0))))
+
+(prove-lemma bvp-car (rewrite)
+             (implies
+              (and 
+               (bvsp x)
+               (listp x))
+              (bvp (car x))))
+
+(prove-lemma lessp-bv-zero (rewrite)
+             (implies
+              (zerop zero)
+              (not (lessp-bv x (nat-to-bv zero size))))
+             ((induct (lessp-bv-recursion x size))))
+
+(prove-lemma number-with-at-least-zero (rewrite)
+             (implies
+              (zerop zero)
+             (equal
+              (number-with-at-least bv zero size)
+              (length bv))))
+
+(prove-lemma lessp-1-exp (rewrite)
+             (equal 
+              (lessp 1 (exp x y))
+              (and (lessp 1 x) (not (zerop y)))))
+
+(prove-lemma lessp-x-exp-x-y (rewrite)
+             (equal
+              (lessp x (exp x y))
+              (or
+               (and (zerop x) (zerop y))
+               (and (lessp 1 x) (lessp 1 y))))
+             ((induct (exp x y))))
+
+(prove-lemma lessp-bv-col-get-with-at-least (rewrite)
+             (implies
+              (and
+               (lessp x y)
+               (lessp y (exp 2 size))
+               (good-state-of-size state size)
+               (not (zerop (number-with-at-least state y size))))
+              (lessp-bv (nat-to-bv x size)
+                        (get (col-with-at-least state y size) state))))
+
+(prove-lemma lessp-1-x-means-not-zerop-x nil
+             (implies
+              (lessp 1 x)
+              (not (zerop x))))
+
+
+(prove-lemma length-xor-bvs-delete-pile (rewrite)
+             (implies
+              (and
+               (lessp 1 (length state))
+               (good-state-of-size state size))
+              (equal (length (xor-bvs (delete-pile n state))) 
+                     (fix size)))
+             ((use (length-xor-bvs (state (delete-pile n state))))))
+
+(prove-lemma high-bit-on-reasonable (rewrite)
+             (implies
+              (and
+               (equal (car (xor-bvs state)) 1)
+               (good-state-of-size state size))
+              (lessp (high-bit-on state) (length state))))
+
+(prove-lemma find-high-out-of-sync-reasonable (rewrite)
+             (implies
+              (and
+               (listp state)
+               (good-state-of-size state size))
+              (lessp (find-high-out-of-sync state)
+                     (length state)))
+             ((induct (lessp-when-high-bit-recursion state size))))
+
+(prove-lemma col-with-at-least-reasonable (rewrite)
+             (implies
+              (and
+               (not (zerop (number-with-at-least state n size)))
+               (good-state-of-size state size))
+              (lessp (col-with-at-least state n size)
+                     (length state))))
+
+(prove-lemma lessp-length (rewrite)
+             (implies
+              (lessp n (length state))
+              (listp state)))
+
+(disable EQUAL-BITP-SIMPLIFY)
+
+
+
+(prove-lemma listp-nat-to-bv (rewrite)
+             (equal (listp (nat-to-bv n size)) (not (zerop size))))
+
+(prove-lemma number-with-at-least-simple (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (zerop size))
+              (equal (number-with-at-least state n size) 
+                     (length state))))
+
+(prove-lemma bitp-car (rewrite)
+             (implies
+              (bvp bv)
+              (bitp (car bv))))
+
+(prove-lemma car-xor-bv-better (rewrite)
+             (equal (car (xor-bv x y)) 
+                    (if (and (listp x) (listp y))
+                        (xor (car x) (car y))
+                      0)))
+
+(prove-lemma xor-bv-inverse-2 (rewrite)
+             (equal (xor-bv b (xor-bv a a)) 
+                    (firstn (fix-xor-bv b) 
+                            (min (length a) (length b)))))
+
+(prove-lemma length-fix-xor-bv (rewrite)
+             (equal (length (fix-xor-bv x)) (length x)))
+
+(prove-lemma xor-bvs-put (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (equal (length value) size) ; needed ?
+               (lessp place (length state)))
+              (equal
+               (xor-bvs (put place value state))
+               (xor-bv (get place state) 
+                       (xor-bv value (xor-bvs state)))))
+             ((disable equal-bitp-simplify)))
+
+(defn triple-cdr-induction (a b c)
+  (if (and (listp a) (listp b) (listp c))
+      (triple-cdr-induction (cdr a) (cdr b) (cdr c))
+    t))
+
+      
+(prove-lemma all-zeros-xor-bv-identity (rewrite)
+             (implies
+              (and
+               (equal (length a) (length b))
+               (equal (length b) (length c))
+               (all-zeros c))
+             (equal
+              (all-zeros (xor-bv a (xor-bv b c)))
+              (equal (fix-xor-bv a) (fix-xor-bv b))))
+             ((disable equal-bitp-simplify)
+              (induct (triple-cdr-induction a b c))))
+
+(prove-lemma length-get (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp place (length state)))
+              (equal (length (get place state)) (fix size))))
+             
+(prove-lemma all-zeros-xor-bvs-put (rewrite)
+             (implies
+              (and
+               (all-zeros (xor-bvs state))
+               (good-state-of-size state size)
+               (equal (length value) size)
+               (lessp place (length state)))
+              (equal
+               (all-zeros (xor-bvs (put place value state)))
+               (equal (fix-xor-bv value) (get place state))))
+             ((use (all-zeros-xor-bv-identity 
+                    (a value) (b (get place state)) 
+                    (c (xor-bvs state))))
+              (disable all-zeros-xor-bv-identity)))
+
+(prove-lemma lessp-bv-x-x (rewrite)
+             (not (lessp-bv x x)))
+
+(prove-lemma put-get (rewrite)
+             (implies
+              (lessp x (length state))
+             (equal
+              (put x (get x state) state)
+              state)))
+
+(prove-lemma get-means-number-with-at-least (rewrite)
+             (implies
+              (and
+               (not (lessp-bv (get x state) (nat-to-bv n size)))
+               (lessp x (length state)))
+              (not (equal (number-with-at-least state n size) 0))))
+
+(prove-lemma number-with-at-least-put (rewrite)
+             (implies
+              (and
+               (lessp p (length state))
+               (good-state-of-size state size)
+               (equal (length v) size))
+             (equal
+              (number-with-at-least (put p v state) n size)
+              (if (lessp-bv (get p state) (nat-to-bv n size))
+                  (if (lessp-bv v (nat-to-bv n size))
+                      (number-with-at-least state n size)
+                    (add1 (number-with-at-least state n size)))
+                  (if (lessp-bv v (nat-to-bv n size))
+                      (sub1 (number-with-at-least state n size))
+                    (number-with-at-least state n size))))))
+
+(prove-lemma all-zeros-xor-bvs-when-lone-big-simple (rewrite)
+             (implies
+              (and
+               (good-state-of-size state 1)
+               (equal (number-with-at-least state 1 1) 1))
+              (equal (car (xor-bvs state)) 1)))
+
+(prove-lemma plus-exp-2-x-exp-2-x (rewrite)
+             (equal
+              (plus (exp 2 x) (exp 2 x))
+              (exp 2 (add1 x))))
+
+(prove-lemma lessp-exp-exp (rewrite)
+             (equal
+              (lessp (exp x y) (exp x z))
+              (if (zerop x) 
+                  (and (not (zerop y)) (zerop z))
+                (and (not (equal x 1)) (lessp y z)))))
+
+(prove-lemma nat-to-bv-exp (rewrite)
+             (implies
+              (not (lessp n size))
+             (equal
+              (nat-to-bv (exp 2 n) size)
+              (all-ones size))))
+
+(prove-lemma bv-to-nat-all-zeros (rewrite)
+             (implies
+              (bvp bv)
+             (equal
+              (equal (bv-to-nat bv) 0)
+              (all-zeros bv))))
+
+(prove-lemma lessp-bv-to-nat-1 (rewrite)
+             (implies
+              (bvp bv)
+              (equal (lessp (bv-to-nat bv) 1) (all-zeros bv))))
+
+(prove-lemma car-nat-to-bv-exp (rewrite)
+             (implies
+              (lessp n size)
+              (equal
+               (car (nat-to-bv (exp 2 n) size))
+               (if (equal (add1 n) size) 1 0))))
+
+;; let's disable some time wasters
+(disable equal-bitp-simplify)
+(disable ALL-ZEROS-XOR-BVS-WHEN-LONE-BIG-SIMPLE)
+(disable HIGH-BIT-ON-REASONABLE )
+(disable find-high-out-of-sync-reasonable)
+
+(prove-lemma all-zeros-firstn-difference (rewrite)
+             (implies
+              (and
+               (bvp x)
+               (equal (length x) size)
+               (lessp n size))
+              (equal
+               (lessp-bv x (nat-to-bv (exp 2 n) size))
+               (all-zeros (firstn x (difference size n)))))
+             ((induct (lessp-bv-recursion x size))))
+
+(prove-lemma all-zeros-xor-bv (rewrite)
+             (implies
+              (and
+               (bvp a) (bvp b)
+               (equal (length a) (length b)))
+              (equal (all-zeros (xor-bv a b)) (equal a b))))
+
+(prove-lemma lessp-bv-nat-to-bv-1 (rewrite)
+             (implies
+              (and 
+               (equal (length x) size)
+               (bvp x))
+              (equal
+               (lessp-bv x (nat-to-bv 1 size))
+               (and (lessp 0 size) (all-zeros x)))))
+
+
+(defn double-length-induction (x y)
+  (if (and (listp x) (listp y))
+      (double-length-induction (cdr x) (cdr y))
+    t))
+
+(prove-lemma all-zeros-equal (rewrite)
+             (implies
+              (and 
+               (bvp a)
+               (bvp b)
+               (all-zeros a)
+               (all-zeros b))
+              (equal (equal a b) (equal (length a) (length b))))
+             ((induct (double-length-induction a b))))
+
+(disable all-zeros-equal)
+
+(prove-lemma all-zeros-xor-bvs (rewrite)
+             (implies
+              (and
+               (good-state-of-size z size)
+               (equal (number-with-at-least z 1 size) 0))
+              (all-zeros (xor-bvs z)))
+             ((enable all-zeros-equal)))
+
+(prove-lemma length-firstn (rewrite)
+             (equal
+              (length (firstn list size))
+              (min (length list) size)))
+
+(prove-lemma length-xor-bv (rewrite)
+             (equal 
+              (length (xor-bv a b)) 
+              (min (length a) (length b))))
+
+(prove-lemma firstn-xor-bv (rewrite)
+             (equal
+              (firstn (xor-bv a b) size)
+              (xor-bv (firstn a size) (firstn b size))))
+
+(prove-lemma all-zeros-xor-bvs-firstn (rewrite)
+             (implies
+              (and
+               (good-state-of-size z size)
+               (lessp n size)
+               (equal (number-with-at-least z (exp 2 n) size) 0))
+              (all-zeros (firstn (xor-bvs z) (difference size n))))
+             ((enable all-zeros-equal)))
+
+(prove-lemma all-zeros-if-firstn-zeros (rewrite)
+             (implies
+              (all-zeros x)
+              (all-zeros (firstn x size))))
+
+(prove-lemma good-state-of-size-length-xor-bvs (rewrite)
+             (equal
+              (good-state-of-size z (length (xor-bvs z)))
+              (good-state-of-size z (length (car z)))))
+
+(prove-lemma bvp-firstn (rewrite)
+             (implies
+              (bvp x)
+              (bvp (firstn x size))))
+
+(prove-lemma number-with-at-least-exp-2 (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp n size)
+               (all-zeros (firstn (xor-bvs state) (difference size n))))
+              (not 
+               (equal (number-with-at-least state (exp 2 n) size) 
+                      1))))
+
+(prove-lemma number-with-at-least-2 (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp 1 size)
+               (all-zeros (xor-bvs state)))
+              (not (equal (number-with-at-least state 2 size) 1)))
+             ((use (number-with-at-least-exp-2 (n 1)))))
+
+
+(prove-lemma lessp-bv-all-zeros (rewrite)
+             (implies
+              (and
+               (all-zeros x)
+               (equal (length x) (length y))
+               (bvp x) (bvp y))
+              (and
+               (equal (lessp-bv x y) (not (all-zeros y)))
+               (not (lessp-bv y x)))))
+
+(prove-lemma number-with-at-least-means-get (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp z (length state))
+               (equal (number-with-at-least state n size) 0))
+              (equal (lessp (bv-to-nat (get z state)) n) t)))
+              
+
+(prove-lemma remainder-sub1-hack (rewrite)
+             (implies
+              (equal (remainder x y) p)
+              (equal (remainder (sub1 x) y) 
+                     (if (zerop x) 0
+                       (if (zerop p) 
+                           (sub1 y) 
+                         (sub1 p))))))
+
+;; ought to be using more up-to-date naturals library!
+
+(prove-lemma equal-times-x (rewrite)
+             (equal
+              (equal (times y x) x)
+              (or
+               (equal x 0)
+               (and (numberp x) (equal y 1)))))
+
+(prove-lemma equal-times-x-2 (rewrite)
+             (equal
+              (equal (times x y) x)
+              (or
+               (equal x 0)
+               (and (numberp x) (equal y 1)))))
+
+(prove-lemma equal-exp-x-x (rewrite)
+             (equal
+              (equal (exp x y) x)
+              (or (equal x 1)
+                  (and (equal x 0) (not (zerop y)))
+                  (and (numberp x) (equal y 1)))))
+
+(prove-lemma lessp-bv-2-means (rewrite)
+             (implies
+              (and
+               (bvp x)
+               (lessp 1 (length x)))
+              (equal
+               (lessp-bv x (nat-to-bv 2 (length x)))
+               (or
+                (all-zeros x)
+                (equal x (nat-to-bv 1 (length x)))))))
+
+(prove-lemma lessp-bv-x-1-means (rewrite)
+             (implies
+              (and
+               (equal (length x) size)
+               (bvp x)
+               (lessp 1 size))
+             (equal
+              (lessp-bv x (nat-to-bv 1 size))
+              (all-zeros x))))
+
+(prove-lemma nat-to-bv-not-numberp (rewrite)
+             (implies
+              (not (numberp n))
+             (equal
+              (nat-to-bv n size)
+              (nat-to-bv 0 size))))
+
+(prove-lemma all-zeros-nat-to-bv-1 (rewrite)
+             (implies
+              (not (zerop size))
+             (equal
+              (all-zeros (nat-to-bv n size))
+              (zerop n))))
+
+(prove-lemma get-when-lessp-bv-2 (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp 1 size)
+               (lessp z (length state))
+               (equal (number-with-at-least state 2 size) 0)
+               (bvp x)
+               (equal (length x) size))
+              (equal
+               (lessp-bv x (get z state))
+               (and
+                (all-zeros x)
+                (equal (get z state) (nat-to-bv 1 size)))))
+             ((induct (lessp-bv-recursion state z))))
+
+
+;; replacement rule version
+(prove-lemma find-high-out-of-sync-reasonable2 (rewrite)
+             (implies
+              (and
+               (listp state)
+               (good-state-of-size state size))
+              (equal (lessp (find-high-out-of-sync state)
+                            (length state))
+                     t))
+             ((use (find-high-out-of-sync-reasonable))))
+
+(prove-lemma xor-bv-0 (rewrite)
+             (implies
+              (and
+               (equal (length x) size)
+               (bvp x))
+              (and 
+               (equal (xor-bv (nat-to-bv 0 size) x) x)
+               (equal (xor-bv x (nat-to-bv 0 size)) x))))
+
+(prove-lemma lessp-bv-to-nat-get-col-with-at-least (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp n (exp 2 size))
+               (lessp 1 size)
+               (not (zerop (number-with-at-least state n size))))
+              (equal
+               (lessp (bv-to-nat (get (col-with-at-least state n size)
+                                      state))
+                      n)
+               f))
+             ((induct (length state))))
+
+;; needed?
+(prove-lemma lessp-get-exp-2-size (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp z (length state)))
+              (equal (lessp (bv-to-nat (get z state)) (exp 2 size)) t)))
+
+(prove-lemma equal-remainder-sub1-0 (rewrite)
+             (equal 
+              (equal (remainder (sub1 x) p) 0)
+              (or
+               (zerop x) (equal p 1)
+               (equal (remainder x p) 1))))
+
+(prove-lemma lessp-1-rewrite (rewrite)
+             (equal
+              (lessp 1 x)
+              (and (numberp x) (not (equal x 0)) (not (equal x 1)))))
+
+(prove-lemma numberp-col-with-at-least (rewrite)
+             (equal
+              (numberp (col-with-at-least state n size))
+              (listp state)))
+
+(prove-lemma equal-remainder-2-special (rewrite)
+             (and
+              (implies
+               (and
+                (equal (remainder x 2) y)
+                (equal y 1))
+               (not (equal (remainder x 2) 0)))
+              (implies
+               (and
+                (not (equal (remainder x 2) y))
+                (equal y 1))
+               (equal (equal (remainder x 2) 0) t))))
+
+(prove-lemma listp-fix-xor-bv (rewrite)
+             (equal
+              (listp (fix-xor-bv x))
+              (listp x)))
+
+(prove-lemma lessp-length-x-length-xor-bvs-put-x (rewrite)
+             (equal
+              (lessp (length x) (length (xor-bvs (put z x state))))
+              f))
+
+(prove-lemma length-xor-bvs-put (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (listp state)
+               (lessp z (length state))
+               (equal (length x) size))
+             (equal (length (xor-bvs (put z x state))) size)))
+
+(prove-lemma lessp-1-length (rewrite)
+             (implies
+              (and
+               (lessp n (length x))
+               (not (zerop n)))
+              (listp (cdr x))))
+
+(prove-lemma all-zeros-get-col-with-at-least (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (lessp 1 size)
+               (lessp 1 (length state))
+               (not (zerop n))
+               (not (zerop (number-with-at-least state n size))))
+              (not (all-zeros 
+                    (get (col-with-at-least state n size) state))))
+             ((induct (length state))))
+
+;; these dinosaurs aren't needed any more
+(disable equal-bit-1)
+(disable silly-listp-cdr)
+
+;; this takes too much time and isn't needed often
+(disable nat-to-bv-is-all-ones)
+
+(prove-lemma equal-remainder-sub1-x-2-special (rewrite)
+             (equal 
+              (equal (remainder (sub1 x) 2) 1)
+              (and (not (zerop x)) (equal (remainder x 2) 0))))
+
+
+;;;;;;
+;;;;;;
+;; The big lemmas about NIM
+
+(prove-lemma smart-moves-from-not-loser (rewrite)
+             (implies
+              (and
+               (not (loser-state state size))
+               (good-state-of-size state size)
+               (lessp 1 (length state))
+               (lessp 1 size)
+               (not (equal (number-with-at-least state 1 size) 0)))
+              (loser-state 
+               (apply-move (smart-move state size) state) size)))
+
+(defn stupid-move (state size)
+  (let ((pile (col-with-at-least state 1 size)))
+    (cons pile (nat-to-bv (sub1 (bv-to-nat (get pile state))) size))))
+
+(defn computer-move (state size)
+  (if (loser-state state size) 
+      (stupid-move state size) 
+    (smart-move state size)))
+
+(prove-lemma smart-move-is-a-move (rewrite)
+             (implies
+              (and
+               (good-state-of-size state size)
+               (not (loser-state state size))
+               (lessp 1 size)
+               (lessp 1 (length state))
+               (lessp 0 (number-with-at-least state 1 size)))
+              (movep (smart-move state size) state size))
+             ((use (lessp-1-x-means-not-zerop-x (x size)))
+              (disable xor-bvs-delete-pile lessp-1-rewrite
+                       get-when-lessp-bv-2 all-zeros-nat-to-bv-1
+                       lessp-bv-all-zeros)))
+
+(prove-lemma moves-from-loser (rewrite)
+             (implies
+              (and
+               (loser-state state size)
+               (lessp 1 size)
+               (good-state-of-size state size)
+               (movep move state size))
+              (not (loser-state (apply-move move state) size)))
+             ((disable xor-bvs-put)))
+
+
+
+
+;;;; put together big lemmas in one theorem about "game"
+
+(constrain a-move-intro (rewrite)
+           (implies 
+            (and
+             (not (zerop (number-with-at-least state 1 size)))
+             (lessp 1 size)
+             (good-state-of-size state size))
+            (movep (a-move state size) state size))
+           ((a-move stupid-move)))
+
+(defn reasonable-game-statep (state size)
+  (and 
+   (good-state-of-size state size)
+   (lessp 1 size)
+   (lessp 1 (length state))))
+
+(defn sum-matches (state)
+  (if (listp state)
+      (plus (bv-to-nat (car state)) (sum-matches (cdr state)))
+    0))
+
+(prove-lemma equal-x-nat-to-bv-0 (rewrite)
+             (implies
+              (and
+               (bvp x)
+               (all-zeros x))
+              (equal 
+               (equal x (nat-to-bv 0 (length x)))
+               t)))
+
+(prove-lemma get-from-zeros (rewrite)
+             (implies
+              (and
+               (good-state-of-size z size)
+               (not (zerop size))
+               (equal (number-with-at-least z 1 size) 0)
+               (lessp d (length z)))
+              (equal (get d z) (nat-to-bv 0 size))))
+
+(prove-lemma lessp-sum-matches-member (rewrite)
+             (implies
+              (lessp place (length state))
+              (not (lessp (sum-matches state) 
+                          (bv-to-nat (get place state))))))
+
+(prove-lemma sum-matches-put (rewrite)
+             (implies
+              (lessp place (length state))
+             (equal
+              (sum-matches (put place v state))
+              (plus (difference (sum-matches state) 
+                                (bv-to-nat (get place state)))
+                    (bv-to-nat v)))))
+
+(prove-lemma lessp-not-all-zeros (rewrite)
+             (implies
+              (and
+               (not (all-zeros x))
+               (bvp x)
+               (listp x))
+              (lessp 0 (bv-to-nat x))))
+
+(defn game-ends-recursion (move state size)
+  (if (and (listp state) (not (zerop (car move))))
+      (game-ends-recursion (cons (sub1 (car move)) (cdr move)) 
+                          (cdr state) size)
+    t))
+    
+(prove-lemma game-ends (rewrite)
+             (implies
+              (and
+               (not (equal (number-with-at-least state 1 size) 0))
+               (good-state-of-size state size)
+               (not (zerop size))
+               (movep move state size))
+              (equal 
+               (lessp (sum-matches (apply-move move state))
+                      (sum-matches state))
+               t))
+             ((induct (game-ends-recursion move state size))))
+
+(disable apply-move)
+(disable smart-move)
+(disable stupid-move)
+
+(defn game (good-player-turn state size)
+  (if (not (reasonable-game-statep state size)) f
+    (if (equal (number-with-at-least state 1 size) 0)
+        good-player-turn
+      (let ((move (if good-player-turn (computer-move state size) 
+                    (a-move state size))))
+        (if (not (movep move state size)) f
+          (game (not good-player-turn) (apply-move move state) size)))))
+  ((lessp (sum-matches state))))
+
+(prove-lemma transitivity-of-lessp-bv (rewrite)
+             (implies
+              (and
+               (lessp-bv x y)
+               (not (lessp-bv z y))
+               (equal (length x) (length y))
+               (equal (length y) (length z))
+               (bvp x)
+               (bvp y)
+               (bvp z))
+              (lessp-bv x z)))
+
+
+(prove-lemma nat-to-bv-size-1 (rewrite)
+             (equal
+              (nat-to-bv x 1)
+              (if (zerop x) '(0) '(1)))
+             ((expand (nat-to-bv x 1))))
+
+(prove-lemma lessp-bv-nat-to-bv-nat-to-bv-2 (rewrite)
+             (implies
+              (not (lessp x y))
+              (not (lessp-bv (nat-to-bv x size) (nat-to-bv y size)))))
+
+(prove-lemma lessp-bv-of-larger (rewrite)
+             (implies
+              (and
+               (lessp-bv v (nat-to-bv x a))
+               (equal (length v) a)
+               (bvp v)
+               (not (lessp y x)))
+              (lessp-bv v (nat-to-bv y a))))
+
+(prove-lemma lessp-number-with-at-least-x-y (rewrite)
+             (implies
+              (and
+               (not (lessp y x))
+               (good-state-of-size state size))
+              (not (lessp (number-with-at-least state x size)
+                          (number-with-at-least state y size)))))
+
+(prove-lemma number-with-at-least-x-y (rewrite)
+             (implies
+              (and
+               (equal (number-with-at-least state x size) 0)
+               (not (lessp y x))
+               (good-state-of-size state size))
+              (equal (number-with-at-least state y size) 0)))
+
+(prove-lemma listp-cdr-put (rewrite)
+             (implies
+              (listp (cdr state))
+              (listp (cdr (put x v state)))))
+
+(prove-lemma listp-cdr-apply-move (rewrite)
+             (implies
+              (and
+               (listp (cdr state))
+               (listp state))
+              (listp (cdr (apply-move move state))))
+             ((enable apply-move)))
+
+(prove-lemma good-state-of-size-apply-move (rewrite)
+             (implies
+              (and
+               (movep move state size)
+               (good-state-of-size state size))
+              (good-state-of-size (apply-move move state) size))
+             ((enable apply-move)
+              (induct (game-ends-recursion move state size))))
+
+
+;;;; THE GAME CORRECTNESS LEMMA
+(prove-lemma computer-always-wins (rewrite)
+             (implies
+              (and
+               (equal good-playerp (not (loser-state state size)))
+               (reasonable-game-statep state size))
+              (game good-playerp state size))
+             ((induct (game good-playerp state size))))
+
+;;;;;;
+;;;;;;
+;;; Let's run an example to watch the game.  We'll need to 
+;;; instantiate the dumb player's strategy to really do this,
+;;; and we'll define some functions to relate bit vector states
+;;; to integers.
+
+(defn nat-to-bv-state (state size)
+  (if (listp state)
+      (cons (nat-to-bv (car state) size)
+            (nat-to-bv-state (cdr state) size))
+    nil))
+
+(defn bv-to-nat-state (state)
+  (if (listp state)
+      (cons (bv-to-nat (car state))
+            (bv-to-nat-state (cdr state)))
+    nil))
+
+;; a particular game where the other player uses the stupid strategy
+(defn game-with-stupid-move (good-player-turn state size)
+  (if (not (reasonable-game-statep state size)) f
+    (if (equal (number-with-at-least state 1 size) 0)
+        good-player-turn
+      (let ((move (if good-player-turn (computer-move state size) 
+                    (stupid-move state size))))
+        (if (not (movep move state size)) f
+          (game-with-stupid-move (not good-player-turn) 
+                                 (apply-move move state) size)))))
+  ((lessp (sum-matches state))))
+
+(prove-lemma movep-stupid-move (rewrite)
+             (implies
+              (and
+               (not (equal (number-with-at-least state 1 size) 0))
+               (lessp 1 size)
+               (good-state-of-size state size))
+              (movep (stupid-move state size) state size))
+             ((enable stupid-move)))
+
+
+(functionally-instantiate game-with-stupid-is-game (rewrite)
+  (implies
+   (and
+    (equal good-playerp (not (loser-state state size)))
+    (reasonable-game-statep state size))
+   (game-with-stupid-move good-playerp state size))
+  computer-always-wins
+  ((game game-with-stupid-move)
+   (a-move stupid-move)))
+

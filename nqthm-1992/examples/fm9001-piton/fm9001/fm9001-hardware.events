@@ -1,0 +1,285 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;   FM9001-HARDWARE.EVENTS
+;;;
+;;;   The low-level, 4-valued, functional specification of the FM9001, with
+;;;   the test logic disabled.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Internal states.
+
+;(defn regs            (state)   (nth 0 state))
+;(defn flags           (state)   (nth 1 state))
+
+(defn a-reg            (state)   (nth 2 state))
+(defn b-reg            (state)   (nth 3 state))
+(defn i-reg            (state)   (nth 4 state))
+(defn data-out         (state)   (nth 5 state))
+(defn addr-out         (state)   (nth 6 state))
+(defn reset-           (state)   (nth 7 state))
+(defn dtack-           (state)   (nth 8 state))
+(defn hold-            (state)   (nth 9 state))
+(defn pc-reg           (state)   (nth 10 state))
+(defn cntl-state       (state)   (nth 11 state))
+
+(disable a-reg)
+(disable b-reg)
+(disable i-reg)
+(disable data-out)
+(disable addr-out)
+(disable reset-)
+(disable dtack-)
+(disable hold-)
+(disable pc-reg)
+(disable cntl-state)
+
+(deftheory fm9001-hardware-state-accessors
+  (regs flags a-reg b-reg i-reg data-out addr-out reset- dtack- hold-
+        pc-reg cntl-state))
+
+;;;  External Inputs.
+
+(defn reset--input   (ext-in)    (nth 0 ext-in))
+(defn hold--input    (ext-in)    (nth 1 ext-in))
+(defn pc-reg-input   (ext-in)    (subrange ext-in 2 5))
+
+(disable reset--input)
+(disable hold--input)
+(disable pc-reg-input)
+
+(deftheory fm9001-external-input-accessors
+  (reset--input hold--input pc-reg-input))
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    FM9001-NEXT-STATE
+;;;
+;;;    The specification of the next state of the processor and memory for a
+;;;    single clock cycle.
+;;;    
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn FM9001-next-state (total-state external-inputs)
+  (let
+    ((p-state (car total-state))
+     (mem-state (cadr total-state)))
+
+    (let
+      ((regs        (regs       p-state))
+       (flags       (flags      p-state))
+       (a-reg       (a-reg      p-state))
+       (b-reg       (b-reg      p-state))
+       (i-reg       (i-reg      p-state))
+       (data-out    (data-out   p-state))
+       (addr-out    (addr-out   p-state))
+       (last-reset- (reset-     p-state))
+       (last-dtack- (dtack-     p-state))
+       (last-hold-  (hold-      p-state))
+       (last-pc-reg (pc-reg     p-state))
+       (cntl-state  (cntl-state p-state))
+
+       (reset-    (reset--input external-inputs))
+       (hold-     (hold--input  external-inputs))
+       (pc-reg-in (pc-reg-input external-inputs)))
+
+      (let
+        ((state            (state            (v-threefix cntl-state)))
+         (rw-              (rw-              (v-threefix cntl-state)))
+         (strobe-          (strobe-          (v-threefix cntl-state)))
+         (hdack-           (hdack-           (v-threefix cntl-state)))
+         (we-regs          (we-regs          (v-threefix cntl-state)))
+         (we-flags         (we-flags         (v-threefix cntl-state)))
+         (we-a-reg         (we-a-reg         (v-threefix cntl-state)))
+         (we-b-reg         (we-b-reg         (v-threefix cntl-state)))
+         (we-i-reg         (we-i-reg         (v-threefix cntl-state)))
+         (we-data-out      (we-data-out      (v-threefix cntl-state)))
+         (we-addr-out      (we-addr-out      (v-threefix cntl-state)))
+         (we-hold-         (we-hold-         (v-threefix cntl-state)))
+         (we-pc-reg        (we-pc-reg        (v-threefix cntl-state)))
+         (data-in-select   (data-in-select   (v-threefix cntl-state)))
+         (dec-addr-out     (dec-addr-out     (v-threefix cntl-state)))
+         (select-immediate (select-immediate (v-threefix cntl-state)))
+         (regs-address     (regs-address     (v-threefix cntl-state)))
+         (alu-c            (alu-c            (v-threefix cntl-state)))
+         (alu-op           (alu-op           (v-threefix cntl-state)))
+         (alu-zero         (alu-zero         (v-threefix cntl-state)))
+         (alu-mpg          (alu-mpg          (v-threefix cntl-state))))
+
+        ;;  ADDR-OUT, RW- and STROBE- are tristate when HOLDing, and pulled
+        ;;  high by external pullups.  The EXT- (external) signals are used
+        ;;  only by the memory interface.
+
+        (let
+          ((ext-addr-out
+            (v-pullup (vft-buf (f-buf hdack-)
+                               (v-threefix addr-out))))
+           (ext-rw-
+            (f-pullup (ft-buf (f-buf hdack-) (f-buf  rw-))))
+           (ext-strobe-
+            (f-pullup (ft-buf (f-buf hdack-) strobe-)))
+           (ext-data-out
+            (vft-buf (f-not (f-buf rw-)) (v-threefix data-out))))
+          (let
+            ((mem-response
+              (memory-value mem-state ext-strobe- ext-rw-
+                            ext-addr-out
+                            (make-list 32 (x)))))
+            (let
+              ((dtack- (car mem-response))
+               (ext-data-bus (v-pullup
+                              (v-wire ext-data-out (cdr mem-response)))))
+              (let
+                ((reg-bus (f$extend-immediate
+                           select-immediate
+                           (a-immediate (v-threefix i-reg))
+                           (f$read-regs regs-address regs)))
+                 (alu-bus (f$core-alu alu-c
+                                      (v-threefix a-reg)
+                                      (v-threefix b-reg)
+                                      alu-zero alu-mpg alu-op
+                                      (make-tree 32)))
+                 (data-in (v-threefix (v-wire ext-data-bus ext-data-out))))
+                (let
+                  ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+                   (abi-bus
+                    (fv-if (f-nand data-in-select
+                                   (f-not last-dtack-))
+                           reg-bus
+                           data-in)))
+                  (list
+                   (list
+                    (f$write-regs we-regs regs-address regs (bv alu-bus))
+                    (f$update-flags flags we-flags alu-bus)
+                    (fv-if we-a-reg abi-bus a-reg)
+                    (fv-if we-b-reg abi-bus b-reg)
+                    (fv-if we-i-reg abi-bus i-reg)
+                    (fv-if we-data-out (bv alu-bus) data-out)
+                    (fv-if we-addr-out addr-out-bus addr-out)
+                    (f-buf reset-)
+                    (f-or strobe- (f-buf dtack-))
+                    (f-if we-hold- (f-buf hold-) last-hold-)
+                    (fv-if we-pc-reg pc-reg-in last-pc-reg)
+                    (v-threefix (f$next-cntl-state
+                                 (f-buf last-reset-)
+                                 (f-buf last-dtack-)
+                                 (f-buf last-hold-)
+                                 rw-
+                                 state
+                                 (v-threefix i-reg)
+                                 (v-threefix flags)
+                                 (v-threefix last-pc-reg)
+                                 regs-address)))
+                   (next-memory-state
+                    mem-state ext-strobe- ext-rw-
+                    ext-addr-out
+                    ext-data-bus)))))))))))
+
+(disable fm9001-next-state)
+
+;;;  RUN-FM9001 -- Simulates N clock cycles.
+
+(defn run-fm9001 (state inputs n)
+  (if (zerop n)
+      state
+    (run-fm9001 (fm9001-next-state state (car inputs))
+                (cdr inputs)
+                (sub1 n))))
+
+(disable run-fm9001)
+
+(prove-lemma run-fm9001-base-case (rewrite)
+  (implies
+   (zerop n)
+   (equal (run-fm9001 state inputs n)
+          state))
+  ;;Hint
+  ((enable run-fm9001)))
+
+(prove-lemma run-fm9001-step-case (rewrite)
+  (implies
+   (not (zerop n))
+   (equal (run-fm9001 state inputs n)
+          (run-fm9001 (fm9001-next-state state (car inputs))
+                      (cdr inputs)
+                      (sub1 n))))
+  ;;Hint
+  ((enable run-fm9001)))
+
+(disable run-fm9001-step-case)
+
+(prove-lemma run-fm9001-plus (rewrite)
+  (equal (run-fm9001 state inputs (plus n m))
+         (run-fm9001 (run-fm9001 state inputs n)
+                     (nthcdr n inputs)
+                     m))
+  ;;Hint
+  ((enable run-fm9001 nthcdr plus)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    FM9001-STATE-STRUCTURE state
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn fm9001-state-structure (state)
+  (and (equal (length state) 2)
+       (properp state)
+       (equal (length (car state)) 12)
+       (properp (car state))
+       (equal (length (cadr state)) 8)
+       (properp (cadr state))
+       (equal (length (caar state)) 4)
+       (properp (caar state))))
+
+(prove-lemma fm9001-state-structure$step (rewrite)
+  (implies
+   (fm9001-state-structure state)
+   (fm9001-state-structure (fm9001-next-state state external-inputs)))
+  ;;Hint
+  ((enable fm9001-next-state)
+   (disable-theory f-gates)
+   (disable make-list *1*make-list *1*make-tree)))
+
+(prove-lemma fm9001-state-structure$induction (rewrite)
+  (implies
+   (fm9001-state-structure state)
+   (fm9001-state-structure (run-fm9001 state inputs steps)))
+  ;;Hint
+  ((enable run-fm9001)))
+
+(prove-lemma fm9001-state-as-a-list ()
+  (implies
+   (fm9001-state-structure state)
+   (equal state
+          (list
+           (list (list (caaar state)
+                       (cadaar state)
+                       (caddaar state)
+                       (cadddaar state))
+                 (cadar state)
+                 (caddar state)
+                 (cadddar state)
+                 (caddddar state)
+                 (cadddddar state)
+                 (caddddddar state)
+                 (cadddddddar state)
+                 (caddddddddar state)
+                 (cadddddddddar state)
+                 (caddddddddddar state)
+                 (cadddddddddddar state))
+           (list (caadr state)
+                 (cadadr state)
+                 (caddadr state)
+                 (cadddadr state)
+                 (caddddadr state)
+                 (cadddddadr state)
+                 (caddddddadr state)
+                 (cadddddddadr state)))))
+  ;;Hint
+  ((enable equal-length-add1 properp)))

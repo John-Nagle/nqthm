@@ -1,0 +1,377 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    FM9001-MEMORY.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   This is a model of a generic memory for the FM9001.  Besides the
+;;;   state component, the memory takes as input a STROBE (active low), a
+;;;   read/write line (low to write), and address and data lines.
+;;;
+;;;   The state component consists of the memory contents, a memory control
+;;;   state (see below), a "clock" (see below), a "count" used for DTACK
+;;;   scheduling, a flag indicating that DTACK has been asserted, the last
+;;;   value of RW- and the last address and data inputs.
+;;;
+;;;   Address lines, and data lines on a write, must be stable for one cycle
+;;;   before the strobe is activated, and one cycle after the strobe is
+;;;   released.  On a write, the same setup/hold constraints also must be met
+;;;   by the low pulse on RW-.  
+;;;
+;;;   Memory control states:
+;;;
+;;;   0 -- The quiet state.  
+;;;   1 -- Read wait.
+;;;   2 -- Write wait.
+;;;   x -- Error.
+;;;
+;;;   The "clock" is an oracle that specifies the wait for DTACK.  Whenever the
+;;;   STROBE is activated, then (CAR clock) is the number of memory delays for
+;;;   this memory operation, and the new "clock" becomes (CDR clock).  For
+;;;   simulation purposes we normally set this to 0 to provide minimum delays
+;;;   since both the CAR and CDR of 0 are 0.
+
+(defn next-memory-state (state strobe- rw- address data)
+  (let ((mem            (car state))
+        (cntl           (cadr state))
+        (clock          (caddr state))
+        (count          (cadddr state))
+        (dtack-asserted (caddddr state))
+        (last-rw-       (cadddddr state))
+        (last-address   (caddddddr state))
+        (last-data      (cadddddddr state)))
+
+    (let ((rw-address-data
+           (list (threefix rw-)
+                 (v-threefix address)
+                 (if (boolp rw-)
+                     (if rw-
+                         (v-threefix last-data)
+                       (v-threefix data))
+                   (make-list (length data) (x))))))
+      (let
+        ((reset       (list* mem 0 clock 0 t rw-address-data))
+         (start-read  (list* mem 1 (cdr clock)
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (start-write (list* mem 2 (cdr clock)
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (read-error  (list* mem 3 (cdr clock)
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (write-error (list* (constant-ram mem (make-list 32 (x)))
+                             3 (cdr clock) 
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (reset-error  (list* (constant-ram mem (make-list 32 (x)))
+                              0 clock 0 t
+                              rw-address-data))
+         (finish-write (list* (write-mem address mem data) 0 clock 0 t
+                              rw-address-data))
+         (read-wait  (list* mem 1 clock (sub1 count) (zerop count)
+                            rw-address-data))
+         (write-wait (list* mem 2 clock (sub1 count) (zerop count)
+                            rw-address-data))
+         (error-wait (list* mem 3 clock (sub1 count) (zerop count)
+                            rw-address-data)))
+
+        (let ((bvp-equal-address (and (bvp address)
+                                      (bvp last-address)
+                                      (equal address last-address)))
+              (bvp-equal-data (and (bvp data)
+                                   (bvp last-data)
+                                   (equal data last-data))))
+
+          (if (and (boolp strobe-) (boolp rw-))
+
+              (case cntl
+                (0 (if strobe-
+                       reset
+                     (if rw-
+                         (if (and last-rw- (boolp last-rw-))
+                             (if bvp-equal-address
+                                 start-read
+                               read-error)
+                           write-error)
+                       (if (and (not last-rw-) ;Subtle
+                                bvp-equal-address
+                                bvp-equal-data)
+                           start-write
+                         write-error))))
+
+                (1 (if strobe-
+                       (if rw-
+                           reset
+                         reset-error)
+                     (if rw-
+                         (if bvp-equal-address
+                             read-wait
+                           read-error)
+                       write-error)))
+
+                (2 (if strobe-
+                       (if rw-
+                           reset-error
+                         (if (and bvp-equal-address
+                                  bvp-equal-data
+                                  (zerop count))
+                             finish-write
+                           reset-error))
+                     (if rw-
+                         write-error
+                       (if (and bvp-equal-address
+                                bvp-equal-data)
+                           write-wait
+                         write-error))))
+
+                (otherwise (if strobe-
+                               (if rw-
+                                   reset
+                                 reset-error)
+                             (if rw-
+                                 error-wait
+                               write-error))))
+
+            reset-error))))))
+                 
+(disable next-memory-state)
+
+(defn memory-value (state strobe- rw- address data)
+  (let ((mem            (car state))
+        (cntl           (cadr state))
+        (clock          (caddr state))
+        (count          (cadddr state))
+        (dtack-asserted (caddddr state))
+        (last-rw-       (cadddddr state))
+        (last-address   (caddddddr state))
+        (last-data      (cadddddddr state)))
+    (let ((x-vector    (make-list (length data) (x)))
+          (z-vector    (make-list (length data) (z))))
+      
+      (let ((unknown        (cons (x) x-vector))
+            (default        (cons (x) z-vector))
+            (read-wait      (cons t x-vector))
+            (write-wait     (cons t z-vector))
+            (dtack-0        (cons (if* (zerop (car clock)) f t)
+                                  (if* rw- x-vector z-vector)))
+            (dtack-read     (cons f
+                                  (if* dtack-asserted
+                                      (read-mem address mem)
+                                    x-vector)))
+            (dtack-read-default  (cons f x-vector))
+            (dtack-write-default  (cons f z-vector)))
+
+        (let ((bvp-equal-address (and* (equal address last-address)
+                                       (and* (bvp address)
+                                             (bvp last-address)))))
+                                       
+
+        (if* (and* (boolp strobe-) (boolp rw-))
+            
+            (case cntl
+              (0 (if* strobe-
+                     default
+                   dtack-0))
+
+              (1 (if* strobe-
+                     default
+                   (if* rw-
+                       (if* bvp-equal-address
+                           (if* (zerop count)
+                               dtack-read
+                             read-wait)
+                         (if* (zerop count)
+                             dtack-read-default
+                           read-wait))
+                     (if* (zerop count)
+                         dtack-write-default
+                       write-wait))))
+
+              (2 (if* strobe-
+                     default
+                   (if* (zerop count)
+                       dtack-write-default
+                     write-wait)))
+
+              (otherwise (if* strobe-
+                             default
+                           (if* rw-
+                               (if* (zerop count)
+                                   dtack-read-default
+                                 read-wait)
+                             (if* (zerop count)
+                                 dtack-write-default
+                               write-wait)))))
+
+          unknown))))))
+
+(disable memory-value)
+
+;;;  A couple of helper definitions to make it easy to call
+;;;  the FM9001 memory.
+
+(defn mem-value (args state)
+  (let ((rw-     (car args))
+        (strobe- (cadr args))
+        (address (subrange args 2 33))
+        (data    (subrange args 34 65)))
+    (memory-value state strobe- rw- address data)))
+
+(disable mem-value)
+
+(defn mem-state (args state)
+  (let ((rw-     (car args))
+        (strobe- (cadr args))
+        (address (subrange args 2 33))
+        (data    (subrange args 34 65)))
+    (next-memory-state state strobe- rw- address data)))
+  
+(disable mem-state)
+
+;;;    Lemmas
+
+(prove-lemma properp-length-memory-value (rewrite)
+  (implies
+   (and (memory-properp 32 32 (car state))
+        (equal (length address) 32)
+        (equal (length data) 32))
+   (and (properp (cdr (memory-value state strobe rw- address data)))
+        (equal (length (cdr (memory-value state strobe rw- address data)))
+               32)))
+  ;;Hint
+  ((enable memory-value)
+   (disable *1*make-list)))
+
+(prove-lemma equal-memory-value (rewrite)
+  (implies
+   (equal (length data1) (length data2))
+   (equal (equal (memory-value state strobe rw- address data1)
+                 (memory-value state strobe rw- address data2))
+          t))
+  ;;Hint
+  ((enable memory-value)))
+
+;;;   This "induction" makes the proof of the next lemma tractable.  This is
+;;;   really a sneaky way to make the prover case-split in the desired way.
+
+(defn next-memory-state$induction (state strobe- rw- address data)
+  (let ((mem            (car state))
+        (cntl           (cadr state))
+        (clock          (caddr state))
+        (count          (cadddr state))
+        (dtack-asserted (caddddr state))
+        (last-rw-       (cadddddr state))
+        (last-address   (caddddddr state))
+        (last-data      (cadddddddr state)))
+
+    (let ((rw-address-data
+           (list (threefix rw-)
+                 (v-threefix address)
+                 (if (boolp rw-)
+                     (if rw-
+                         (v-threefix last-data)
+                       (v-threefix data))
+                   (make-list (length data) (x))))))
+      (let
+        ((reset       (list* mem 0 clock 0 t rw-address-data))
+         (start-read  (list* mem 1 (cdr clock)
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (start-write (list* mem 2 (cdr clock)
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (read-error  (list* mem 3 (cdr clock)
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (write-error (list* (constant-ram mem (make-list 32 (x)))
+                             3 (cdr clock) 
+                             (sub1 (car clock)) (zerop (car clock))
+                             rw-address-data))
+         (reset-error  (list* (constant-ram mem (make-list 32 (x)))
+                              0 clock 0 t
+                              rw-address-data))
+         (finish-write (list* (write-mem address mem data) 0 clock 0 t
+                              rw-address-data))
+         (read-wait  (list* mem 1 clock (sub1 count) (zerop count)
+                            rw-address-data))
+         (write-wait (list* mem 2 clock (sub1 count) (zerop count)
+                            rw-address-data))
+         (error-wait (list* mem 3 clock (sub1 count) (zerop count)
+                            rw-address-data)))
+
+        (let ((bvp-equal-address (and (bvp address)
+                                      (bvp last-address)
+                                      (equal address last-address)))
+              (bvp-equal-data (and (bvp data)
+                                   (bvp last-data)
+                                   (equal data last-data))))
+
+          (if (and (boolp strobe-) (boolp rw-))
+
+              (case cntl
+                (0 (if strobe-
+                       reset
+                     (if rw-
+                         (if (and last-rw- (boolp last-rw-))
+                             (if bvp-equal-address
+                                 start-read
+                               read-error)
+                           write-error)
+                       (if (and (not last-rw-) ;Subtle
+                                bvp-equal-address
+                                bvp-equal-data)
+                           start-write
+                         write-error))))
+
+                (1 (if strobe-
+                       (if rw-
+                           reset
+                         reset-error)
+                     (if rw-
+                         (if bvp-equal-address
+                             read-wait
+                           read-error)
+                       write-error)))
+
+                (2 (if strobe-
+                       (if rw-
+                           reset-error
+                         (if (and bvp-equal-address
+                                  bvp-equal-data
+                                  (zerop count))
+                             finish-write
+                           reset-error))
+                     (if rw-
+                         write-error
+                       (if (and bvp-equal-address
+                                bvp-equal-data)
+                           write-wait
+                         write-error))))
+
+                (otherwise (if strobe-
+                               (if rw-
+                                   reset
+                                 reset-error)
+                             (if rw-
+                                 error-wait
+                               write-error))))
+
+            (if (not (and (boolp strobe-) (boolp rw-)))
+                reset-error
+              (next-memory-state$induction (sub1 state)
+                                           strobe- rw- address data)))))))
+  ;;Hint
+  ((lessp (count state))))
+
+(prove-lemma properp-length-next-memory-state (rewrite)
+  (and (properp (next-memory-state state strobe- rw- address data))
+       (equal (length (next-memory-state state strobe- rw- address data)) 8))
+  ;;Hint
+  ((induct (next-memory-state$induction
+            state strobe- rw- address data))
+   (enable next-memory-state)))

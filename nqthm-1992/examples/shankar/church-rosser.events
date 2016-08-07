@@ -1,0 +1,1491 @@
+#|
+ Copyright (C) 1994 by Natarajan Shankar.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Natarajan Shankar PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS
+ PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Natarajan Shankar BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+ PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+ LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+ BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+ DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(BOOT-STRAP THM)
+;An Annotated Script of A MECHANICAL PROOF OF THE CHURCH-ROSSER THEOREM.
+;                          by
+;                    N. Shankar
+;
+;What follows is a list of events (definitions and lemmas) in the mechanical
+;proof of the Church-Rosser theorem that was carried out with the Boyer-Moore
+;theorem-prover.  The formal expressions below are subtle and complex and
+;the annotations provide only a small amount of help.  The proof consists of
+;the following parts -
+;1. Formalization of Lambda-calculus in the standard notation.
+;2. Formalization of Lambda-calculus in the de Bruijn notation.
+;3. Proof of the Diamond property of walks in the de Bruijn notation.
+;4. Proof of the Diamond property of sequences of beta-steps.
+;5. Proof that a sequence of beta-steps is the transitive closure of
+;   a walk.
+;6. Proof that the standard notation translates into the de Bruijn notation.
+;7. Proof that the Church-Rosser proof for the de Bruijn notation can be
+;   translated back into the standard notation.
+;8. Proof of the Diamond property of walks directly in the standard notation.
+;standard formalization:  The prefix "N" stands for "normal".  The two shells
+;NLAMBDA and NCOMB represent lambda-abstraction and application, respectively.
+;Variables are represented by numbers and constants by literal atoms.
+(ADD-SHELL NLAMBDA
+           NIL
+           NLAMBDAP
+           ((NBIND (ONE-OF NUMBERP) ZERO) (NBODY (NONE-OF) ZERO)))
+(ADD-SHELL NCOMB NIL NCOMBP ((NLEFT (NONE-OF) ZERO) (NRIGHT (NONE-OF) ZERO)))
+;(NSUBST X Y N) is the result of substituting term Y for variable N in term X.
+(DEFN NSUBST
+      (X Y N)
+      (IF (NLAMBDAP X)
+          (IF (EQUAL (NBIND X) N)
+              X
+              (NLAMBDA (NBIND X) (NSUBST (NBODY X) Y N)))
+          (IF (NCOMBP X)
+              (NCOMB (NSUBST (NLEFT X) Y N) (NSUBST (NRIGHT X) Y N))
+              (IF (NUMBERP X) (IF (EQUAL X N) Y X) X))))
+;Variable X does not occur free in term Y.
+(DEFN NOT-FREE-IN
+      (X Y)
+      (IF (NLAMBDAP Y)
+          (IF (EQUAL X (NBIND Y)) T (NOT-FREE-IN X (NBODY Y)))
+          (IF (NCOMBP Y)
+              (AND (NOT-FREE-IN X (NLEFT Y))
+                   (NOT-FREE-IN X (NRIGHT Y)))
+              (NOT (EQUAL X Y)))))
+;The free variables in Y are disjoint from the bound variables in X.
+(DEFN FREE-FOR
+      (X Y)
+      (IF (NLAMBDAP X)
+          (AND (NOT-FREE-IN (NBIND X) Y)
+               (FREE-FOR (NBODY X) Y))
+          (IF (NCOMBP X)
+              (AND (FREE-FOR (NLEFT X) Y)
+                   (FREE-FOR (NRIGHT X) Y))
+              T)))
+;Index of the first occurrence of N in the list LIST.
+(DEFN INDEX
+      (N LIST)
+      (IF (LISTP LIST)
+          (IF (EQUAL (CAR LIST) N) 1 (ADD1 (INDEX N (CDR LIST))))
+          (ADD1 N)))
+;A and B are identical modulo bound-variables which are accumulated in
+;X and Y, respectively.
+(DEFN ALPHA-EQUAL
+      (A B X Y)
+      (IF (AND (NLAMBDAP A)
+               (NLAMBDAP B))
+          (ALPHA-EQUAL (NBODY A)
+                       (NBODY B)
+                       (CONS (NBIND A) X)
+                       (CONS (NBIND B) Y))
+          (IF (AND (NCOMBP A)
+                   (NCOMBP B))
+              (AND (ALPHA-EQUAL (NLEFT A) (NLEFT B) X Y)
+                   (ALPHA-EQUAL (NRIGHT A) (NRIGHT B) X Y))
+              (IF (AND (NUMBERP A)
+                       (NUMBERP B))
+                  (EQUAL (INDEX A X) (INDEX B Y))
+                  (EQUAL A B)))))
+;X is a well-formed term in the standard notation.
+(DEFN NTERMP
+      (X)
+      (IF (NLAMBDAP X)
+          (NTERMP (NBODY X))
+          (IF (NCOMBP X)
+              (AND (NTERMP (NLEFT X))
+                   (NTERMP (NRIGHT X)))
+              (OR (NUMBERP X)
+                  (LITATOM X)))))
+;A goes to B by the beta-reduction of some non-overlapping redexes.
+(DEFN NBETA-STEP
+      (A B)
+      (IF (EQUAL A B)
+          T
+          (IF (NLAMBDAP A)
+              (AND (NLAMBDAP B)
+                   (EQUAL (NBIND A) (NBIND B))
+                   (NBETA-STEP (NBODY A) (NBODY B)))
+              (IF (NCOMBP A)
+                  (OR (AND (NLAMBDAP (NLEFT A))
+                           (FREE-FOR (NBODY (NLEFT A)) (NRIGHT A))
+                           (EQUAL B
+                                  (NSUBST (NBODY (NLEFT A))
+                                          (NRIGHT A)
+                                          (NBIND (NLEFT A)))))
+                      (AND (NCOMBP B)
+                           (NBETA-STEP (NLEFT A) (NLEFT B))
+                           (NBETA-STEP (NRIGHT A) (NRIGHT B))))
+                  F))))
+;A goes to B by an alpha-or-beta-step.
+(DEFN NSTEP
+      (A B)
+      (OR (ALPHA-EQUAL A B NIL NIL)
+          (NBETA-STEP A B)))
+;A goes to B via a series of steps through terms in LIST.
+(DEFN NREDUCTION
+      (A B LIST)
+      (IF (LISTP LIST)
+          (AND (NSTEP (CAR LIST) B)
+               (NREDUCTION A (CAR LIST) (CDR LIST)))
+          (NSTEP A B)))
+;de Bruijn formalization: 
+(ADD-SHELL LAMBDA NIL LAMBDAP ((BODY (NONE-OF) ZERO)))
+(ADD-SHELL COMB NIL COMBP ((LEFT (NONE-OF) ZERO) (RIGHT (NONE-OF) ZERO)))
+;BUMP increments all variables of stack-level greater than N by one.
+(DEFN BUMP
+      (X N)
+      (IF (LAMBDAP X)
+          (LAMBDA (BUMP (BODY X) (ADD1 N)))
+          (IF (COMBP X)
+              (COMB (BUMP (LEFT X) N) (BUMP (RIGHT X) N))
+              (IF (LESSP N X) (ADD1 X) X))))
+;(SUBST X Y N) is the result of substituting Y for N in X.
+(DEFN SUBST
+      (X Y N)
+      (IF (LAMBDAP X)
+          (LAMBDA (SUBST (BODY X) (BUMP Y 0) (ADD1 N)))
+          (IF (COMBP X)
+              (COMB (SUBST (LEFT X) Y N) (SUBST (RIGHT X) Y N))
+              (IF (NOT (ZEROP X))
+                  (IF (EQUAL X N) Y (IF (LESSP N X) (SUB1 X) X))
+                  X))))
+;BUMP commutes with itself.
+(PROVE-LEMMA BUMP-BUMP
+             (REWRITE)
+             (IMPLIES (LEQ N M)
+                      (EQUAL (BUMP (BUMP Y N) (ADD1 M)) (BUMP (BUMP Y M) N))))
+(DEFN BUMP-SUBST-INDUCT
+      (X Y N M)
+      (IF (LAMBDAP X)
+          (BUMP-SUBST-INDUCT (BODY X) (BUMP Y 0) (ADD1 N) (ADD1 M))
+          (IF (COMBP X)
+              (AND (BUMP-SUBST-INDUCT (LEFT X) Y N M)
+                   (BUMP-SUBST-INDUCT (RIGHT X) Y N M))
+              T)))
+;BUMP distributes over SUBST.
+(PROVE-LEMMA BUMP-SUBST
+             (REWRITE)
+             (IMPLIES (LESSP M N)
+                      (EQUAL (BUMP (SUBST X Y N) M)
+                             (SUBST (BUMP X M) (BUMP Y M) (ADD1 N))))
+             ((INDUCT (BUMP-SUBST-INDUCT X Y N M))))
+(DEFN SUBST-INDUCT
+      (X Y Z M N)
+      (IF (LAMBDAP X)
+          (SUBST-INDUCT (BODY X) (BUMP Y 0) (BUMP Z 0) (ADD1 M) (ADD1 N))
+          (IF (COMBP X)
+              (AND (SUBST-INDUCT (LEFT X) Y Z M N)
+                   (SUBST-INDUCT (RIGHT X) Y Z M N))
+              T)))
+(PROVE-LEMMA LAMBDAP-BUMP (REWRITE) (IMPLIES (LAMBDAP X) (LAMBDAP (BUMP X N))))
+(PROVE-LEMMA LAMBDAP-SUBST
+             (REWRITE)
+             (IMPLIES (LAMBDAP X) (LAMBDAP (SUBST X Y N))))
+;BUMP distributes over SUBST in another way.
+(PROVE-LEMMA ANOTHER-BUMP-SUBST
+             (REWRITE)
+             (IMPLIES (LEQ N (ADD1 M))
+                      (EQUAL (SUBST (BUMP X (ADD1 M)) (BUMP Y M) N)
+                             (BUMP (SUBST X Y N) M)))
+             ((INDUCT (BUMP-SUBST-INDUCT X Y N M))))
+(PROVE-LEMMA BUMP-LAMBDAP
+             (REWRITE)
+             (IMPLIES (LAMBDAP X)
+                      (EQUAL (BODY (BUMP X N)) (BUMP (BODY X) (ADD1 N)))))
+(PROVE-LEMMA SUBST-LAMBDA
+             (REWRITE)
+             (IMPLIES (LAMBDAP X)
+                      (EQUAL (BODY (SUBST X Y N))
+                             (SUBST (BODY X) (BUMP Y 0) (ADD1 N)))))
+(DEFN LEFT-INSTRS (X) (CAR X))
+(DEFN RIGHT-INSTRS (X) (CADR X))
+(DEFN COMMAND (X) (CADDR X))
+;Result of applying walk-instruction W to M in an inside-out manner.
+(DEFN WALK
+      (W M)
+      (IF (LAMBDAP M)
+          (LAMBDA (WALK W (BODY M)))
+          (IF (COMBP M)
+              (IF (AND (EQUAL (COMMAND W) 'REDUCE)
+                       (LAMBDAP (LEFT M)))
+                  (SUBST (BODY (WALK (LEFT-INSTRS W) (LEFT M)))
+                         (WALK (RIGHT-INSTRS W) (RIGHT M))
+                         1)
+                  (COMB (WALK (LEFT-INSTRS W) (LEFT M))
+                        (WALK (RIGHT-INSTRS W) (RIGHT M))))
+              M)))
+(DEFN BUMP-WALK-IND
+      (U M N)
+      (IF (LAMBDAP M)
+          (BUMP-WALK-IND U (BODY M) (ADD1 N))
+          (IF (COMBP M)
+              (IF (AND (EQUAL (COMMAND U) 'REDUCE)
+                       (LAMBDAP (LEFT M)))
+                  (AND (BUMP-WALK-IND (LEFT-INSTRS U) (LEFT M) N)
+                       (BUMP-WALK-IND (RIGHT-INSTRS U) (RIGHT M) N))
+                  (AND (BUMP-WALK-IND (LEFT-INSTRS U) (LEFT M) N)
+                       (BUMP-WALK-IND (RIGHT-INSTRS U) (RIGHT M) N)))
+              T)))
+(PROVE-LEMMA LAMBDA-WALK (REWRITE) (IMPLIES (LAMBDAP M) (LAMBDAP (WALK W M))))
+;BUMP and WALK commute with each other.
+(PROVE-LEMMA BUMP-WALK
+             (REWRITE)
+             (EQUAL (WALK U (BUMP M N)) (BUMP (WALK U M) N))
+             ((INDUCT (BUMP-WALK-IND U M N))))
+(PROVE-LEMMA NLISTP-WALK (REWRITE) (IMPLIES (NLISTP W) (EQUAL (WALK W M) M)))
+;The `skolem' function generating the substitutive walk.
+(DEFN SUB-WALK
+      (W M U N)
+      (IF (LAMBDAP M)
+          (SUB-WALK W (BODY M) U (ADD1 N))
+          (IF (COMBP M)
+              (IF (AND (EQUAL (COMMAND W) 'REDUCE)
+                       (LAMBDAP (LEFT M)))
+                  (LIST (SUB-WALK (LEFT-INSTRS W) (LEFT M) U N)
+                        (SUB-WALK (RIGHT-INSTRS W) (RIGHT M) U N)
+                        'REDUCE)
+                  (LIST (SUB-WALK (LEFT-INSTRS W) (LEFT M) U N)
+                        (SUB-WALK (RIGHT-INSTRS W) (RIGHT M) U N)))
+              (IF (NOT (ZEROP M)) (IF (EQUAL M N) U W) W))))
+(DEFN WALK-SUBST-IND
+      (W M U X N)
+      (IF (LAMBDAP M)
+          (WALK-SUBST-IND W (BODY M) U (BUMP X 0) (ADD1 N))
+          (IF (COMBP M)
+              (IF (AND (EQUAL (COMMAND W) 'REDUCE)
+                       (LAMBDAP (LEFT M)))
+                  (AND (WALK-SUBST-IND (LEFT-INSTRS W) (LEFT M) U X N)
+                       (WALK-SUBST-IND (RIGHT-INSTRS W) (RIGHT M) U X N))
+                  (AND (WALK-SUBST-IND (LEFT-INSTRS W) (LEFT M) U X N)
+                       (WALK-SUBST-IND (RIGHT-INSTRS W) (RIGHT M) U X N)))
+              T)))
+;(BUMP X N) cannot contain N+1 free.
+(PROVE-LEMMA SUBST-NOT-FREE-IN
+             (REWRITE)
+             (EQUAL (SUBST (BUMP X N) Y (ADD1 N)) X)
+             ((INDUCT (SUBST X Y N))))
+;SUBST distributes over itself.  A tricky one!
+(PROVE-LEMMA SUBST-SUBST
+             (REWRITE)
+             (IMPLIES (AND (NUMBERP M)
+                           (LESSP M N))
+                      (EQUAL (SUBST (SUBST X (BUMP Z M) (ADD1 N))
+                                    (SUBST Y Z N)
+                                    (ADD1 M))
+                             (SUBST (SUBST X Y (ADD1 M)) Z N)))
+             ((INDUCT (SUBST-INDUCT X Y Z M N))))
+;The substitutivity of walks lemma.
+(PROVE-LEMMA WALK-SUBST
+             (REWRITE)
+             (IMPLIES (NOT (ZEROP N))
+                      (EQUAL (WALK (SUB-WALK W M U N) (SUBST M X N))
+                             (SUBST (WALK W M) (WALK U X) N)))
+             ((INDUCT (WALK-SUBST-IND W M U X N))))
+(PROVE-LEMMA WALK-LAMBDA
+             (REWRITE)
+             (IMPLIES (LAMBDAP X) (EQUAL (BODY (WALK U X)) (WALK U (BODY X)))))
+;`Skolem' function generating convergent walk.
+(DEFN MAKE-WALK
+      (M U V)
+      (IF (LAMBDAP M)
+          (MAKE-WALK (BODY M) U V)
+          (IF (COMBP M)
+              (IF (AND (EQUAL (COMMAND U) 'REDUCE)
+                       (LAMBDAP (LEFT M)))
+                  (SUB-WALK (MAKE-WALK (LEFT M)
+                                       (LEFT-INSTRS U)
+                                       (LEFT-INSTRS V))
+                            (BODY (WALK (LEFT-INSTRS U) (LEFT M)))
+                            (MAKE-WALK (RIGHT M)
+                                       (RIGHT-INSTRS U)
+                                       (RIGHT-INSTRS V))
+                            1)
+                  (IF (AND (EQUAL (COMMAND V) 'REDUCE)
+                           (LAMBDAP (LEFT M)))
+                      (LIST (MAKE-WALK (LEFT M)
+                                       (LEFT-INSTRS U)
+                                       (LEFT-INSTRS V))
+                            (MAKE-WALK (RIGHT M)
+                                       (RIGHT-INSTRS U)
+                                       (RIGHT-INSTRS V))
+                            'REDUCE)
+                      (LIST (MAKE-WALK (LEFT M)
+                                       (LEFT-INSTRS U)
+                                       (LEFT-INSTRS V))
+                            (MAKE-WALK (RIGHT M)
+                                       (RIGHT-INSTRS U)
+                                       (RIGHT-INSTRS V)))))
+              U)))
+;The Diamond property of walks.
+(PROVE-LEMMA MAIN
+             (REWRITE)
+             (EQUAL (WALK (MAKE-WALK M U V) (WALK U M))
+                    (WALK (MAKE-WALK M V U) (WALK V M))))
+;Result of applying a series of walks.
+(DEFN REDUCE (W M) (IF (LISTP W) (REDUCE (CDR W) (WALK (CAR W) M)) M))
+;`Skolem' function constructing convergent walk given a walk W and a
+;series of walks V.
+(DEFN MAKE-WALK-REDUCE
+      (M W V)
+      (IF (LISTP V)
+          (MAKE-WALK-REDUCE (WALK (CAR V) M) (MAKE-WALK M (CAR V) W) (CDR V))
+          W))
+;`Skolem' function constructing convergent series of walks for same case as above.
+(DEFN MAKE-REDUCE-WALK
+      (M W V)
+      (IF (LISTP V)
+          (CONS (MAKE-WALK M W (CAR V))
+                (MAKE-REDUCE-WALK (WALK (CAR V) M)
+                                  (MAKE-WALK M (CAR V) W)
+                                  (CDR V)))
+          NIL))
+;The Rectangle property.
+(PROVE-LEMMA WALK-REDUCE
+             (REWRITE)
+             (EQUAL (REDUCE (MAKE-REDUCE-WALK M W V) (WALK W M))
+                    (WALK (MAKE-WALK-REDUCE M W V) (REDUCE V M))))
+;`Skolem' function constructing convergent series of walks for Diamond property.
+(DEFN MAKE-REDUCE
+      (M U V)
+      (IF (LISTP U)
+          (CONS (MAKE-WALK-REDUCE M (CAR U) V)
+                (MAKE-REDUCE (WALK (CAR U) M)
+                             (CDR U)
+                             (MAKE-REDUCE-WALK M (CAR U) V)))
+          U))
+(PROVE-LEMMA LIST-MAKE-REDUCE
+             (REWRITE)
+             (IMPLIES (LISTP V)
+                      (EQUAL (REDUCE (MAKE-REDUCE M U V) (REDUCE V M))
+                             (REDUCE (MAKE-REDUCE (WALK (CAR V) M)
+                                                  (MAKE-REDUCE-WALK M
+                                                                    (CAR V)
+                                                                    U)
+                                                  (CDR V))
+                                     (REDUCE V M)))))
+(PROVE-LEMMA LIST-MAKE-REDUCE1
+             (REWRITE)
+             (EQUAL (REDUCE (MAKE-REDUCE M U (CONS X Y)) (REDUCE Y (WALK X M)))
+                    (REDUCE (MAKE-REDUCE (WALK X M)
+                                         (MAKE-REDUCE-WALK M X U)
+                                         Y)
+                            (REDUCE (CONS X Y) M)))
+             ((USE (LIST-MAKE-REDUCE (V (CONS X Y))))))
+;The Diamond property of a series of walks.
+(PROVE-LEMMA CHURCH-ROSSER
+             (REWRITE)
+             (EQUAL (REDUCE (MAKE-REDUCE M U V) (REDUCE V M))
+                    (REDUCE (MAKE-REDUCE M V U) (REDUCE U M))))
+;Translation from standard to de Bruijn.  X a standard term, and
+;BOUNDS bound variables accumulated so far.
+(DEFN TRANSLATE
+      (X BOUNDS)
+      (IF (NLAMBDAP X)
+          (LAMBDA (TRANSLATE (NBODY X) (CONS (NBIND X) BOUNDS)))
+          (IF (NCOMBP X)
+              (COMB (TRANSLATE (NLEFT X) BOUNDS)
+                    (TRANSLATE (NRIGHT X) BOUNDS))
+              (IF (NUMBERP X) (INDEX X BOUNDS) X))))
+;Two alpha-equivalent terms have the same translation.
+(PROVE-LEMMA ALPHA-TRANSLATE
+             (REWRITE)
+             (IMPLIES (ALPHA-EQUAL A B X Y)
+                      (EQUAL (TRANSLATE A X) (TRANSLATE B Y))))
+(DEFN INSERT
+      (X BOUNDS N)
+      (IF (ZEROP N)
+          (CONS X BOUNDS)
+          (IF (LISTP BOUNDS)
+              (CONS (CAR BOUNDS) (INSERT X (CDR BOUNDS) (SUB1 N)))
+              (CONS X NIL))))
+(DEFN NSUBST-IND
+      (X Y Z BOUNDS N)
+      (IF (NLAMBDAP X)
+          (IF (EQUAL (NBIND X) Z)
+              T
+              (NSUBST-IND (NBODY X) Y Z (CONS (NBIND X) BOUNDS) (ADD1 N)))
+          (IF (NCOMBP X)
+              (AND (NSUBST-IND (NLEFT X) Y Z BOUNDS N)
+                   (NSUBST-IND (NRIGHT X) Y Z BOUNDS N))
+              T)))
+(DEFN TRANS-INSERT-IND
+      (X Z BOUNDS N)
+      (IF (NLAMBDAP X)
+          (TRANS-INSERT-IND (NBODY X) Z (CONS (NBIND X) BOUNDS) (ADD1 N))
+          (IF (NCOMBP X)
+              (AND (TRANS-INSERT-IND (NLEFT X) Z BOUNDS N)
+                   (TRANS-INSERT-IND (NRIGHT X) Z BOUNDS N))
+              T)))
+(DEFN PRECEDE
+      (X BOUNDS N)
+      (IF (ZEROP N)
+          F
+          (IF (LISTP BOUNDS)
+              (OR (EQUAL (CAR BOUNDS) X)
+                  (PRECEDE X (CDR BOUNDS) (SUB1 N)))
+              F)))
+(PROVE-LEMMA NPRECEDE-INDEX
+             (REWRITE)
+             (IMPLIES (AND (NOT (PRECEDE Z BOUNDS N))
+                           (LEQ N (LENGTH BOUNDS)))
+                      (EQUAL (INDEX Z (INSERT Z BOUNDS N)) (ADD1 N))))
+(PROVE-LEMMA PRECEDE-INDEX1
+             (REWRITE)
+             (IMPLIES (AND (LESSP N (INDEX X BOUNDS))
+                           (LEQ N (LENGTH BOUNDS)))
+                      (EQUAL (INDEX X (INSERT Z BOUNDS N))
+                             (IF (EQUAL X Z)
+                                 (ADD1 N)
+                                 (ADD1 (INDEX X BOUNDS))))))
+(PROVE-LEMMA PRECEDE-INDEX
+             (REWRITE)
+             (IMPLIES (PRECEDE Z BOUNDS N)
+                      (LESSP (INDEX Z (INSERT Z BOUNDS N)) (ADD1 N))))
+(PROVE-LEMMA PRECEDE-INDEX2
+             (REWRITE)
+             (IMPLIES (AND (LEQ (INDEX X BOUNDS) N)
+                           (LEQ N (LENGTH BOUNDS)))
+                      (EQUAL (INDEX X (INSERT Z BOUNDS N)) (INDEX X BOUNDS))))
+(PROVE-LEMMA TRANSLATE-INSERT
+             (REWRITE)
+             (IMPLIES (AND (PRECEDE Z BOUNDS N)
+                           (LEQ N (LENGTH BOUNDS))
+                           (NTERMP X))
+                      (EQUAL (TRANSLATE X (INSERT Z BOUNDS N))
+                             (BUMP (TRANSLATE X BOUNDS) N)))
+             ((INDUCT (TRANS-INSERT-IND X Z BOUNDS N))))
+(PROVE-LEMMA SUBST-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (PRECEDE Z BOUNDS N)
+                           (NTERMP X)
+                           (LEQ N (LENGTH BOUNDS)))
+                      (EQUAL (SUBST (TRANSLATE X (INSERT Z BOUNDS N))
+                                    Y
+                                    (ADD1 N))
+                             (TRANSLATE X BOUNDS))))
+(DEFN NOT-FREE-IND
+      (Y Z BOUNDS N)
+      (IF (NLAMBDAP Y)
+          (NOT-FREE-IND (NBODY Y) Z (CONS (NBIND Y) BOUNDS) (ADD1 N))
+          (IF (NCOMBP Y)
+              (AND (NOT-FREE-IND (NLEFT Y) Z BOUNDS N)
+                   (NOT-FREE-IND (NRIGHT Y) Z BOUNDS N))
+              T)))
+(PROVE-LEMMA TRANSLATE-INSERT1
+             (REWRITE)
+             (IMPLIES (AND (PRECEDE Z (CONS X BOUNDS) (ADD1 N))
+                           (NTERMP Y)
+                           (LEQ N (LENGTH BOUNDS)))
+                      (EQUAL (TRANSLATE Y (CONS X (INSERT Z BOUNDS N)))
+                             (BUMP (TRANSLATE Y (CONS X BOUNDS)) (ADD1 N))))
+             ((USE (TRANSLATE-INSERT (BOUNDS (CONS X BOUNDS))
+                                     (N (ADD1 N))
+                                     (X Y)))
+              ))
+(PROVE-LEMMA NOT-FREE-IN-TRANSLATE
+             (REWRITE)
+             (IMPLIES (AND (NOT-FREE-IN Z Y)
+                           (LEQ N (LENGTH BOUNDS))
+                           (NTERMP Y))
+                      (EQUAL (TRANSLATE Y (INSERT Z BOUNDS N))
+                             (BUMP (TRANSLATE Y BOUNDS) N)))
+             ((INDUCT (NOT-FREE-IND Y Z BOUNDS N))))
+(PROVE-LEMMA NOT-FREE-IN-CORR
+             (REWRITE)
+             (IMPLIES (AND (NTERMP Y)
+                           (NOT-FREE-IN Z Y))
+                      (EQUAL (TRANSLATE Y (CONS Z BOUNDS))
+                             (BUMP (TRANSLATE Y BOUNDS) 0)))
+             ((USE (NOT-FREE-IN-TRANSLATE (N 0)))))
+(PROVE-LEMMA SUBST-NSUBST2
+             (REWRITE)
+             (IMPLIES (AND (PRECEDE Z (CONS W BOUNDS) (ADD1 N))
+                           (NTERMP X)
+                           (LEQ N (LENGTH BOUNDS)))
+                      (EQUAL (SUBST (TRANSLATE X (CONS W (INSERT Z BOUNDS N)))
+                                    Y
+                                    (ADD1 (ADD1 N)))
+                             (TRANSLATE X (CONS W BOUNDS))))
+             ((USE (SUBST-NSUBST (BOUNDS (CONS W BOUNDS)) (N (ADD1 N))))))
+(PROVE-LEMMA SUBST-NSUBST2-CORR
+             (REWRITE)
+             (IMPLIES (NTERMP X)
+                      (EQUAL (SUBST (TRANSLATE X (CONS Z (CONS Z BOUNDS)))
+                                    Y
+                                    (ADD1 (ADD1 0)))
+                             (TRANSLATE X (CONS Z BOUNDS))))
+             ((USE (SUBST-NSUBST2 (W Z) (N 0)))))
+(PROVE-LEMMA INDEX-INSERT
+             (REWRITE)
+             (IMPLIES (AND (NOT (EQUAL X Z))
+                           (LEQ N (LENGTH BOUNDS)))
+                      (NOT (EQUAL (INDEX X (INSERT Z BOUNDS N)) (ADD1 N)))))
+;Translation distributes over substitution.
+(PROVE-LEMMA TRANSLATE-PRESERVES-SUBST
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR X Y)
+                           (NOT (PRECEDE Z BOUNDS N))
+                           (LEQ N (LENGTH BOUNDS))
+                           (NTERMP X)
+                           (NTERMP Y))
+                      (EQUAL (TRANSLATE (NSUBST X Y Z) BOUNDS)
+                             (SUBST (TRANSLATE X (INSERT Z BOUNDS N))
+                                    (TRANSLATE Y BOUNDS)
+                                    (ADD1 N))))
+             ((INDUCT (NSUBST-IND X Y Z BOUNDS N))))
+;Translation distributes over beta-reduction.
+(PROVE-LEMMA TRANSLATE-PRESERVES-REDUCTION
+             (REWRITE)
+             (IMPLIES (AND (NLAMBDAP X)
+                           (FREE-FOR (NBODY X) Y)
+                           (NTERMP X)
+                           (NTERMP Y))
+                      (EQUAL (TRANSLATE (NSUBST (NBODY X) Y (NBIND X)) BOUNDS)
+                             (SUBST (BODY (TRANSLATE X BOUNDS))
+                                    (TRANSLATE Y BOUNDS)
+                                    1)))
+             ((USE (TRANSLATE-PRESERVES-SUBST (X (NBODY X))
+                                              (Z (NBIND X))
+                                              (N 0)))
+              ))
+;Reduction is the transitive closure of a walk.
+;X goes to Y in a beta-step, in the de Bruijn notation.
+(DEFN BETA-STEP
+      (X Y)
+      (IF (EQUAL X Y)
+          T
+          (IF (LAMBDAP X)
+              (AND (LAMBDAP Y)
+                   (BETA-STEP (BODY X) (BODY Y)))
+              (IF (COMBP X)
+                  (OR (AND (LAMBDAP (LEFT X))
+                           (EQUAL Y (SUBST (BODY (LEFT X)) (RIGHT X) 1)))
+                      (AND (COMBP Y)
+                           (BETA-STEP (LEFT X) (LEFT Y))
+                           (BETA-STEP (RIGHT X) (RIGHT Y))))
+                  F))))
+;A goes to B via LIST in a series of beta-steps.
+(DEFN REDUCTION
+      (A B LIST)
+      (IF (LISTP LIST)
+          (AND (BETA-STEP (CAR LIST) B)
+               (REDUCTION A (CAR LIST) (CDR LIST)))
+          (BETA-STEP A B)))
+(DEFN MAKE-WALK-STEP
+      (X Y)
+      (IF (EQUAL X Y)
+          NIL
+          (IF (LAMBDAP X)
+              (MAKE-WALK-STEP (BODY X) (BODY Y))
+              (IF (COMBP X)
+                  (IF (AND (LAMBDAP (LEFT X))
+                           (EQUAL Y (SUBST (BODY (LEFT X)) (RIGHT X) 1)))
+                      '(NIL NIL REDUCE)
+                      (LIST (MAKE-WALK-STEP (LEFT X) (LEFT Y))
+                            (MAKE-WALK-STEP (RIGHT X) (RIGHT Y))))
+                  NIL))))
+(PROVE-LEMMA MAKE-WALK-STEP-WALKS
+             (REWRITE)
+             (IMPLIES (BETA-STEP A B) (EQUAL (WALK (MAKE-WALK-STEP A B) A) B)))
+(DEFN APPEND (X Y) (IF (LISTP X) (CONS (CAR X) (APPEND (CDR X) Y)) Y))
+(DEFN MAKE-REDUCE-REDUCTION
+      (A B LIST)
+      (IF (LISTP LIST)
+          (APPEND (MAKE-REDUCE-REDUCTION A (CAR LIST) (CDR LIST))
+                  (LIST (MAKE-WALK-STEP (CAR LIST) B) NIL))
+          (LIST (MAKE-WALK-STEP A B))))
+(PROVE-LEMMA REDUCE-APPEND
+             (REWRITE)
+             (EQUAL (REDUCE (APPEND X Y) A) (REDUCE Y (REDUCE X A))))
+;A reduction is a series of walks.
+(PROVE-LEMMA MAKE-REDUCE-REDUCTION-REDUCTION
+             (REWRITE)
+             (IMPLIES (REDUCTION A B LIST)
+                      (EQUAL (REDUCE (MAKE-REDUCE-REDUCTION A B LIST) A) B)))
+(DEFN LIST-LAMBDA
+      (LIST)
+      (IF (LISTP LIST)
+          (CONS (LAMBDA (CAR LIST))
+                (LIST-LAMBDA (CDR LIST)))
+          NIL))
+(PROVE-LEMMA LAMBDA-REDUCTION
+             (REWRITE)
+             (IMPLIES (REDUCTION A A1 LIST)
+                      (REDUCTION (LAMBDA A)
+                                 (LAMBDA A1)
+                                 (LIST-LAMBDA LIST))))
+(DEFN MAP-COMB-LEFT
+      (A LIST)
+      (IF (LISTP LIST)
+          (CONS (COMB A (CAR LIST)) (MAP-COMB-LEFT A (CDR LIST)))
+          NIL))
+(DEFN MAP-COMB-RIGHT
+      (A LIST)
+      (IF (LISTP LIST)
+          (CONS (COMB (CAR LIST) A) (MAP-COMB-RIGHT A (CDR LIST)))
+          NIL))
+(DEFN LIST-COMB
+      (A B LIST1 LIST2)
+      (IF (LISTP LIST1)
+          (IF (LISTP LIST2)
+              (CONS (COMB (CAR LIST1) (CAR LIST2))
+                    (LIST-COMB A B (CDR LIST1) (CDR LIST2)))
+              (MAP-COMB-RIGHT B LIST1))
+          (IF (LISTP LIST2) (MAP-COMB-LEFT A LIST2) NIL)))
+(PROVE-LEMMA MAP-COMB-RIGHT-REDUCTION2
+             (REWRITE)
+             (IMPLIES (REDUCTION A A1 LIST1)
+                      (REDUCTION (COMB A B1)
+                                 (COMB A1 B1)
+                                 (MAP-COMB-RIGHT B1 LIST1))))
+(PROVE-LEMMA MAP-COMB-RIGHT-REDUCTION
+             (REWRITE)
+             (IMPLIES (AND (BETA-STEP B B1)
+                           (REDUCTION A A1 LIST1))
+                      (REDUCTION (COMB A B)
+                                 (COMB A1 B1)
+                                 (MAP-COMB-RIGHT B LIST1))))
+(PROVE-LEMMA MAP-COMB-LEFT-REDUCTION2
+             (REWRITE)
+             (IMPLIES (REDUCTION B B1 LIST2)
+                      (REDUCTION (COMB A1 B)
+                                 (COMB A1 B1)
+                                 (MAP-COMB-LEFT A1 LIST2))))
+(PROVE-LEMMA MAP-COMB-LEFT-REDUCTION
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION B B1 LIST2)
+                           (BETA-STEP A A1))
+                      (REDUCTION (COMB A B)
+                                 (COMB A1 B1)
+                                 (MAP-COMB-LEFT A LIST2))))
+(PROVE-LEMMA LIST-COMB-REDUCTION
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION A A1 LIST1)
+                           (REDUCTION B B1 LIST2))
+                      (REDUCTION (COMB A B)
+                                 (COMB A1 B1)
+                                 (LIST-COMB A B LIST1 LIST2))))
+(PROVE-LEMMA BETA-SUBST
+             (REWRITE)
+             (BETA-STEP (COMB (LAMBDA A)
+                              B)
+                        (SUBST A B 1)))
+(DEFN
+ MAKE-REDUCTION-WALK
+ (W A)
+ (IF
+  (EQUAL (WALK W A) A)
+  NIL
+  (IF
+   (LAMBDAP A)
+   (LIST-LAMBDA (MAKE-REDUCTION-WALK W (BODY A)))
+   (IF (COMBP A)
+       (IF (AND (LAMBDAP (LEFT A))
+                (EQUAL (COMMAND W) 'REDUCE))
+           (CONS (SUBST (BODY (WALK (LEFT-INSTRS W) (LEFT A)))
+                        (WALK (RIGHT-INSTRS W) (RIGHT A))
+                        1)
+                 (CONS (COMB (WALK (LEFT-INSTRS W) (LEFT A))
+                             (WALK (RIGHT-INSTRS W) (RIGHT A)))
+                       (LIST-COMB (LEFT A)
+                                  (RIGHT A)
+                                  (MAKE-REDUCTION-WALK (LEFT-INSTRS W)
+                                                       (LEFT A))
+                                  (MAKE-REDUCTION-WALK (RIGHT-INSTRS W)
+                                                       (RIGHT A)))))
+           (LIST-COMB (LEFT A)
+                      (RIGHT A)
+                      (MAKE-REDUCTION-WALK (LEFT-INSTRS W) (LEFT A))
+                      (MAKE-REDUCTION-WALK (RIGHT-INSTRS W) (RIGHT A))))
+       NIL))))
+;A walk is a series of beta-steps.
+(PROVE-LEMMA MAKE-REDUCTION-WALK-STEPS
+             (REWRITE)
+             (REDUCTION A (WALK W A) (MAKE-REDUCTION-WALK W A)))
+(PROVE-LEMMA REDUCTION-APPEND
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION A B X)
+                           (REDUCTION B C Y))
+                      (REDUCTION A C (APPEND Y (CONS B X)))))
+(DEFN MAKE-REDUCE-STEPS
+      (W A)
+      (IF (LISTP W)
+          (APPEND (MAKE-REDUCE-STEPS (CDR W) (WALK (CAR W) A))
+                  (CONS (WALK (CAR W) A) (MAKE-REDUCTION-WALK (CAR W) A)))
+          NIL))
+(PROVE-LEMMA MAKE-REDUCE-STEPS-STEPS
+             (REWRITE)
+             (REDUCTION A (REDUCE W A) (MAKE-REDUCE-STEPS W A)))
+;`Skolem' function MAKE-W constructs the W to which Y and Z converge.
+(DEFN MAKE-W
+      (X Y Z LIST1 LIST2)
+      (REDUCE (MAKE-REDUCE X
+                           (MAKE-REDUCE-REDUCTION X Y LIST1)
+                           (MAKE-REDUCE-REDUCTION X Z LIST2))
+              (REDUCE (MAKE-REDUCE-REDUCTION X Z LIST2) X)))
+;MAKE-REDUCTION constructs the corresponding series of beta-steps.
+(DEFN MAKE-REDUCTION
+      (X Y Z LIST1 LIST2)
+      (MAKE-REDUCE-STEPS (MAKE-REDUCE X
+                                      (MAKE-REDUCE-REDUCTION X Z LIST2)
+                                      (MAKE-REDUCE-REDUCTION X Y LIST1))
+                         Y))
+;The next two events together give the Church-Rosser theorem for the de Bruijn
+;representation.  The first one shows the existence of convergent reductions,
+;and the second one shows that they converge.
+(PROVE-LEMMA THE-REAL-CHURCH-ROSSER
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION X Y LIST1)
+                           (REDUCTION X Z LIST2))
+                      (AND (REDUCTION Y
+                                      (MAKE-W X Z Y LIST2 LIST1)
+                                      (MAKE-REDUCTION X Y Z LIST1 LIST2))
+                           (REDUCTION Z
+                                      (MAKE-W X Y Z LIST1 LIST2)
+                                      (MAKE-REDUCTION X Z Y LIST2 LIST1)))))
+(PROVE-LEMMA BOTH-MAKE-W-ARE-SAME
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION X Y LIST1)
+                           (REDUCTION X Z LIST2))
+                      (EQUAL (MAKE-W X Y Z LIST1 LIST2)
+                             (MAKE-W X Z Y LIST2 LIST1)))
+             ((USE (CHURCH-ROSSER (M X)
+                                  (U (MAKE-REDUCE-REDUCTION X Y LIST1))
+                                  (V (MAKE-REDUCE-REDUCTION X Z LIST2))))
+              ))
+;Translating the proof back into the standard notation.
+;A standard beta-step translates to a de Bruijn beta-step.
+(PROVE-LEMMA NBETA-STEP-TRANSLATES
+             (REWRITE)
+             (IMPLIES (AND (NTERMP A)
+                           (NBETA-STEP A B))
+                      (BETA-STEP (TRANSLATE A X) (TRANSLATE B X))))
+(DEFN TRANS-LIST
+      (X)
+      (IF (LISTP X) (CONS (TRANSLATE (CAR X) NIL) (TRANS-LIST (CDR X))) NIL))
+(PROVE-LEMMA NTERMP-SUBST
+             (REWRITE)
+             (IMPLIES (AND (NTERMP X)
+                           (NTERMP Y))
+                      (NTERMP (NSUBST X Y N))))
+(PROVE-LEMMA NTERMP-BSTEP
+             (REWRITE)
+             (IMPLIES (AND (NBETA-STEP A B)
+                           (NTERMP A))
+                      (NTERMP B))
+             ((INDUCT (NBETA-STEP A B))))
+(PROVE-LEMMA NTERMP-ASTEP
+             (REWRITE)
+             (IMPLIES (AND (ALPHA-EQUAL A B X Y)
+                           (NTERMP A))
+                      (NTERMP B)))
+(PROVE-LEMMA NTERMP-LIST
+             (REWRITE)
+             (IMPLIES (AND (NREDUCTION A B LIST)
+                           (NTERMP A))
+                      (NTERMP B)))
+;Standard reduction goes to de Bruijn reduction.
+(PROVE-LEMMA REDUCTION-TRANSLATES
+             (REWRITE)
+             (IMPLIES (AND (NTERMP A)
+                           (NREDUCTION A B LIST))
+                      (REDUCTION (TRANSLATE A NIL)
+                                 (TRANSLATE B NIL)
+                                 (TRANS-LIST LIST))))
+;Finds the largest free-variable in the de Bruijn term X.
+(DEFN FIND-M
+      (X N)
+      (IF (LAMBDAP X)
+          (FIND-M (BODY X) (ADD1 N))
+          (IF (COMBP X)
+              (IF (LESSP (FIND-M (LEFT X) N) (FIND-M (RIGHT X) N))
+                  (FIND-M (RIGHT X) N)
+                  (FIND-M (LEFT X) N))
+              (DIFFERENCE X N))))
+;Translates the de Bruijn term X into a standard term given stack level N,
+;and that M is the largest free variable in X.  Very tricky!
+(DEFN UNTRANS
+      (X M N)
+      (IF (LAMBDAP X)
+          (NLAMBDA (PLUS M (ADD1 N)) (UNTRANS (BODY X) M (ADD1 N)))
+          (IF (COMBP X)
+              (NCOMB (UNTRANS (LEFT X) M N) (UNTRANS (RIGHT X) M N))
+              (IF (LESSP N X)
+                  (DIFFERENCE X (ADD1 N))
+                  (IF (NOT (ZEROP X)) (ADD1 (PLUS M (DIFFERENCE N X))) X)))))
+;X is a well-formed de Bruijn term.
+(DEFN TERMP
+      (X)
+      (IF (LAMBDAP X)
+          (TERMP (BODY X))
+          (IF (COMBP X)
+              (AND (TERMP (LEFT X))
+                   (TERMP (RIGHT X)))
+              (OR (NOT (ZEROP X))
+                  (LITATOM X)))))
+(PROVE-LEMMA NOT-FREE-IN-UNTRANS
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (LEQ (FIND-M X N) M)
+                           (LESSP (PLUS M N) Y))
+                      (NOT-FREE-IN Y (UNTRANS X M N))))
+;An untranslated term is free for another untranslated term.
+(PROVE-LEMMA FREE-FOR-UNTRANS
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (TERMP Y)
+                           (LEQ N2 N1)
+                           (LEQ (FIND-M Y N2) M))
+                      (FREE-FOR (UNTRANS X M N1) (UNTRANS Y M N2)))
+             ((INDUCT (UNTRANS X M N1))))
+(DEFN TRANS-UNTRANS-IND
+      (X BOUNDS M N)
+      (IF (NLAMBDAP X)
+          (TRANS-UNTRANS-IND (NBODY X) (CONS (NBIND X) BOUNDS) M (ADD1 N))
+          (IF (NCOMBP X)
+              (AND (TRANS-UNTRANS-IND (NLEFT X) BOUNDS M N)
+                   (TRANS-UNTRANS-IND (NRIGHT X) BOUNDS M N))
+              T)))
+;Generates a list of bound variables of length N.
+(DEFN BINDINGS
+      (M N)
+      (IF (ZEROP N) NIL (CONS (PLUS M N) (BINDINGS M (SUB1 N)))))
+;A TRANSLATE followed by an UNTRANS leaves X unchanged (modulo bound variables).
+(PROVE-LEMMA TRANS-UNTRANS
+             (REWRITE)
+             (IMPLIES (AND (EQUAL (LENGTH BOUNDS) N)
+                           (NTERMP X)
+                           (LEQ (FIND-M (TRANSLATE X BOUNDS) N) M))
+                      (ALPHA-EQUAL X
+                                   (UNTRANS (TRANSLATE X BOUNDS) M N)
+                                   BOUNDS
+                                   (BINDINGS M N)))
+             ((DISABLE ALPHA-TRANSLATE) (INDUCT (TRANS-UNTRANS-IND X
+                                                                   BOUNDS
+                                                                   M
+                                                                   N))))
+(PROVE-LEMMA TERMP-NTERMP
+             (REWRITE)
+             (IMPLIES (NTERMP X) (TERMP (TRANSLATE X BOUNDS))))
+(PROVE-LEMMA NTERMP-TERMP
+             (REWRITE)
+             (IMPLIES (TERMP X) (NTERMP (UNTRANS X M N))))
+(PROVE-LEMMA INDEX-FREEVAR
+             (REWRITE)
+             (IMPLIES (AND (LESSP N X)
+                           (LEQ (DIFFERENCE X N) M))
+                      (EQUAL (INDEX (DIFFERENCE (SUB1 X) N) (BINDINGS M N))
+                             X)))
+;An UNTRANS followed by a TRANSLATE doesn't change a thing.
+(PROVE-LEMMA UNTRANS-TRANS
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (LEQ (FIND-M X N) M))
+                      (EQUAL (TRANSLATE (UNTRANS X M N) (BINDINGS M N)) X)))
+(PROVE-LEMMA UNTRANS-SUBST
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (TERMP Y)
+                           (LAMBDAP X)
+                           (LEQ (FIND-M Y N) M)
+                           (LEQ (FIND-M X N) M))
+                      (EQUAL (TRANSLATE (NSUBST (NBODY (UNTRANS X M N))
+                                                (UNTRANS Y M N)
+                                                (NBIND (UNTRANS X M N)))
+                                        (BINDINGS M N))
+                             (SUBST (BODY X) Y 1)))
+             ((USE (TRANSLATE-PRESERVES-REDUCTION (X (UNTRANS X M N))
+                                                  (Y (UNTRANS Y M N))
+                                                  (BOUNDS (BINDINGS M N))))
+              ))
+(PROVE-LEMMA LITATOM-TRANSLATE
+             (REWRITE)
+             (IMPLIES (LITATOM (TRANSLATE A BOUNDS))
+                      (EQUAL (TRANSLATE A BOUNDS) A)))
+;If A and B have the same translation, then they are alpha-equal.
+(PROVE-LEMMA
+ TRANSLATE-ALPHA
+ (REWRITE)
+ (IMPLIES (AND (NTERMP A)
+               (NTERMP B)
+               (EQUAL (TRANSLATE A BOUNDS) (TRANSLATE B BOUNDS2)))
+          (ALPHA-EQUAL A B BOUNDS BOUNDS2))
+ ((INDUCT (ALPHA-EQUAL A B BOUNDS BOUNDS2))
+  (USE (LITATOM-TRANSLATE) (LITATOM-TRANSLATE (A B) (BOUNDS BOUNDS2)))))
+(PROVE-LEMMA TERMP-BUMP (REWRITE) (IMPLIES (TERMP X) (TERMP (BUMP X N))))
+(PROVE-LEMMA TERMP-SUBST
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (TERMP Y)
+                           (NOT (ZEROP N)))
+                      (TERMP (SUBST X Y N))))
+;Returns an instruction corresponding to a beta-step.
+(DEFN MAKE-BSTEP
+      (A B)
+      (IF (EQUAL A B)
+          NIL
+          (IF (AND (LAMBDAP A)
+                   (LAMBDAP B))
+              (MAKE-BSTEP (BODY A) (BODY B))
+              (IF (COMBP A)
+                  (IF (AND (LAMBDAP (LEFT A))
+                           (EQUAL B (SUBST (BODY (LEFT A)) (RIGHT A) 1)))
+                      (LIST NIL NIL 'REDUCE)
+                      (LIST (MAKE-BSTEP (LEFT A) (LEFT B))
+                            (MAKE-BSTEP (RIGHT A) (RIGHT B))))
+                  NIL))))
+;Applies the instruction to a term.
+(DEFN BSTEP
+      (W X)
+      (IF (LAMBDAP X)
+          (LAMBDA (BSTEP W (BODY X)))
+          (IF (COMBP X)
+              (IF (AND (LAMBDAP (LEFT X))
+                       (EQUAL (COMMAND W) 'REDUCE))
+                  (SUBST (BODY (LEFT X)) (RIGHT X) 1)
+                  (COMB (BSTEP (LEFT-INSTRS W) (LEFT X))
+                        (BSTEP (RIGHT-INSTRS W) (RIGHT X))))
+              X)))
+;The instruction works.
+(PROVE-LEMMA MAKE-BSTEP-BETA-STEP
+             (REWRITE)
+             (IMPLIES (BETA-STEP A B) (EQUAL (BSTEP (MAKE-BSTEP A B) A) B)))
+;A standard beta-step.
+(DEFN NBSTEP
+      (W X)
+      (IF (NLAMBDAP X)
+          (NLAMBDA (NBIND X) (NBSTEP W (NBODY X)))
+          (IF (NCOMBP X)
+              (IF (AND (NLAMBDAP (NLEFT X))
+                       (EQUAL (COMMAND W) 'REDUCE))
+                  (NSUBST (NBODY (NLEFT X)) (NRIGHT X) (NBIND (NLEFT X)))
+                  (NCOMB (NBSTEP (LEFT-INSTRS W) (NLEFT X))
+                         (NBSTEP (RIGHT-INSTRS W) (NRIGHT X))))
+              X)))
+(PROVE-LEMMA LAMBDAP-UNTRANS
+             (REWRITE)
+             (IMPLIES (TERMP X)
+                      (EQUAL (NLAMBDAP (UNTRANS X M N)) (LAMBDAP X))))
+(DEFN FIND-M-SUBST-IND
+      (X Y M N IND)
+      (IF (LAMBDAP X)
+          (FIND-M-SUBST-IND (BODY X) (BUMP Y 0) M (ADD1 N) (ADD1 IND))
+          (IF (COMBP X)
+              (AND (FIND-M-SUBST-IND (LEFT X) Y M N IND)
+                   (FIND-M-SUBST-IND (RIGHT X) Y M N IND))
+              T)))
+(PROVE-LEMMA FIND-M-BUMP
+             (REWRITE)
+             (NOT (LESSP (FIND-M Y N) (FIND-M (BUMP Y COUNT) (ADD1 N)))))
+(PROVE-LEMMA DIFF-ZERO
+             (REWRITE)
+             (IMPLIES (LEQ M N) (EQUAL (DIFFERENCE M N) 0)))
+(DEFN UNTRANS-BSTEP-IND
+      (A B M N)
+      (IF (EQUAL A B)
+          T
+          (IF (AND (LAMBDAP A)
+                   (LAMBDAP B))
+              (UNTRANS-BSTEP-IND (BODY A) (BODY B) M (ADD1 N))
+              (IF (COMBP A)
+                  (IF (AND (LAMBDAP (LEFT A))
+                           (EQUAL B (SUBST (BODY (LEFT A)) (RIGHT A) 1)))
+                      T
+                      (AND (UNTRANS-BSTEP-IND (LEFT A) (LEFT B) M N)
+                           (UNTRANS-BSTEP-IND (RIGHT A) (RIGHT B) M N)))
+                  T))))
+(PROVE-LEMMA NBSTEP-NIL (REWRITE) (IMPLIES (NLISTP W) (EQUAL (NBSTEP W A) A)))
+;A beta-step translates back.
+(PROVE-LEMMA UNTRANS-BETA-STEP
+             (REWRITE)
+             (IMPLIES (AND (BETA-STEP A B)
+                           (TERMP A)
+                           (LEQ (FIND-M A N) M))
+                      (NBETA-STEP (UNTRANS A M N)
+                                  (NBSTEP (MAKE-BSTEP A B) (UNTRANS A M N))))
+             ((INDUCT (UNTRANS-BSTEP-IND A B M N))))
+(PROVE-LEMMA FIND-M-BUMP2
+             (REWRITE)
+             (IMPLIES (LEQ COUNT N)
+                      (EQUAL (FIND-M (BUMP Y COUNT) (ADD1 N)) (FIND-M Y N))))
+(PROVE-LEMMA TERMP-BETA-STEP
+             (REWRITE)
+             (IMPLIES (AND (BETA-STEP A B)
+                           (TERMP A))
+                      (TERMP B))
+             ((INDUCT (BETA-STEP A B))))
+(PROVE-LEMMA TERMP-REDUCTION
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION A B LIST)
+                           (TERMP A))
+                      (TERMP B)))
+(PROVE-LEMMA FIND-M-SUBST
+             (REWRITE)
+             (IMPLIES (AND (LEQ (FIND-M X (ADD1 N)) M)
+                           (LEQ (FIND-M Y N) M)
+                           (LEQ IND N))
+                      (NOT (LESSP M (FIND-M (SUBST X Y (ADD1 IND)) N))))
+             ((INDUCT (FIND-M-SUBST-IND X Y M N IND))))
+;What a beta-step translates back into is alpha-equal to what would've
+;been gotten by doing the step directly in the standard form.
+(PROVE-LEMMA UNTRANS-SUBST-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (TERMP Y)
+                           (LAMBDAP X)
+                           (LEQ (FIND-M Y N) M)
+                           (LEQ (FIND-M X N) M))
+                      (ALPHA-EQUAL (NSUBST (NBODY (UNTRANS X M N))
+                                           (UNTRANS Y M N)
+                                           (NBIND (UNTRANS X M N)))
+                                   (UNTRANS (SUBST (BODY X) Y 1) M N)
+                                   (BINDINGS M N)
+                                   (BINDINGS M N)))
+             ((USE (TRANSLATE-ALPHA (A (NSUBST (NBODY (UNTRANS X M N))
+                                               (UNTRANS Y M N)
+                                               (NBIND (UNTRANS X M N))))
+                                    (B (UNTRANS (SUBST (BODY X) Y 1) M N))
+                                    (BOUNDS (BINDINGS M N))
+                                    (BOUNDS2 (BINDINGS M N)))
+                   (UNTRANS-TRANS (X (SUBST (BODY X) Y 1))))
+              ))
+(PROVE-LEMMA UNTRANS-NBSTEP
+             (REWRITE)
+             (IMPLIES (AND (TERMP X)
+                           (LEQ (FIND-M X N) M))
+                      (ALPHA-EQUAL (NBSTEP W (UNTRANS X M N))
+                                   (UNTRANS (BSTEP W X) M N)
+                                   (BINDINGS M N)
+                                   (BINDINGS M N))))
+(PROVE-LEMMA ANOTHER-FIND-M-SUBST
+             (REWRITE)
+             (IMPLIES (AND (LEQ (FIND-M Y N) M)
+                           (LEQ (FIND-M X (ADD1 N)) M)
+                           (LEQ IND N))
+                      (NOT (LESSP M (FIND-M (SUBST X Y (ADD1 IND)) N))))
+             ((INDUCT (FIND-M-SUBST-IND X Y M N IND))))
+(PROVE-LEMMA UNTRANS-NBSTEP-ZERO
+             (REWRITE)
+             (IMPLIES (AND (BETA-STEP X Y)
+                           (TERMP X)
+                           (LEQ (FIND-M X 0) M))
+                      (ALPHA-EQUAL (NBSTEP (MAKE-BSTEP X Y) (UNTRANS X M 0))
+                                   (UNTRANS Y M 0)
+                                   NIL
+                                   NIL))
+             ((USE (UNTRANS-NBSTEP (W (MAKE-BSTEP X Y)) (N 0)))))
+(PROVE-LEMMA BETA-STEP-FIND-M
+             (REWRITE)
+             (IMPLIES (AND (BETA-STEP A B)
+                           (LEQ (FIND-M A N) M))
+                      (NOT (LESSP M (FIND-M B N))))
+             ((INDUCT (UNTRANS-BSTEP-IND A B M N))))
+(PROVE-LEMMA ANOTHER-BETA-STEP-FIND-M
+             (REWRITE)
+             (IMPLIES (BETA-STEP A B) (NOT (LESSP (FIND-M A N) (FIND-M B N))))
+             ((USE (BETA-STEP-FIND-M (M (FIND-M A N))))))
+(PROVE-LEMMA REDUCTION-FIND-M
+             (REWRITE)
+             (IMPLIES (REDUCTION A B LIST)
+                      (NOT (LESSP (FIND-M A N) (FIND-M B N)))))
+(TOGGLE G0350 MAKE-W T)
+(TOGGLE G0351 MAKE-REDUCTION T)
+;Standard term corresponding to MAKE-W.
+(DEFN MAKE-N-W
+      (X Y Z LIST1 LIST2)
+      (UNTRANS (MAKE-W (TRANSLATE X NIL)
+                       (TRANSLATE Y NIL)
+                       (TRANSLATE Z NIL)
+                       (TRANS-LIST LIST1)
+                       (TRANS-LIST LIST2))
+               (FIND-M (TRANSLATE X NIL) 0)
+               0))
+(PROVE-LEMMA ALPHA-EQUAL-COMMUTES
+             (REWRITE)
+             (EQUAL (ALPHA-EQUAL A B X Y) (ALPHA-EQUAL B A Y X)))
+(DEFN END-CONS
+      (X Y)
+      (IF (LISTP Y) (CONS (CAR Y) (END-CONS X (CDR Y))) (CONS X NIL)))
+(PROVE-LEMMA END-CONS-NREDUCTION
+             (REWRITE)
+             (IMPLIES (AND (NREDUCTION A B LIST)
+                           (NSTEP A1 A))
+                      (NREDUCTION A1 B (END-CONS A LIST))))
+;Translates reductions back.
+(DEFN MAKE-NREDUCTION
+      (A B W M)
+      (IF (LISTP W)
+          (CONS (NBSTEP (MAKE-BSTEP (CAR W) B) (UNTRANS (CAR W) M 0))
+                (CONS (UNTRANS (CAR W) M 0)
+                      (MAKE-NREDUCTION A (CAR W) (CDR W) M)))
+          (CONS (UNTRANS B M 0)
+                (CONS (NBSTEP (MAKE-BSTEP A B) (UNTRANS A M 0)) NIL))))
+;Reductions translate.
+(PROVE-LEMMA REDUCTION-MAKE-NREDUCTION
+             (REWRITE)
+             (IMPLIES (AND (REDUCTION A B LIST)
+                           (TERMP A)
+                           (LEQ (FIND-M A 0) M))
+                      (NREDUCTION (UNTRANS A M 0)
+                                  (UNTRANS B M 0)
+                                  (MAKE-NREDUCTION A B LIST M))))
+;Standard convergent reduction corresponding to MAKE-REDUCTION.
+(DEFN NMAKE-REDUCTION
+      (X Y Z LIST1 LIST2)
+      (END-CONS (UNTRANS (TRANSLATE Y NIL) (FIND-M (TRANSLATE X NIL) 0) 0)
+                (MAKE-NREDUCTION (TRANSLATE Y NIL)
+                                 (MAKE-W (TRANSLATE X NIL)
+                                         (TRANSLATE Z NIL)
+                                         (TRANSLATE Y NIL)
+                                         (TRANS-LIST LIST2)
+                                         (TRANS-LIST LIST1))
+                                 (MAKE-REDUCTION (TRANSLATE X NIL)
+                                                 (TRANSLATE Y NIL)
+                                                 (TRANSLATE Z NIL)
+                                                 (TRANS-LIST LIST1)
+                                                 (TRANS-LIST LIST2))
+                                 (FIND-M (TRANSLATE X NIL) 0))))
+(PROVE-LEMMA TRANS-UNTRANS-NIL
+             (REWRITE)
+             (IMPLIES (AND (NTERMP X)
+                           (LEQ (FIND-M (TRANSLATE X NIL) 0) M))
+                      (ALPHA-EQUAL X (UNTRANS (TRANSLATE X NIL) M 0) NIL NIL))
+             ((USE (TRANS-UNTRANS (BOUNDS NIL) (N 0)))))
+;Church-Rosser theorem for standard representation.  FINALLY-CHURCH-ROSSER
+;gives the complete form.
+(PROVE-LEMMA
+ STANDARD-CHURCH-ROSSER
+ (REWRITE)
+ (IMPLIES (AND (NREDUCTION X Y LIST1)
+               (NREDUCTION X Z LIST2)
+               (NTERMP X))
+          (NREDUCTION Y
+                      (MAKE-N-W X Z Y LIST2 LIST1)
+                      (NMAKE-REDUCTION X Y Z LIST1 LIST2)))
+ ((DISABLE BOTH-MAKE-W-ARE-SAME)
+  (USE (REDUCTION-FIND-M (A (TRANSLATE X NIL))
+                         (B (TRANSLATE Y NIL))
+                         (N 0)
+                         (LIST (TRANS-LIST LIST1))))))
+(PROVE-LEMMA BOTH-MAKE-N-W-ARE-SAME
+             (REWRITE)
+             (IMPLIES (AND (NTERMP X)
+                           (NREDUCTION X Y LIST1)
+                           (NREDUCTION X Z LIST2))
+                      (EQUAL (MAKE-N-W X Y Z LIST1 LIST2)
+                             (MAKE-N-W X Z Y LIST2 LIST1))))
+(PROVE-LEMMA
+ FINALLY-CHURCH-ROSSER
+ (REWRITE)
+ (IMPLIES (AND (NTERMP X)
+               (NREDUCTION X Y LIST1)
+               (NREDUCTION X Z LIST2))
+          (AND (NREDUCTION Y
+                           (MAKE-N-W X Z Y LIST2 LIST1)
+                           (NMAKE-REDUCTION X Y Z LIST1 LIST2))
+               (NREDUCTION Z
+                           (MAKE-N-W X Z Y LIST2 LIST1)
+                           (NMAKE-REDUCTION X Z Y LIST2 LIST1))))
+ ((DISABLE MAKE-N-W NMAKE-REDUCTION) (USE (STANDARD-CHURCH-ROSSER))))
+;Now, the Diamond property of walks done directly in the standard notation.
+(PROVE-LEMMA FREE-FOR-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR EXP X)
+                           (FREE-FOR Y X))
+                      (FREE-FOR (NSUBST EXP Y Z) X)))
+(PROVE-LEMMA NOT-FREE-IN-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (NOT-FREE-IN X EXP)
+                           (NOT-FREE-IN X Y))
+                      (NOT-FREE-IN X (NSUBST EXP Y Z))))
+(PROVE-LEMMA NOT-FREE-IN-NSUBST1
+             (REWRITE)
+             (IMPLIES (AND (NOT-FREE-IN X Y)
+                           (NUMBERP X))
+                      (NOT-FREE-IN X (NSUBST EXP Y X))))
+(DEFN NWALK
+      (W X)
+      (IF (NLAMBDAP X)
+          (NLAMBDA (NBIND X) (NWALK W (NBODY X)))
+          (IF (NCOMBP X)
+              (IF (AND (NLAMBDAP (NLEFT X))
+                       (EQUAL (COMMAND W) 'REDUCE))
+                  (NSUBST (NBODY (NWALK (LEFT-INSTRS W) (NLEFT X)))
+                          (NWALK (RIGHT-INSTRS W) (NRIGHT X))
+                          (NBIND (NWALK (LEFT-INSTRS W) (NLEFT X))))
+                  (NCOMB (NWALK (LEFT-INSTRS W) (NLEFT X))
+                         (NWALK (RIGHT-INSTRS W) (NRIGHT X))))
+              X)))
+(PROVE-LEMMA NOT-FREE-IN-WALK
+             (REWRITE)
+             (IMPLIES (NOT-FREE-IN X EXP) (NOT-FREE-IN X (NWALK W EXP))))
+(PROVE-LEMMA TRANSITIVITY-OF-ALPHA-EQUAL
+             (REWRITE)
+             (IMPLIES (AND (ALPHA-EQUAL A B X Y)
+                           (ALPHA-EQUAL B C Y Z))
+                      (ALPHA-EQUAL A C X Z)))
+(PROVE-LEMMA FREE-FOR-IN-WALK
+             (REWRITE)
+             (IMPLIES (FREE-FOR EXP X) (FREE-FOR (NWALK W EXP) X)))
+(DEFN FREE-FOR-WALK
+      (W X)
+      (IF (NLAMBDAP X)
+          (FREE-FOR-WALK W (NBODY X))
+          (IF (NCOMBP X)
+              (IF (AND (NLAMBDAP (NLEFT X))
+                       (EQUAL (COMMAND W) 'REDUCE))
+                  (AND (FREE-FOR (NBODY (NLEFT X)) (NRIGHT X))
+                       (FREE-FOR-WALK (LEFT-INSTRS W) (NLEFT X))
+                       (FREE-FOR-WALK (RIGHT-INSTRS W) (NRIGHT X)))
+                  (AND (FREE-FOR-WALK (LEFT-INSTRS W) (NLEFT X))
+                       (FREE-FOR-WALK (RIGHT-INSTRS W) (NRIGHT X))))
+              T)))
+(PROVE-LEMMA NLISTP-FREE-FOR-WALK
+             (REWRITE)
+             (IMPLIES (NLISTP W) (FREE-FOR-WALK W X)))
+(DEFN FREE-FOR-TRANS-IND
+      (W X BOUNDS)
+      (IF (NLAMBDAP X)
+          (FREE-FOR-TRANS-IND W (NBODY X) (CONS (NBIND X) BOUNDS))
+          (IF (NCOMBP X)
+              (AND (FREE-FOR-TRANS-IND (LEFT-INSTRS W) (NLEFT X) BOUNDS)
+                   (FREE-FOR-TRANS-IND (RIGHT-INSTRS W) (NRIGHT X) BOUNDS))
+              T)))
+(PROVE-LEMMA NBODY-UNTRANS
+             (REWRITE)
+             (IMPLIES (AND (NTERMP X)
+                           (LAMBDAP (TRANSLATE X BOUNDS)))
+                      (EQUAL (NBODY (UNTRANS (TRANSLATE X BOUNDS) M N))
+                             (UNTRANS (TRANSLATE (NBODY X)
+                                                 (CONS (NBIND X) BOUNDS))
+                                      M
+                                      (ADD1 N)))))
+(PROVE-LEMMA FREE-FOR-WALK-UNTRANS-TRANS
+             (REWRITE)
+             (IMPLIES (AND (NTERMP X)
+                           (LEQ (FIND-M (TRANSLATE X BOUNDS) (LENGTH BOUNDS))
+                                M))
+                      (FREE-FOR-WALK W
+                                     (UNTRANS (TRANSLATE X BOUNDS)
+                                              M
+                                              (LENGTH BOUNDS))))
+             ((INDUCT (FREE-FOR-TRANS-IND W X BOUNDS))))
+(PROVE-LEMMA FREE-FOR-IN-WALK1
+             (REWRITE)
+             (IMPLIES (FREE-FOR X Y) (FREE-FOR (NWALK W1 X) (NWALK W2 Y))))
+(PROVE-LEMMA ALPHA-EQUAL-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (NTERMP X)
+                           (NTERMP Y)
+                           (NTERMP X1)
+                           (NTERMP Y1)
+                           (NLAMBDAP X)
+                           (NLAMBDAP X1)
+                           (FREE-FOR (NBODY X) Y)
+                           (FREE-FOR (NBODY X1) Y1)
+                           (ALPHA-EQUAL X X1 BND BND1)
+                           (ALPHA-EQUAL Y Y1 BND BND1))
+                      (ALPHA-EQUAL (NSUBST (NBODY X) Y (NBIND X))
+                                   (NSUBST (NBODY X1) Y1 (NBIND X1))
+                                   BND
+                                   BND1))
+             ((USE (TRANSLATE-PRESERVES-REDUCTION (BOUNDS BND))
+                   (TRANSLATE-PRESERVES-REDUCTION (X X1) (Y Y1) (BOUNDS BND1))
+                   (TRANSLATE-ALPHA (B (NSUBST (NBODY X) Y (NBIND X)))
+                                    (A (NSUBST (NBODY X1) Y1 (NBIND X1)))
+                                    (BOUNDS2 BND)
+                                    (BOUNDS BND1)))
+              (DISABLE NTERMP-ASTEP)))
+(PROVE-LEMMA NWALK-NTERMP (REWRITE) (IMPLIES (NTERMP A) (NTERMP (NWALK W A))))
+(PROVE-LEMMA NLAMBDAP-NWALK
+             (REWRITE)
+             (IMPLIES (NLAMBDAP A) (NLAMBDAP (NWALK W A))))
+(PROVE-LEMMA FREE-FOR-NWALK2
+             (REWRITE)
+             (IMPLIES (AND (NLAMBDAP X)
+                           (FREE-FOR (NBODY X) Y))
+                      (FREE-FOR (NBODY (NWALK W1 X)) (NWALK W2 Y))))
+(PROVE-LEMMA NWALK-ALPHA
+             (REWRITE)
+             (IMPLIES (AND (NTERMP A)
+                           (NTERMP B)
+                           (ALPHA-EQUAL A B X Y)
+                           (FREE-FOR-WALK W A)
+                           (FREE-FOR-WALK W B))
+                      (ALPHA-EQUAL (NWALK W A) (NWALK W B) X Y))
+             ((DISABLE NTERMP-ASTEP)))
+(PROVE-LEMMA NSUBST-NOT-FREE-IN
+             (REWRITE)
+             (IMPLIES (NOT-FREE-IN X A) (EQUAL (NSUBST A B X) A)))
+(PROVE-LEMMA NSUBST-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR A B)
+                           (NOT-FREE-IN X C)
+                           (NOT (EQUAL X Y)))
+                      (EQUAL (NSUBST (NSUBST A B X) C Y)
+                             (NSUBST (NSUBST A C Y) (NSUBST B C Y) X))))
+(DEFN SUB-NWALK
+      (W M U N)
+      (IF (NLAMBDAP M)
+          (IF (EQUAL (NBIND M) N) W (SUB-NWALK W (NBODY M) U N))
+          (IF (NCOMBP M)
+              (IF (AND (EQUAL (COMMAND W) 'REDUCE)
+                       (NLAMBDAP (NLEFT M)))
+                  (LIST (SUB-NWALK (LEFT-INSTRS W) (NLEFT M) U N)
+                        (SUB-NWALK (RIGHT-INSTRS W) (NRIGHT M) U N)
+                        'REDUCE)
+                  (LIST (SUB-NWALK (LEFT-INSTRS W) (NLEFT M) U N)
+                        (SUB-NWALK (RIGHT-INSTRS W) (NRIGHT M) U N)))
+              (IF (NUMBERP M) (IF (EQUAL M N) U W) W))))
+(PROVE-LEMMA NLAMBDAP-NSUBST
+             (REWRITE)
+             (IMPLIES (NLAMBDAP X) (NLAMBDAP (NSUBST X Y Z))))
+(PROVE-LEMMA NSUBST-TWICE
+             (REWRITE)
+             (IMPLIES (FREE-FOR A B)
+                      (EQUAL (NSUBST (NSUBST A B X) C X)
+                             (NSUBST A (NSUBST B C X) X))))
+(PROVE-LEMMA NWALK-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR M X)
+                           (FREE-FOR-WALK W M))
+                      (EQUAL (NWALK (SUB-NWALK W M U N) (NSUBST M X N))
+                             (NSUBST (NWALK W M) (NWALK U X) N))))
+(DEFN FREE-FORX
+      (A B X)
+      (IF (NOT-FREE-IN X A)
+          T
+          (IF (NLAMBDAP A)
+              (IF (EQUAL (NBIND A) X)
+                  T
+                  (AND (NOT-FREE-IN (NBIND A) B)
+                       (FREE-FORX (NBODY A) B X)))
+              (IF (NCOMBP A)
+                  (AND (FREE-FORX (NLEFT A) B X)
+                       (FREE-FORX (NRIGHT A) B X))
+                  T))))
+(PROVE-LEMMA NSUBST-NSUBSTX
+             (REWRITE)
+             (IMPLIES (AND (FREE-FORX A B X)
+                           (NOT-FREE-IN X C)
+                           (NOT (EQUAL X Y)))
+                      (EQUAL (NSUBST (NSUBST A B X) C Y)
+                             (NSUBST (NSUBST A C Y) (NSUBST B C Y) X))))
+(PROVE-LEMMA NSUBST-TWICEX
+             (REWRITE)
+             (IMPLIES (FREE-FORX A B X)
+                      (EQUAL (NSUBST (NSUBST A B X) C X)
+                             (NSUBST A (NSUBST B C X) X))))
+(PROVE-LEMMA FREE-FOR-FREE-FORX
+             (REWRITE)
+             (IMPLIES (FREE-FOR A B) (FREE-FORX A B X)))
+(DEFN FREE-FORX-WALK
+      (W X)
+      (IF (NLAMBDAP X)
+          (FREE-FORX-WALK W (NBODY X))
+          (IF (NCOMBP X)
+              (IF (AND (NLAMBDAP (NLEFT X))
+                       (EQUAL (COMMAND W) 'REDUCE))
+                  (AND (FREE-FORX (NBODY (NWALK (LEFT-INSTRS W) (NLEFT X)))
+                                  (NWALK (RIGHT-INSTRS W) (NRIGHT X))
+                                  (NBIND (NWALK (LEFT-INSTRS W) (NLEFT X))))
+                       (FREE-FORX-WALK (LEFT-INSTRS W) (NLEFT X))
+                       (FREE-FORX-WALK (RIGHT-INSTRS W) (NRIGHT X)))
+                  (AND (FREE-FORX-WALK (LEFT-INSTRS W) (NLEFT X))
+                       (FREE-FORX-WALK (RIGHT-INSTRS W) (NRIGHT X))))
+              T)))
+(PROVE-LEMMA FREE-FOR-FREE-FORX-WALK
+             (REWRITE)
+             (IMPLIES (FREE-FOR-WALK W X) (FREE-FORX-WALK W X)))
+(PROVE-LEMMA FREE-FORX-NSUBST
+             (REWRITE)
+             (IMPLIES (AND (FREE-FORX X M N)
+                           (FREE-FORX X Y Z)
+                           (NOT-FREE-IN Z M))
+                      (FREE-FORX (NSUBST X M N) Y Z)))
+(PROVE-LEMMA FREE-FORX-NSUBST2
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR X M)
+                           (FREE-FORX X Y Z))
+                      (FREE-FORX X (NSUBST Y M N) Z)))
+(PROVE-LEMMA NWALK-NLAMBDA1
+             (REWRITE)
+             (IMPLIES (NLAMBDAP X)
+                      (EQUAL (NBODY (NWALK U X)) (NWALK U (NBODY X)))))
+(PROVE-LEMMA NWALK-NLAMBDA2
+             (REWRITE)
+             (IMPLIES (NLAMBDAP X) (EQUAL (NBIND (NWALK U X)) (NBIND X))))
+(PROVE-LEMMA NWALK-NSUBSTX
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR M X)
+                           (FREE-FORX-WALK W M))
+                      (EQUAL (NWALK (SUB-NWALK W M U N) (NSUBST M X N))
+                             (NSUBST (NWALK W M) (NWALK U X) N))))
+(DEFN MAKE-NWALK
+      (M U V)
+      (IF (NLAMBDAP M)
+          (MAKE-NWALK (NBODY M) U V)
+          (IF (NCOMBP M)
+              (IF (AND (EQUAL (COMMAND U) 'REDUCE)
+                       (NLAMBDAP (NLEFT M)))
+                  (SUB-NWALK (MAKE-NWALK (NLEFT M)
+                                         (LEFT-INSTRS U)
+                                         (LEFT-INSTRS V))
+                             (NBODY (NWALK (LEFT-INSTRS U) (NLEFT M)))
+                             (MAKE-NWALK (NRIGHT M)
+                                         (RIGHT-INSTRS U)
+                                         (RIGHT-INSTRS V))
+                             (NBIND (NWALK (LEFT-INSTRS U) (NLEFT M))))
+                  (IF (AND (EQUAL (COMMAND V) 'REDUCE)
+                           (NLAMBDAP (NLEFT M)))
+                      (LIST (MAKE-NWALK (NLEFT M)
+                                        (LEFT-INSTRS U)
+                                        (LEFT-INSTRS V))
+                            (MAKE-NWALK (NRIGHT M)
+                                        (RIGHT-INSTRS U)
+                                        (RIGHT-INSTRS V))
+                            'REDUCE)
+                      (LIST (MAKE-NWALK (NLEFT M)
+                                        (LEFT-INSTRS U)
+                                        (LEFT-INSTRS V))
+                            (MAKE-NWALK (NRIGHT M)
+                                        (RIGHT-INSTRS U)
+                                        (RIGHT-INSTRS V)))))
+              U)))
+(PROVE-LEMMA FREE-FOR-SUB-NWALK
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR M X)
+                           (FREE-FORX-WALK W M)
+                           (FREE-FORX-WALK U X))
+                      (FREE-FORX-WALK (SUB-NWALK W M U N) (NSUBST M X N))))
+(PROVE-LEMMA FREE-FORX-MAKE-NWALK
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR-WALK U M)
+                           (FREE-FOR-WALK V M))
+                      (FREE-FORX-WALK (MAKE-NWALK M U V) (NWALK U M))))
+;The Diamond property of beta-walks.
+(PROVE-LEMMA DIAMOND-OF-BETA
+             (REWRITE)
+             (IMPLIES (AND (FREE-FOR-WALK U M)
+                           (FREE-FOR-WALK V M))
+                      (EQUAL (NWALK (MAKE-NWALK M U V) (NWALK U M))
+                             (NWALK (MAKE-NWALK M V U) (NWALK V M)))))
+
+

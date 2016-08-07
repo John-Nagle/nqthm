@@ -1,0 +1,115 @@
+  Copyright (C) 1994 Computational Logic, Inc.  All Rights Reserved.
+
+  Copying of this file is authorized to those who have read and
+  agreed with the terms in the "Nqthm-1992 GENERAL PUBLIC SOFTWARE
+  LICENSE" at the beginning of the Nqthm file "basis.lisp".
+
+NQTHM Version 1992
+
+Comments, bugs, suggestions to:
+
+  Michael K. Smith
+  Computational Logic Inc.
+  1717 W 6th, Suite 290
+  Austin, TX 78703-4776
+
+  Fax  : (512) 322-0656
+  Email: mksmith@cli.com
+
+--------------------------------------------------------------------------
+INSTALLATION
+
+The files required are:
+
+ sinfix.lisp
+ latex-init.lisp
+ latex-theory.lisp
+ scribe-init.lisp
+ scribe-theory.lisp
+ akcl-patch.lisp ***
+
+*** With AKCL version 1.615 (and earlier, presumably), a patch file
+must be loaded before the -init files can be compiled.  Sinfix.lisp
+makes this load conditional on a feature check for akcl.
+
+ #+akcl (load-base "akcl-patch.lisp")
+
+LOAD-BASE looks for the file in the *infix-directory* directory.  See
+below.
+
+For decent speed, sinfix and the -init files should be compiled.
+With AKCL that means producing the files:
+
+ sinfix.o
+ latex-init.o
+ scribe-init.o
+
+After compiling Nqthm, connect to the directory in which the sinfix
+sources reside, start up Nqthm, compile sinfix.lisp, load sinfix.o
+and then compile the *-init.lisp files.  Starting out in the directory
+in which sinfix resides causes *infix-directory* to get set properly.
+
+By default, sinfix expects the scribe-theory and latex-theory files to
+be in *infix-directory*.  And they in turn expect their corresponding
+-init files to be there also.  This is the directory in which you
+should compile sinfix.lisp (the value of (probe-file "./") at compile
+time).  If you want to put these files elsewhere or want to compile
+the system from some other directory, edit sinfix.lisp before
+compiling it for your system.  Find and change:
+
+ (defparameter *infix-directory* #.(namestring (probe-file "./")))
+
+It is the first defparameter in the file.  The `#.' causes the
+(namestring (probe-file ..)) to be evaluated at compile time.  The
+resulting value gets assigned at load time.
+
+Other -theory files may reside in *infix-directory* or in the `current
+directory' (defined to be the directory returned by (probe-file "./")
+at execution time).  The current directory is checked first.
+
+
+--------------------------------------------------------------------------
+USE
+
+The simple way to run this program is to connect to the directory
+containing your .events files, start up nqthm-1992, and load sinfix.o.
+
+The basic call is then 
+
+  (infix-file <file> :mode <mode>) 
+
+where <file> is the name (without type) of a .events file and, in the
+simplest case, <mode> is one of "scribe" or "latex".  For example:
+
+  (infix-file "clock" :mode "scribe") 
+
+See the documentation in sinfix.lisp for information on user
+parameterization and extension of modes.  In particular, see the
+section `SETTINGS THAT MAY BE MODIFIED IN MODE-THEORY.LISP'.
+
+Just as a note, if you have an events file, say clock.events, and
+create a corresponding theory file, clock-theory.lisp, then you can
+use the even simpler invocation:
+
+  (infix-file "clock") 
+
+
+--------------------------------------------------------------------------
+TESTING
+
+SinFix has been tested in both Scribe and LaTeX mode against the files
+in "/slocal/src/nqthm-1992/examples/*/*.events".
+
+Subdirectories included were:
+
+kaufmann 		basic			kunen
+bevier			numbers			bronstein
+flatau			shankar			cowles
+fm9001-piton		talcott			fortran-vcg		
+yu			driver			hunt
+
+See testlog.summary for a complete list of files tested.
+
+
+
+

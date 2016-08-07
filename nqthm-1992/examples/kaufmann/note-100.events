@@ -1,0 +1,328 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+(boot-strap nqthm)
+
+(defn ramsey (p q)
+  (if (zerop p)
+      1
+      (if (zerop q)
+          1
+          (plus (ramsey (sub1 p) q)
+                (ramsey p (sub1 q)))))
+  ;; A hint to the prover (see below)
+  ((lessp (plus p q))))
+
+(defn related (i j pairs)
+  (or (member (cons i j) pairs)
+      (member (cons j i) pairs)))
+
+(defn partition (n rest pairs)
+  (if (listp rest)
+      (if (related n (car rest) pairs)
+          (cons (cons (car rest)
+                      (car (partition n (cdr rest) pairs)))
+                (cdr (partition n (cdr rest) pairs)))
+          (cons (car (partition n (cdr rest) pairs))
+                (cons (car rest)
+                      (cdr (partition n (cdr rest) pairs)))))
+      (cons nil nil)))
+
+(defn length (lst)
+  (if (listp lst)
+      (add1 (length (cdr lst)))
+      0))
+
+(defn wit (pairs domain p q)
+  ;; returns (cons set flag) where flag is 1 or 2
+  (if (listp domain)
+      (if (zerop p)
+          (cons nil 1)
+        (if (zerop q)
+            (cons nil 2)
+          (if (lessp (length (car (partition (car domain)
+                                             (cdr domain)
+                                             pairs)))
+                     (ramsey (sub1 p) q))
+              ;; then use set2 to form a clique or
+              ;;  an independent set
+              (if (equal (cdr (wit pairs (cdr (partition (car domain)
+                                                         (cdr domain)
+                                                         pairs)) p (sub1 q))) 1)
+                  (wit pairs (cdr (partition (car domain)
+                                             (cdr domain)
+                                             pairs)) p (sub1 q))
+                (cons (cons (car domain)
+                            (car (wit pairs (cdr (partition (car domain)
+                                                            (cdr domain)
+                                                            pairs)) p (sub1 q))))
+                      2))
+            ;; otherwise use set1 to form an independent set
+            ;;  or a clique
+            (if (equal (cdr (wit pairs (car (partition (car domain)
+                                                       (cdr domain)
+                                                       pairs)) (sub1 p) q)) 2)
+                (wit pairs (car (partition (car domain)
+                                           (cdr domain)
+                                           pairs)) (sub1 p) q)
+              (cons (cons (car domain)
+                          (car (wit pairs (car (partition (car domain)
+                                                          (cdr domain)
+                                                          pairs)) (sub1 p) q)))
+                    1)))))
+    (cons nil 1))
+  ((lessp (plus p q))))
+
+(defn homogeneous1 (n domain pairs flg)
+  (if (listp domain)
+      (and (if (equal flg 1)
+               (related n (car domain) pairs)
+               (not (related n (car domain) pairs)))
+           (homogeneous1 n (cdr domain) pairs flg))
+      t))
+
+(defn homogeneous (domain pairs flg)
+  (if (listp domain)
+      (and (homogeneous1 (car domain) (cdr domain) pairs flg)
+           (homogeneous (cdr domain) pairs flg))
+      t))
+
+(defn subsetp (x y)
+  (if (nlistp x)
+      t
+      (if (member (car x) y)
+          (subsetp (cdr x) y)
+          f)))
+
+(prove-lemma member-cons (rewrite)
+  (implies (member a l)
+           (member a (cons x l))))
+
+(prove-lemma subsetp-cons (rewrite)
+  (implies (subsetp l m)
+           (subsetp l (cons a m))))
+
+(prove-lemma subsetp-reflexivity (rewrite)
+  (subsetp x x))
+
+(prove-lemma cdr-subsetp (rewrite)
+  (subsetp (cdr x) x))
+
+(prove-lemma member-subsetp (rewrite)
+  (implies (and (member x y)
+                (subsetp y z))
+           (member x z)))
+
+(prove-lemma subsetp-is-transitive (rewrite)
+  (implies (and (subsetp x y)
+                (subsetp y z))
+           (subsetp x z)))
+
+(prove-lemma subsetp-cdr-partition (rewrite)
+  (subsetp (cdr (partition x z pairs))
+           z))
+
+(prove-lemma subsetp-hom-set-domain-1 (rewrite)
+  (implies
+    (subsetp
+      (car (wit pairs (cdr (partition x z pairs)) p q))
+      (cdr (partition x z pairs)))
+    (subsetp
+      (car (wit pairs (cdr (partition x z pairs)) p q))
+      (cons x z)))
+  ;; The USE hint below was needed because of the free variable
+  ;; in the statement of transitivity of SUBSETP.  The DISABLE
+  ;; hint was there so that the use of SUBSETP-CDR-PARTITION
+  ;; wasn't rewritten to T.
+  ((use (subsetp-cdr-partition))
+   (disable subsetp-cdr-partition)))
+
+(prove-lemma subsetp-car-partition (rewrite)
+  (subsetp (car (partition x z pairs))
+           z))
+
+(prove-lemma subsetp-hom-set-domain-2 (rewrite)
+  (implies
+    (subsetp
+      (car (wit pairs (car (partition x z pairs)) p q))
+      (car (partition x z pairs)))
+    (subsetp
+      (car (wit pairs (car (partition x z pairs)) p q))
+      (cons x z)))
+  ((use (subsetp-car-partition))
+   (disable subsetp-car-partition)))
+
+(prove-lemma subsetp-hom-set-domain (rewrite)
+  (subsetp (car (wit pairs domain p q))
+           domain))
+
+(defn good-hom-set (pairs domain p q flg)
+  (and (homogeneous (car (wit pairs domain p q))
+                    pairs
+                    flg)
+       (not (lessp (length (car (wit pairs domain p q)))
+                   (if (equal flg 1) p q)))))
+
+(prove-lemma homogeneous1-subset (rewrite)
+  (implies (and (subsetp x domain)
+                (homogeneous1 elt domain pairs flg))
+           (homogeneous1 elt x pairs flg)))
+
+(prove-lemma homogeneous1-cdr-partition (rewrite)
+  (homogeneous1 elt (cdr (partition elt dom pairs)) pairs 2))
+
+(prove-lemma length-partition-1 nil
+  (equal (length z)
+         (plus (length (car (partition x z pairs)))
+               (length (cdr (partition x z pairs))))))
+
+(prove-lemma length-partition (rewrite)
+  (equal (length (car (partition x z pairs)))
+         (difference (length z)
+                     (length (cdr (partition x z pairs)))))
+  ((use (length-partition-1))))
+
+(prove-lemma ramsey-not-zero (rewrite)
+  ;; Used as a linear lemma
+  (lessp 0 (ramsey p q)))
+
+(prove-lemma homogeneous1-car-wit-cdr-partition
+           (rewrite)
+           (homogeneous1
+            elt
+            (car (wit pairs
+                      (cdr (partition elt dom pairs))
+                      p q))
+            pairs 2)
+           ((use (homogeneous1-subset
+                  (domain (cdr (partition elt dom pairs)))
+                  (flg 2)
+                  (x (car (wit pairs
+                          (cdr (partition elt dom pairs))
+                          p q)))))
+            (disable homogeneous1-subset)))
+
+(prove-lemma homogeneous1-car-partition (rewrite)
+  (homogeneous1 elt (car (partition elt dom pairs)) pairs 1))
+
+(prove-lemma homogeneous1-car-wit-car-partition
+           (rewrite)
+           (homogeneous1
+            elt
+            (car (wit pairs
+                      (car (partition elt dom pairs))
+                      p q))
+            pairs 1)
+           ((use (homogeneous1-subset
+                  (domain (car (partition elt dom pairs)))
+                  (flg 1)
+                  (x (car (wit pairs
+                          (car (partition elt dom pairs))
+                          p q)))))
+            (disable homogeneous1-subset)))
+
+(prove-lemma cdr-wit-is-1-or-2 (rewrite)
+  (implies (not (equal (cdr (wit pairs dom p q)) 1))
+           (equal (cdr (wit pairs dom p q)) 2)))
+
+(prove-lemma wit-yields-good-hom-set (rewrite)
+  (implies (not (lessp (length domain)
+                       (ramsey p q)))
+           (good-hom-set pairs domain p q
+                         (cdr (wit pairs domain p q)))))
+
+(defn setp (x)
+  (if (listp x)
+      (and (not (member (car x) (cdr x)))
+           (setp (cdr x)))
+    t))
+
+(prove-lemma setp-partition (rewrite)
+  (implies (setp x)
+           (and (setp (car (partition a x pairs)))
+                (setp (cdr (partition a x pairs))))))
+
+(prove-lemma not-member-car-wit-cdr-partition
+       (rewrite)
+       (implies (not (member z x))
+                (not (member
+                      z
+                      (car (wit pairs
+                                (cdr (partition z x pairs))
+                                p
+                                q)))))
+       ((use (member-subsetp
+              (y (car (wit pairs
+                           (cdr (partition z x pairs))
+                           p
+                           q)))
+              (x z)
+              (z x))
+             (subsetp-is-transitive
+              (x (car (wit pairs
+                           (cdr (partition z x pairs))
+                           p
+                           q)))
+              (y (cdr (partition z x pairs)))
+              (z x)))))
+
+(prove-lemma not-member-car-wit-car-partition
+       (rewrite)
+       (implies (not (member z x))
+                (not (member
+                      z
+                      (car (wit pairs
+                                (car (partition z x pairs))
+                                p
+                                q)))))
+       ((use (member-subsetp
+              (y (car (wit pairs
+                           (car (partition z x pairs))
+                           p
+                           q)))
+              (x z)
+              (z x))
+             (subsetp-is-transitive
+              (x (car (wit pairs
+                           (car (partition z x pairs))
+                           p
+                           q)))
+              (y (car (partition z x pairs)))
+              (z x)))))
+
+(prove-lemma setp-hom-set (rewrite)
+  (implies (setp domain)
+           (setp (car (wit pairs domain p q)))))
+
+(prove-lemma ramsey-theorem-2 (rewrite)
+  (implies (leq (ramsey p q)
+                (length domain))
+           (and (subsetp (car (wit pairs domain p q))
+                         domain)
+                (good-hom-set pairs domain p q
+                              (cdr (wit pairs domain p q)))
+                (implies (setp domain)
+                         (setp (car (wit pairs domain p q))))))
+  ((disable good-hom-set)))
+

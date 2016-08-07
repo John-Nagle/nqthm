@@ -1,0 +1,2940 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+; William R. Bevier, Matt Kaufmann, and Matt Wilding
+
+(note-lib "bags" T)
+
+;; Jan 91 - some additional facts mostly having to do with GCD
+;; added by MMW
+
+;; Oct 90 - modified by MMW to eliminate theories
+
+;; Tue Sep 26 10:20:45 1989, from ~wilding/numerical/newnat.events
+
+;; NATURALS Theory
+
+;; Created by Bill Bevier 1988 (see CLI internal note 057)
+
+;; Modifications by Bill Bevier and Matt Wilding (9/89) including
+;; adding some new metalemmas for times, reorganizing the theories,
+;; removing some extraneous lemmas, and removing dependence upon
+;; other theories (by adding the pertinent lemmas).
+
+;; This script requires the bags theory
+
+;; This script sets up a theory for the NATURALS with the following subtheories
+;; ADDITION
+;; MULTIPLICATION
+;; REMAINDER
+;; QUOTIENT
+;; EXPONENTIATION 
+;; LOGS
+;; GCDS
+
+;; The theories of EXPONENTIATION, LOGS, and GCDS still need a lot of work
+
+; --------------------------------------------------------------------------------
+; ARITHMETIC
+; --------------------------------------------------------------------------------
+
+; -------------------- PLUS & DIFFERENCE --------------------
+
+; ---------- EQUAL ----------
+
+(prove-lemma equal-plus-0 (rewrite)
+       (equal (equal (plus a b) 0)
+              (and (zerop a)
+                   (zerop b))))
+
+(prove-lemma plus-cancellation (rewrite)
+       (equal (equal (plus a b) (plus a c))
+              (equal (fix b) (fix c))))
+
+(disable plus-cancellation)
+
+(prove-lemma equal-difference-0 (rewrite)
+       (and (equal (equal (difference x y) 0)
+                   (not (lessp y x)))
+            (equal (equal 0 (difference x y))
+                   (not (lessp y x))))
+       ((induct (difference x y))))
+
+(prove-lemma difference-cancellation (rewrite)
+       (equal (equal (difference x y) (difference z y))
+              (if (lessp x y)
+                  (not (lessp y z))
+                  (if (lessp z y)
+                      (not (lessp y x))
+                      (equal (fix x) (fix z)))))
+       ((enable equal-difference-0)))
+
+(disable difference-cancellation)
+
+; ---------- PLUS ----------
+
+(prove-lemma commutativity-of-plus (rewrite)
+       (equal (plus x y) (plus y x)))
+
+(prove-lemma commutativity2-of-plus (rewrite) 
+       (equal (plus x (plus y z))
+              (plus y (plus x z))))
+
+(prove-lemma plus-zero-arg2 (rewrite)
+       (implies (zerop y)
+                (equal (plus x y)
+                       (fix x)))
+       ((induct (plus x y))))
+
+(prove-lemma plus-add1-arg1 (rewrite)
+       (equal (plus (add1 a) b)
+              (add1 (plus a b))))
+
+(prove-lemma plus-add1-arg2 (rewrite)
+       (equal (plus x (add1 y)) 
+              (if (numberp y)
+                  (add1 (plus x y))
+                  (add1 x))))
+
+(prove-lemma associativity-of-plus  (rewrite)
+       (equal (plus (plus x y) z) (plus x (plus y z))))
+
+(prove-lemma plus-difference-arg1 (rewrite)
+       (equal (plus (difference a b) c)
+              (if (lessp b a)
+                  (difference (plus a c) b)
+                  (plus 0 c)))
+       ((induct (difference a b))))
+       
+(prove-lemma plus-difference-arg2 (rewrite)
+       (equal (plus a (difference b c))
+              (if (lessp c b)
+                  (difference (plus a b) c)
+                  (plus a 0)))
+       ((induct (plus a b))))
+
+; ---------- DIFFERENCE-PLUS cancellation rules ----------
+;
+; Here are the basic canonicalization rules for differences of sums. These
+; are subsumed by the meta lemmas and are therefore globally disabled.
+; They are here merely to prove the meta lemmas.
+
+(prove-lemma difference-plus-cancellation-proof ()
+       (equal (difference (plus x y) x) (fix y)))
+
+
+(prove-lemma difference-plus-cancellation (rewrite)
+       (and (equal (difference (plus x y) x) (fix y))
+            (equal (difference (plus y x) x) (fix y)))
+       ((use (difference-plus-cancellation-proof (x x) (y y)))
+        (enable commutativity-of-plus)))
+
+(disable difference-plus-cancellation)
+
+(prove-lemma difference-plus-plus-cancellation-proof ()
+       (equal (difference (plus x y) (plus x z))
+              (difference y z)))
+
+(prove-lemma difference-plus-plus-cancellation (rewrite)
+       (and (equal (difference (plus x y) (plus x z))
+                   (difference y z))
+            (equal (difference (plus y x) (plus x z))
+                   (difference y z))
+            (equal (difference (plus x y) (plus z x))
+                   (difference y z))
+            (equal (difference (plus y x) (plus z x))
+                   (difference y z)))
+       ((use (difference-plus-plus-cancellation-proof (x x) (y y) (z z)))
+        (enable commutativity-of-plus)))
+
+(disable difference-plus-plus-cancellation)
+
+(prove-lemma difference-plus-plus-cancellation-hack (rewrite)
+       (equal (difference (plus w x a) (plus y z a))
+              (difference (plus w x) (plus y z)))
+       ((enable commutativity-of-plus
+                commutativity2-of-plus
+                difference-plus-plus-cancellation)
+        (do-not-induct t)))
+
+(disable difference-plus-plus-cancellation-hack)
+
+; Here are a few more facts about difference needed to prove the meta lemmas.
+; These are disabled here. We re-prove them after the proof of the meta
+; lemmas so that they will fire before the meta lemmas in subsequent proofs.
+
+(prove-lemma diff-sub1-arg2 (rewrite)
+       (equal (difference a (sub1 b))
+              (if (zerop b)
+                  (fix a)
+                  (if (lessp a b)
+                      0
+                      (add1 (difference a b)))))
+       ((induct (difference a b))))
+
+(disable diff-sub1-arg2)
+
+(prove-lemma diff-diff-arg1 (rewrite)
+    (equal (difference (difference x y) z)
+           (difference x (plus y z))))
+
+
+(prove-lemma diff-diff-arg2 (rewrite)
+       (equal (difference a (difference b c))
+              (if (lessp b c)
+                  (fix a)
+                  (difference (plus a c) b)))
+       ((enable diff-sub1-arg2
+                plus-zero-arg2)
+        (induct (difference a b))))
+
+
+; diff-diff-diff should be removed, but since the hack lemmas for
+; correctness-of-cancel-difference-plus are designed for it, we'll
+; keep it around.
+
+(prove-lemma diff-diff-diff (rewrite)
+       (implies (and (leq b a)
+                     (leq d c))
+                (equal (difference (difference a b)
+                                   (difference c d))
+                       (difference (plus a d) (plus b c))))
+       ((enable diff-diff-arg1
+                diff-diff-arg2
+                plus-difference-arg2
+                plus-zero-arg2)
+        (do-not-induct t)))
+
+(disable diff-diff-diff)
+
+(prove-lemma difference-lessp-arg1 (rewrite)
+       (implies (lessp a b)
+                (equal (difference a b) 0)))
+
+(disable difference-lessp-arg1)
+
+; --------------------------------------------------------------------------------
+; Meta Lemmas to Cancel PLUS and DIFFERENCE expressions
+; --------------------------------------------------------------------------------
+
+; ---------- PLUS-TREE and PLUS-FRINGE ----------
+
+(defn plus-fringe (x)
+  (if (and (listp x) (equal (car x) 'plus))
+      (append (plus-fringe (cadr x)) (plus-fringe (caddr x)))
+      (cons x nil)))
+
+(defn plus-tree (l)
+  (if (nlistp l)
+      ''0
+        (if (nlistp (cdr l)) 
+            (list 'fix (car l))
+            (if (nlistp (cddr l))
+                (list 'plus (car l) (cadr l))
+                (list 'plus (car l) (plus-tree (cdr l)))))))
+
+(prove-lemma numberp-eval$-plus (rewrite)
+       (implies (and (listp x) (equal (car x) 'plus))
+                (numberp (eval$ t x a))))
+
+(disable numberp-eval$-plus)
+
+(prove-lemma numberp-eval$-plus-tree (rewrite)
+       (numberp (eval$ t (plus-tree l) a)) ((enable plus-tree)))
+
+(disable numberp-eval$-plus-tree)
+
+(prove-lemma member-implies-plus-tree-greatereqp (rewrite)
+       (implies (member x y)
+                (not (lessp (eval$ t (plus-tree y) a) (eval$ t x a))))
+       ((enable plus-tree 
+                plus-zero-arg2)))
+
+(disable member-implies-plus-tree-greatereqp)
+
+(prove-lemma plus-tree-delete (rewrite)
+       (equal (eval$ t (plus-tree (delete x y)) a)
+              (if (member x y)
+                  (difference (eval$ t (plus-tree y) a) (eval$ t x a))
+                  (eval$ t (plus-tree y) a)))
+       ((enable delete plus-tree
+                delete-non-member
+                difference-plus-cancellation 
+                equal-difference-0 
+                equal-plus-0
+                listp-delete
+                member-implies-plus-tree-greatereqp
+                numberp-eval$-plus-tree 
+                plus-zero-arg2)))
+
+(disable plus-tree-delete)
+
+(prove-lemma subbagp-implies-plus-tree-greatereqp (rewrite)
+       (implies (subbagp x y)
+                (not (lessp (eval$ t (plus-tree y) a)
+                            (eval$ t (plus-tree x) a))))
+       ((enable plus-tree subbagp
+                member-implies-plus-tree-greatereqp
+                plus-tree-delete
+                plus-zero-arg2
+                subbagp-cdr2)))
+
+(disable subbagp-implies-plus-tree-greatereqp)
+
+(prove-lemma plus-tree-bagdiff (rewrite)
+       (implies (subbagp x y)
+                (equal (eval$ t (plus-tree (bagdiff y x)) a)
+                       (difference (eval$ t (plus-tree y) a)
+                                   (eval$ t (plus-tree x) a))))
+       ((enable bagdiff plus-tree subbagp
+                commutativity-of-plus
+                diff-diff-arg1
+                difference-lessp-arg1
+                member-implies-plus-tree-greatereqp
+                numberp-eval$-plus-tree
+                plus-tree-delete
+                plus-zero-arg2
+                subbagp-cdr2
+                subbagp-implies-plus-tree-greatereqp)))
+
+(disable plus-tree-bagdiff)
+
+(prove-lemma numberp-eval$-bridge (rewrite)
+       (implies (equal (eval$ t z a) (eval$ t (plus-tree x) a))
+                (numberp (eval$ t z a)))
+       ((enable plus-tree
+                numberp-eval$-plus-tree)))
+
+(disable numberp-eval$-bridge)
+
+(prove-lemma bridge-to-subbagp-implies-plus-tree-greatereqp (rewrite)
+       (implies (and (subbagp y (plus-fringe z))
+                     (equal (eval$ t z a)
+                            (eval$ t (plus-tree (plus-fringe z)) a)))
+                (equal (lessp (eval$ t z a) (eval$ t (plus-tree y) a)) f))
+       ((enable subbagp plus-fringe plus-tree
+                subbagp-implies-plus-tree-greatereqp)))
+
+(disable bridge-to-subbagp-implies-plus-tree-greatereqp)
+
+(prove-lemma eval$-plus-tree-append (rewrite)
+       (equal (eval$ t (plus-tree (append x y)) a)
+              (plus (eval$ t (plus-tree x) a) (eval$ t (plus-tree y) a)))
+       ((enable plus-zero-arg2 commutativity2-of-plus commutativity-of-plus
+                equal-plus-0 plus-cancellation plus-tree
+                numberp-eval$-plus-tree numberp-eval$-bridge)))
+
+(disable eval$-plus-tree-append)
+
+(prove-lemma plus-tree-plus-fringe (rewrite)
+       (equal (eval$ t (plus-tree (plus-fringe x)) a) (fix (eval$ t x a)))
+       ((enable plus-zero-arg2 commutativity-of-plus plus-fringe plus-tree
+                numberp-eval$-plus numberp-eval$-bridge
+                eval$-plus-tree-append)
+        (induct (plus-fringe x))))
+
+(disable plus-tree-plus-fringe)
+
+(prove-lemma member-implies-numberp (rewrite)
+       (implies (and (member c (plus-fringe x)) (numberp (eval$ t c a)))
+                (numberp (eval$ t x a)))
+       ((enable plus-fringe numberp-eval$-plus) 
+        (induct (plus-fringe x))))
+
+(disable member-implies-numberp)
+
+(prove-lemma cadr-eval$-list (rewrite)
+       (and (equal (car (eval$ 'list x a)) (eval$ t (car x) a))
+            (equal (cdr (eval$ 'list x a))
+                   (if (listp x) (eval$ 'list (cdr x) a) 0))))
+
+(disable cadr-eval$-list)
+
+(prove-lemma eval$-quote (rewrite)
+       (equal (eval$ t (cons 'quote args) a) (car args)))
+
+(disable eval$-quote)
+
+(prove-lemma listp-eval$ (rewrite)
+       (equal (listp (eval$ 'list x a)) (listp x)))
+
+(disable listp-eval$)
+
+; ---------- CANCEL PLUS ----------
+
+; CANCEL-EQUAL-PLUS cancels identical terms in a term which is the equality
+; of two sums. For example,
+; 
+;   (EQUAL (PLUS A B C) (PLUS B D E)) => (EQUAL (PLUS A C) (PLUS D E))
+;
+
+(defn cancel-equal-plus (x)
+  (if (and (listp x) (equal (car x) 'equal))
+      (if (and (listp (cadr x)) (equal (caadr x) 'plus)
+               (listp (caddr x)) (equal (caaddr x) 'plus))
+          (list 'equal
+                 (plus-tree
+                  (bagdiff (plus-fringe (cadr x))
+                           (bagint (plus-fringe (cadr x))
+                                   (plus-fringe (caddr x)))))
+                 (plus-tree
+                  (bagdiff (plus-fringe (caddr x))
+                           (bagint (plus-fringe (cadr x))
+                                   (plus-fringe (caddr x))))))
+          (if (and (listp (cadr x)) (equal (caadr x) 'plus)
+                   (member (caddr x) (plus-fringe (cadr x))))
+              (list 'if (list 'numberp (caddr x))
+                     (list 'equal
+                            (plus-tree
+                             (delete (caddr x)
+                                     (plus-fringe (cadr x))))
+                            ''0)
+                     (list 'quote f))
+              (if (and (listp (caddr x)) (equal (caaddr x) 'plus)
+                       (member (cadr x) (plus-fringe (caddr x))))
+                  (list 'if (list 'numberp (cadr x))
+                         (list 'equal ''0
+                                (plus-tree
+                                 (delete (cadr x)
+                                         (plus-fringe (caddr x)))))
+                         (list 'quote f))
+                  x)))
+      x))
+
+(prove-lemma correctness-of-cancel-equal-plus ((meta equal))
+       (equal (eval$ t x a) (eval$ t (cancel-equal-plus x) a))
+       ((enable bridge-to-subbagp-implies-plus-tree-greatereqp
+                cancel-equal-plus
+                difference-cancellation
+                equal-difference-0 
+                eval$-quote
+                member-implies-numberp
+                member-implies-plus-tree-greatereqp
+                numberp-eval$-plus
+                plus-tree-bagdiff
+                plus-tree-delete
+                plus-tree-plus-fringe
+                subbagp-bagint1
+                subbagp-bagint2)
+        (disable eval$)))
+
+; ---------- CANCEL-DIFFERENCE-PLUS ----------
+
+; CANCEL-DIFFERENCE-PLUS cancels identical terms in a term which is the 
+; difference of two sums. For example,
+; 
+;  (DIFFERENCE (PLUS A B C) (PLUS B D E)) => (DIFFERENCE (PLUS A C) (PLUS D E))
+;
+; Using rewrite rules, we canonicalize terms involving  PLUS and DIFFERENCE 
+; to be the DIFFERENCE of two sums. Then CANCEL-DIFFERENCE-PLUS cancels out 
+; like terms.
+
+(defn cancel-difference-plus (x)
+  (if (and (listp x) (equal (car x) 'difference))
+      (if (and (listp (cadr x)) (equal (caadr x) 'plus)
+               (listp (caddr x)) (equal (caaddr x) 'plus))
+          (list 'difference
+                 (plus-tree
+                  (bagdiff (plus-fringe (cadr x))
+                           (bagint (plus-fringe (cadr x))
+                                   (plus-fringe (caddr x)))))
+                 (plus-tree
+                  (bagdiff (plus-fringe (caddr x))
+                           (bagint (plus-fringe (cadr x))
+                                   (plus-fringe (caddr x))))))
+          (if (and (listp (cadr x)) (equal (caadr x) 'plus)
+                   (member (caddr x) (plus-fringe (cadr x))))
+              (plus-tree (delete (caddr x) (plus-fringe (cadr x))))
+              (if (and (listp (caddr x)) (equal (caaddr x) 'plus)
+                       (member (cadr x) (plus-fringe (caddr x))))
+                  ''0
+                    x)))
+      x))
+
+(prove-lemma correctness-of-cancel-difference-plus ((meta difference))
+       (equal (eval$ t x a) (eval$ t (cancel-difference-plus x) a))
+       ((enable cancel-difference-plus
+                associativity-of-plus
+                bridge-to-subbagp-implies-plus-tree-greatereqp
+                commutativity-of-plus
+                diff-diff-diff
+                difference-lessp-arg1
+                difference-plus-plus-cancellation-hack
+                equal-difference-0 
+                eval$-quote
+                member-implies-plus-tree-greatereqp
+                numberp-eval$-plus
+                plus-tree-bagdiff
+                plus-tree-delete
+                plus-tree-plus-fringe
+                subbagp-bagint1
+                subbagp-bagint2)
+        (disable eval$)))
+
+; ---------- DIFFERENCE ----------
+
+; Here are the rules for difference terms which we want to try before
+; the meta lemmas. They help canonicalize terms to differences of sums.
+
+(prove-lemma difference-elim (elim)
+       (implies (and (numberp y)
+                     (not (lessp y x)))
+                (equal (plus x (difference y x)) y)))
+
+(prove-lemma difference-leq-arg1 (rewrite)
+       (implies (leq a b)
+                (equal (difference a b) 0)))
+
+(prove-lemma difference-add1-arg2 (rewrite)
+       (equal (difference a (add1 b))
+              (if (lessp b a)
+                  (sub1 (difference a b))
+                  0))
+       ((enable difference-leq-arg1)
+        (induct (difference a b))))
+
+(prove-lemma difference-sub1-arg2 (rewrite)
+       (equal (difference a (sub1 b))
+              (if (zerop b)
+                  (fix a)
+                  (if (lessp a b)
+                      0
+                      (add1 (difference a b)))))
+       ((enable diff-sub1-arg2)))
+
+(prove-lemma difference-difference-arg1 (rewrite)
+       (equal (difference (difference x y) z)
+              (difference x (plus y z)))
+       ((enable diff-diff-arg1)))
+
+(prove-lemma difference-difference-arg2 (rewrite)
+       (equal (difference a (difference b c))
+              (if (lessp b c)
+                  (fix a)
+                  (difference (plus a c) b)))
+       ((enable diff-diff-arg2)))
+
+(prove-lemma difference-x-x (rewrite) 
+       (equal (difference x x) 0))
+
+; ---------- LESSP ----------
+
+(prove-lemma lessp-difference-cancellation (rewrite)
+       (equal (lessp (difference a c)
+                     (difference b c))
+              (if (leq c a)
+                  (lessp a b)
+                  (lessp c b)))
+       ((enable equal-difference-0)))
+
+(disable lessp-difference-cancellation)
+
+; CANCEL-LESSP-PLUS cancels LESSP terms whose arguments are sums.
+; Examples:
+; (LESSP (PLUS A B C) (PLUS A C D)) -> (LESSP (FIX B) (FIX D))
+; (LESSP A (PLUS A B))  -> (NOT (ZEROP (FIX B)))
+; (LESSP (PLUS A B) A)  -> F
+
+(defn cancel-lessp-plus (x)
+  (if (and (listp x) (equal (car x) 'lessp))
+      (if (and (listp (cadr x)) (equal (caadr x) 'plus)
+               (listp (caddr x)) (equal (caaddr x) 'plus))
+          (list 'lessp
+                 (plus-tree
+                  (bagdiff (plus-fringe (cadr x))
+                           (bagint (plus-fringe (cadr x))
+                                   (plus-fringe (caddr x)))))
+                 (plus-tree
+                  (bagdiff (plus-fringe (caddr x))
+                           (bagint (plus-fringe (cadr x))
+                                   (plus-fringe (caddr x))))))
+          (if (and (listp (cadr x)) (equal (caadr x) 'plus)
+                   (member (caddr x) (plus-fringe (cadr x))))
+              (list 'quote f)
+              (if (and (listp (caddr x)) (equal (caaddr x) 'plus)
+                       (member (cadr x) (plus-fringe (caddr x))))
+                  (list 'not 
+                         (list 'zerop (plus-tree
+                                       (delete (cadr x)
+                                               (plus-fringe (caddr x))))))
+                  x)))
+      x))
+
+(prove-lemma correctness-of-cancel-lessp-plus ((meta lessp))
+       (equal (eval$ t x a) (eval$ t (cancel-lessp-plus x) a))
+       ((enable cancel-lessp-plus 
+                bridge-to-subbagp-implies-plus-tree-greatereqp
+                equal-difference-0 
+                eval$-quote
+                lessp-difference-cancellation
+                member-implies-plus-tree-greatereqp
+                numberp-eval$-plus
+                plus-tree-bagdiff
+                plus-tree-delete
+                plus-tree-plus-fringe
+                subbagp-bagint1
+                subbagp-bagint2)
+        (disable eval$)))
+
+
+
+; ---------- TIMES ----------
+
+(prove-lemma equal-times-0 (rewrite)
+       (equal (equal (times x y) 0)
+              (or (zerop x)
+                  (zerop y)))
+       ((enable equal-plus-0)
+        (induct (times x y))))
+
+(prove-lemma equal-times-1 (rewrite)
+       (equal (equal (times a b) 1)
+              (and (equal a 1)
+                   (equal b 1)))
+       ((enable equal-plus-0)
+        (induct (times a b))))
+
+;(prove-lemma equal-sub1-times-0 (rewrite)
+;       (equal (equal (sub1 (times a b)) 0)
+;             (or (zerop a)
+;                 (zerop b)
+;                 (and (equal a 1) (equal b 1)))))
+
+(prove-lemma equal-sub1-0 (rewrite)
+       (equal (equal (sub1 x) 0)
+              (or (zerop x)
+                  (equal x 1))))
+
+(prove-lemma times-zero (rewrite)
+       (implies (zerop y)
+                (equal (times x y) 0))
+       ((enable plus-zero-arg2 commutativity-of-plus)))
+
+(prove-lemma times-add1 (rewrite)
+       (equal (times x (add1 y))
+              (if (numberp y)
+                  (plus x (times x y)) 
+                  (fix x)))
+       ((enable plus-zero-arg2 commutativity-of-plus)))
+
+(prove-lemma commutativity-of-times (rewrite)
+       (equal (times y x) (times x y))
+       ((enable times-zero times-add1)))
+
+(prove-lemma times-distributes-over-plus-proof ()
+       (equal (times x (plus y z))
+              (plus (times x y) (times x z)))
+       ((enable commutativity2-of-plus
+                associativity-of-plus)))
+
+(prove-lemma times-distributes-over-plus (rewrite)
+       (and (equal (times x (plus y z))
+                   (plus (times x y) (times x z)))
+            (equal (times (plus x y) z)
+                   (plus (times x z) (times y z))))
+       ((use (times-distributes-over-plus-proof (x x) (y y) (z z))
+             (times-distributes-over-plus-proof (x z) (y x) (z y)))
+        (enable commutativity-of-times)))
+
+(prove-lemma commutativity2-of-times (rewrite)
+       (equal (times x y z)
+              (times y x z))
+       ((enable commutativity-of-times
+                times-distributes-over-plus)))
+
+(prove-lemma associativity-of-times (rewrite)
+       (equal (times (times x y) z) 
+              (times x y z))
+       ((enable commutativity-of-times 
+                commutativity2-of-times)))
+
+(prove-lemma times-distributes-over-difference-proof ()
+       (equal (times (difference a b) c)
+              (difference (times a c) (times b c)))
+       ((enable commutativity-of-times)))
+
+
+(prove-lemma times-distributes-over-difference (rewrite)
+       (and (equal (times (difference a b) c)
+                   (difference (times a c) (times b c)))
+            (equal (times a (difference b c))
+                   (difference (times a b) (times a c))))
+       ((use (times-distributes-over-difference-proof (a a) (b b) (c c))
+             (times-distributes-over-difference-proof (a b) (b c) (c a)))
+        (enable commutativity-of-times)))
+
+(prove-lemma times-quotient-proof ()
+       (implies (and (not (zerop x))
+                     (equal (remainder y x) 0))
+                (equal (times (quotient y x) x) 
+                       (fix y)))
+       ((enable times-zero times-add1)
+        (induct (remainder y x))))
+
+(prove-lemma times-quotient (rewrite)
+       (implies (and (not (zerop y))
+                     (equal (remainder x y) 0))
+                (and (equal (times (quotient x y) y)
+                            (fix x))
+                     (equal (times y (quotient x y))
+                            (fix x))))
+       ((use (times-quotient-proof (x y) (y x)))
+        (enable commutativity-of-times)))
+
+(prove-lemma times-1-arg1 (rewrite)
+       (equal (times 1 x) (fix x))
+       ((enable times-zero)))
+
+(prove-lemma lessp-times1-proof ()
+       (implies (and (lessp a b)
+                     (not (zerop c)))
+                (equal (lessp a (times b c))
+                       t)))
+
+(prove-lemma lessp-times1 (rewrite)
+       (implies (and (lessp a b)
+                     (not (zerop c)))
+                (and (equal (lessp a (times b c))
+                            t)
+                     (equal (lessp a (times c b))
+                            t)))
+       ((enable commutativity-of-times)
+        (use (lessp-times1-proof (a a) (b b) (c c)))
+        (do-not-induct t)))
+
+(prove-lemma lessp-times2-proof ()
+       (implies (and (leq a b)
+                     (not (zerop c)))
+                (equal (lessp (times b c) a)
+                       f)))
+
+(prove-lemma lessp-times2 (rewrite)
+       (implies (and (leq a b)
+                     (not (zerop c)))
+                (and (equal (lessp (times b c) a)
+                            f)
+                     (equal (lessp (times c b) a)
+                            f)))
+       ((enable commutativity-of-times)
+        (use (lessp-times2-proof (a a) (b b) (c c)))
+        (do-not-induct t)))
+
+(prove-lemma lessp-times3-proof1 ()
+       (implies (and (not (zerop a))
+                     (lessp 1 b))
+                (lessp a (times a b)))
+       ((enable times-zero)))
+
+(prove-lemma lessp-times3-proof2 ()
+       (implies (lessp a (times a b))
+                (and (not (zerop a))
+                     (lessp 1 b))))
+
+
+(prove-lemma lessp-times3 (rewrite)
+       (and (equal (lessp a (times a b))
+                   (and (not (zerop a))
+                        (lessp 1 b)))
+            (equal (lessp a (times b a))
+                   (and (not (zerop a))
+                        (lessp 1 b))))
+       ((enable commutativity-of-times)
+        (use (lessp-times3-proof1 (a a) (b b))
+             (lessp-times3-proof2 (a a) (b b)))
+        (do-not-induct t)))
+
+
+(prove-lemma lessp-times-cancellation-proof ()
+       (equal (lessp (times x z) (times y z))
+              (and (not (zerop z))
+                   (lessp x y)))
+       ((enable commutativity-of-times
+                correctness-of-cancel-lessp-plus
+                times-zero)))
+
+
+(prove-lemma lessp-times-cancellation1 (rewrite)
+       (and (equal (lessp (times x z) (times y z))
+                   (and (not (zerop z))
+                        (lessp x y)))
+            (equal (lessp (times z x) (times y z))
+                   (and (not (zerop z))
+                        (lessp x y)))
+            (equal (lessp (times x z) (times z y))
+                   (and (not (zerop z))
+                        (lessp x y)))
+            (equal (lessp (times z x) (times z y))
+                   (and (not (zerop z))
+                        (lessp x y))))
+       ((use (lessp-times-cancellation-proof (x x) (y y) (z z)))
+        (enable commutativity-of-times)
+        (do-not-induct t)))
+
+(disable lessp-times-cancellation1)
+
+(prove-lemma lessp-plus-times-proof ()
+       (implies (lessp x a)
+                (equal (lessp (plus x (times a b))
+                              (times a c))
+                       (lessp b c)))
+       ((enable commutativity-of-times
+                lessp-times-cancellation1
+                lessp-times1 
+                lessp-times2 
+                lessp-times3
+                times-add1
+                times-zero)
+        (induct (lessp b c))))
+
+(prove-lemma lessp-plus-times1 (rewrite)
+       (and (equal (lessp (plus a (times b c)) b)
+                   (and (lessp a b) (zerop c)))
+            (equal (lessp (plus a (times c b)) b)
+                   (and (lessp a b) (zerop c)))
+            (equal (lessp (plus (times c b) a) b)
+                   (and (lessp a b) (zerop c)))
+            (equal (lessp (plus (times b c) a) b)
+                   (and (lessp a b) (zerop c))))
+       ((use (lessp-plus-times-proof (a b) (b c) (c 1) (x a)))
+        (enable commutativity-of-plus
+                commutativity-of-times
+                times-1-arg1)
+        (do-not-induct t)))       
+
+(prove-lemma lessp-plus-times2 (rewrite)
+       (implies (and (not (zerop a))
+                     (lessp x a))
+                (and (equal (lessp (plus x (times a b))
+                                   (times a c))
+                            (lessp b c))
+                     (equal (lessp (plus x (times b a))
+                                   (times a c))
+                            (lessp b c))
+                     (equal (lessp (plus x (times a b))
+                                   (times c a))
+                            (lessp b c))
+                     (equal (lessp (plus x (times b a))
+                                   (times c a))
+                            (lessp b c))
+                     (equal (lessp (plus (times a b) x)
+                                   (times a c))
+                            (lessp b c))
+                     (equal (lessp (plus (times b a) x)
+                                   (times a c))
+                            (lessp b c))
+                     (equal (lessp (plus (times a b) x)
+                                   (times c a))
+                            (lessp b c))
+                     (equal (lessp (plus (times b a) x)
+                                   (times c a))
+                            (lessp b c))))
+       ((enable commutativity-of-plus
+                commutativity-of-times)
+        (use (lessp-plus-times-proof (a a) (b b) (c c) (x x)))
+        (do-not-induct t)))
+
+(prove-lemma lessp-1-times (rewrite)
+       (equal (lessp 1 (times a b))
+              (not (or (zerop a)
+                       (zerop b)
+                       (and (equal a 1) (equal b 1))))))
+
+
+
+
+;;; meta lemmas to cancel lessp-times and equal-times expressions
+;; examples
+;; (lessp (times b (times d a)) (times b (times e (times a f)))) -> 
+;;                                            (and (and (not (zerop a)) 
+;;                                                      (not (zerop b)))
+;;                                                 (lessp (fix d) (times e f)))
+;;
+;; (equal (times b (times c d)) (times b d))    -> 
+;;                                           (or (or (zerop b) (zerop d))
+;;                                               (equal (fix c) 1))
+
+
+(defn times-tree (x)
+  (if (nlistp x) 
+      ''1
+      (if (nlistp (cdr x))
+          (list 'fix (car x))
+          (if (nlistp (cddr x))
+              (list 'times (car x) (cadr x))
+              (list 'times (car x) (times-tree (cdr x)))))))
+                    
+(defn times-fringe (x)
+  (if (and (listp x)
+           (equal (car x) 'times))
+      (append (times-fringe (cadr x)) (times-fringe (caddr x)))
+      (cons x nil)))
+
+(defn or-zerop-tree (x)
+  (if (nlistp x) 
+      '(false)
+      (if (nlistp (cdr x))
+          (list 'zerop (car x))
+          (if (nlistp (cddr x)) 
+              (list 'or (list 'zerop (car x)) (list 'zerop (cadr x)))
+              (list 'or (list 'zerop (car x)) (or-zerop-tree (cdr x)))))))
+
+(defn and-not-zerop-tree (x)
+  (if (nlistp x)
+      '(true)
+      (if (nlistp (cdr x))
+          (list 'not (list 'zerop (car x)))
+          (list 'and (list 'not (list 'zerop (car x)))
+                 (and-not-zerop-tree (cdr x))))))
+
+(prove-lemma numberp-eval$-times (rewrite)
+       (implies (equal (car x) 'times)
+                (numberp (eval$ t x a))))
+
+(disable numberp-eval$-times)
+
+
+(prove-lemma eval$-times (rewrite)
+       (implies (equal (car x) 'times)
+                (equal (eval$ t x a)
+                       (times (eval$ t (cadr x) a) (eval$ t (caddr x) a)))))
+
+(disable eval$-times)
+
+
+(prove-lemma eval$-or (rewrite)
+       (implies (equal (car x) 'or)
+                (equal (eval$ t x a) 
+                       (or (eval$ t (cadr x) a) (eval$ t (caddr x) a)))))
+
+(disable eval$-or)
+
+(prove-lemma eval$-equal (rewrite)
+       (implies (equal (car x) 'equal)
+                (equal (eval$ t x a) 
+                       (equal (eval$ t (cadr x) a) (eval$ t (caddr x) a)))))
+
+(disable eval$-equal)
+
+(prove-lemma eval$-lessp (rewrite)
+       (implies (equal (car x) 'lessp)
+                (equal (eval$ t x a)
+                       (lessp (eval$ t (cadr x) a) (eval$ t (caddr x) a)))))
+
+(disable eval$-lessp)
+
+
+(prove-lemma eval$-quotient (rewrite)
+       (implies (equal (car x) 'quotient)
+                (equal (eval$ t x a)
+                       (quotient (eval$ t (cadr x) a)
+                                 (eval$ t (caddr x) a)))))
+
+(disable eval$-quotient)
+
+(prove-lemma eval$-if (rewrite)
+       (implies (equal (car x) 'if)
+                (equal (eval$ t x a)
+                       (if (eval$ t (cadr x) a)
+                           (eval$ t (caddr x) a)
+                           (eval$ t (cadddr x) a)))))
+
+(disable eval$-if)
+
+(prove-lemma numberp-eval$-times-tree (rewrite)
+       (numberp (eval$ t (times-tree x) a))
+       ((enable times-tree)))
+
+(disable numberp-eval$-times-tree)
+
+
+(prove-lemma lessp-times-arg1 ()
+       (implies (not (zerop a))
+                (equal (not (lessp (times a x) (times a y)))
+                       (not (lessp x y))))
+       ((induct (plus a x))
+        (enable times correctness-of-cancel-lessp-plus)))
+
+(prove-lemma infer-equality-from-not-lessp ()
+       (implies (and (numberp a)
+                     (numberp b))
+                (equal (and (not (lessp a b)) (not (lessp b a))) 
+                       (equal a b))))
+
+(prove-lemma equal-times-arg1 (rewrite)
+       (implies (not (zerop a))
+                (equal (equal (times a x) (times a y))
+                       (equal (fix x) (fix y))))
+       ((use (lessp-times-arg1 (a a) (x x) (y y))
+             (lessp-times-arg1 (a a) (x y) (y x))
+             (infer-equality-from-not-lessp (a (times a x)) (b (times a y))))
+        (do-not-induct t)))
+
+(disable equal-times-arg1)
+
+(prove-lemma equal-times-bridge (rewrite)
+       (equal (equal (times a b)
+                     (times c (times a d)))
+              (or (zerop a)
+                  (equal (fix b) (times c d))))
+       ((enable commutativity-of-times
+                commutativity2-of-times 
+                equal-times-0
+                equal-times-arg1
+                times-zero)))
+
+(disable equal-times-bridge)
+
+(prove-lemma eval$-times-member (rewrite)
+       (implies (member e x)
+                (equal (eval$ t (times-tree x) a)
+                       (times (eval$ t e a)
+                              (eval$ t
+                                     (times-tree (delete e x))
+                                     a))))
+       ((enable delete times-tree
+                COMMUTATIVITY-OF-TIMES
+                DELETE-NON-MEMBER
+                EQUAL-TIMES-0
+                EQUAL-TIMES-BRIDGE 
+                LISTP-DELETE
+                MEMBER-NON-LIST
+                TIMES-1-ARG1
+                TIMES-ZERO)))
+
+(disable eval$-times-member)
+
+(prove-lemma zerop-makes-times-tree-zero (rewrite)
+       (implies (and (not (eval$ t (and-not-zerop-tree x) a))
+                     (subbagp x y))
+                (equal (eval$ t (times-tree y) a) 0))
+       ((enable AND-NOT-ZEROP-TREE
+                COMMUTATIVITY-OF-TIMES
+                EVAL$-TIMES-MEMBER
+                SUBBAGP
+                TIMES-TREE
+                TIMES-ZERO)))
+
+(disable zerop-makes-times-tree-zero)
+
+(prove-lemma or-zerop-tree-is-not-zerop-tree (rewrite)
+       (equal (eval$ t (or-zerop-tree x) a)
+              (not (eval$ t (and-not-zerop-tree x) a)))
+       ((enable AND-NOT-ZEROP-TREE OR-ZEROP-TREE)))
+
+(disable or-zerop-tree-is-not-zerop-tree)
+
+(prove-lemma zerop-makes-times-tree-zero2 (rewrite)
+       (implies (and (eval$ t (or-zerop-tree x) a)
+                     (subbagp x y))
+                (equal (eval$ t (times-tree y) a) 0))
+       ((use (zerop-makes-times-tree-zero)
+             (or-zerop-tree-is-not-zerop-tree))
+        (enable OR-ZEROP-TREE 
+                SUBBAGP
+                TIMES-TREE)))
+
+(disable zerop-makes-times-tree-zero2)
+
+(prove-lemma times-tree-append (rewrite)
+       (equal (eval$ t (times-tree (append x y)) a)
+              (times (eval$ t (times-tree x) a) (eval$ t (times-tree y) a)))
+       ((enable append
+                ASSOCIATIVITY-OF-TIMES
+                COMMUTATIVITY-OF-TIMES
+                COMMUTATIVITY2-OF-TIMES 
+                EQUAL-TIMES-0
+                EQUAL-TIMES-ARG1
+                EQUAL-TIMES-BRIDGE
+                NUMBERP-EVAL$-TIMES-TREE 
+                TIMES-1-ARG1 
+                TIMES-TREE 
+                TIMES-ZERO)))
+
+(disable times-tree-append)
+
+(prove-lemma times-tree-of-times-fringe (rewrite)
+       (equal (eval$ t (times-tree (times-fringe x)) a)
+              (fix (eval$ t x a)))
+       ((enable COMMUTATIVITY-OF-TIMES
+                EVAL$-TIMES
+                TIMES-FRINGE
+                TIMES-TREE
+                TIMES-TREE-APPEND
+                TIMES-ZERO)
+        (induct (times-fringe x))))
+
+(disable times-tree-of-times-fringe)
+
+(defn cancel-lessp-times (x)
+  (if (and (equal (car x) 'lessp)
+           (equal (caadr x) 'times)
+           (equal (caaddr x) 'times))
+      (if (listp (bagint (times-fringe (cadr x))
+                         (times-fringe (caddr x))))
+          (list 'and
+                (and-not-zerop-tree (bagint (times-fringe (cadr x))
+                                            (times-fringe (caddr x))))
+                (list 'lessp 
+                      (times-tree (bagdiff (times-fringe (cadr x)) 
+                                           (bagint (times-fringe (cadr x))
+                                                   (times-fringe (caddr x)))))
+                      (times-tree (bagdiff (times-fringe (caddr x)) 
+                                           (bagint (times-fringe (cadr x))
+                                                   (times-fringe (caddr x)))))))
+        x)
+    x))
+
+
+
+(prove-lemma eval$-lessp-times-tree-bagdiff (rewrite)
+       (implies (and (subbagp x y)
+                     (subbagp x z)
+                     (eval$ t (and-not-zerop-tree x) a))
+                (equal (lessp (eval$ t (times-tree (bagdiff y x)) a)
+                              (eval$ t (times-tree (bagdiff z x)) a))
+                       (lessp (eval$ t (times-tree y) a)
+                              (eval$ t (times-tree z) a))))
+       ((enable AND-NOT-ZEROP-TREE
+                BAGDIFF
+                EVAL$-TIMES-MEMBER
+                LESSP-TIMES-CANCELLATION1
+                SUBBAGP
+                SUBBAGP-CDR1
+                SUBBAGP-CDR2
+                TIMES-TREE 
+                ZEROP-MAKES-TIMES-TREE-ZERO)))
+
+(disable eval$-lessp-times-tree-bagdiff)
+
+(prove-lemma zerop-makes-lessp-false-bridge (rewrite)
+       (implies (and (equal (car x) 'times)
+                     (equal (car y) 'times)
+                     (not (eval$ t (and-not-zerop-tree 
+                                    (bagint (times-fringe x)
+                                            (times-fringe y)))
+                                 a)))
+                (equal (lessp (times (eval$ t (cadr x) a)
+                                     (eval$ t (caddr x) a))
+                              (times (eval$ t (cadr y) a)
+                                     (eval$ t (caddr y) a)))
+                       f))
+       ((enable AND-NOT-ZEROP-TREE
+                BAGINT
+                COMMUTATIVITY-OF-TIMES
+                DELETE
+                EQUAL-TIMES-0
+                EVAL$-TIMES
+                ;MEMBER-CONS 
+                 ;MEMBER-NON-LIST
+                SUBBAGP-BAGINT1
+                SUBBAGP-BAGINT2 
+                TIMES-FRINGE
+                TIMES-TREE
+                TIMES-TREE-APPEND
+                TIMES-TREE-OF-TIMES-FRINGE
+                TIMES-ZERO)
+        (use (zerop-makes-times-tree-zero (x (bagint (times-fringe x)
+                                                     (times-fringe y)))
+                                          (y (times-fringe x)))
+             (zerop-makes-times-tree-zero (x (bagint (times-fringe x)
+                                                     (times-fringe y)))
+                                          (y (times-fringe y))))))
+
+(disable zerop-makes-lessp-false-bridge)
+
+
+(prove-lemma correctness-of-cancel-lessp-times ((meta lessp))
+       (equal (eval$ t x a) 
+              (eval$ t (cancel-lessp-times x) a))
+       ((enable CANCEL-LESSP-TIMES
+                EVAL$-LESSP-TIMES-TREE-BAGDIFF
+                EVAL$-LESSP
+                EVAL$-TIMES
+                SUBBAGP-BAGINT1
+                SUBBAGP-BAGINT2
+                TIMES-TREE-OF-TIMES-FRINGE
+                ZEROP-MAKES-LESSP-FALSE-BRIDGE)))
+
+
+
+(defn cancel-equal-times (x)
+  (if (and (equal (car x) 'equal)
+           (equal (caadr x) 'times)
+           (equal (caaddr x) 'times))
+      (if (listp (bagint (times-fringe (cadr x)) (times-fringe (caddr x))))
+          (list 'or 
+                (or-zerop-tree (bagint (times-fringe (cadr x)) (times-fringe (caddr x))))
+                (list 'equal
+                      (times-tree (bagdiff (times-fringe (cadr x)) 
+                                           (bagint (times-fringe (cadr x)) 
+                                                   (times-fringe (caddr x)))))
+                          (times-tree (bagdiff (times-fringe (caddr x)) 
+                                               (bagint (times-fringe (cadr x)) 
+                                                       (times-fringe (caddr x)))))))
+            x)
+      x))
+
+(prove-lemma zerop-makes-equal-true-bridge (rewrite)
+       (implies (and (equal (car x) 'times)
+                     (equal (car y) 'times)
+                     (eval$ t (or-zerop-tree (bagint (times-fringe x) 
+                                                     (times-fringe y))) 
+                            a))
+                (equal
+                 (equal (times (eval$ t (cadr x) a)
+                               (eval$ t (caddr x) a))
+                        (times (eval$ t (cadr y) a)
+                               (eval$ t (caddr y) a)))
+                 t))
+       ((enable BAGINT 
+                COMMUTATIVITY-OF-TIMES
+                DELETE 
+                EQUAL-TIMES-0 
+                EVAL$-TIMES
+                OR-ZEROP-TREE
+                SUBBAGP-BAGINT1 
+                SUBBAGP-BAGINT2
+                TIMES-FRINGE 
+                TIMES-TREE
+                TIMES-TREE-APPEND 
+                TIMES-TREE-OF-TIMES-FRINGE 
+                TIMES-ZERO)
+        (use (zerop-makes-times-tree-zero2 (x (bagint (times-fringe x)
+                                                      (times-fringe y)))
+                                           (y (times-fringe x)))
+             (zerop-makes-times-tree-zero2 (x (bagint (times-fringe x)
+                                                      (times-fringe y)))
+                                           (y (times-fringe y))))))
+
+(disable zerop-makes-equal-true-bridge)
+                       
+(prove-lemma eval$-equal-times-tree-bagdiff (rewrite)
+       (implies (and (subbagp x y)
+                     (subbagp x z)
+                     (not (eval$ t (or-zerop-tree x) a)))
+                (equal
+                 (equal (eval$ t (times-tree (bagdiff y x)) a)
+                        (eval$ t (times-tree (bagdiff z x)) a))
+                 (equal (eval$ t (times-tree y) a)
+                        (eval$ t (times-tree z) a))))
+       ((enable AND-NOT-ZEROP-TREE
+                BAGDIFF
+                EQUAL-TIMES-ARG1 
+                EVAL$-TIMES-MEMBER
+                NUMBERP-EVAL$-TIMES-TREE
+                OR-ZEROP-TREE
+                OR-ZEROP-TREE-IS-NOT-ZEROP-TREE
+                SUBBAGP 
+                SUBBAGP-CDR1
+                SUBBAGP-CDR2
+                TIMES-TREE 
+                ZEROP-MAKES-TIMES-TREE-ZERO)))
+
+(disable eval$-equal-times-tree-bagdiff)
+
+(prove-lemma cancel-equal-times-preserves-inequality (rewrite)
+       (implies (and (subbagp z x)
+                     (subbagp z y)
+                     (not (equal
+                           (eval$ t (times-tree x) a)
+                           (eval$ t (times-tree y) a))))
+                (not (equal
+                      (eval$ t (times-tree (bagdiff x z)) a)
+                      (eval$ t (times-tree (bagdiff y z)) a))))
+       ((enable BAGDIFF
+                EVAL$-TIMES-MEMBER
+                SUBBAGP
+                SUBBAGP-CDR2
+                TIMES-TREE)))
+
+(disable cancel-equal-times-preserves-inequality)
+
+(prove-lemma cancel-equal-times-preserves-inequality-bridge (rewrite)
+       (implies (and (equal (car x) 'times)
+                     (equal (car y) 'times)
+                     (not (equal 
+                           (times (eval$ t (cadr x) a) (eval$ t (caddr x) a))
+                           (times (eval$ t (cadr y) a) (eval$ t (caddr y) a)))))
+                (not (equal 
+                      (eval$ t (times-tree (bagdiff (times-fringe x)  
+                                                    (bagint (times-fringe x) 
+                                                            (times-fringe y))))
+                             a)
+                      (eval$ t (times-tree (bagdiff (times-fringe y)  
+                                                    (bagint (times-fringe x) 
+                                                            (times-fringe y))))
+                             a))))
+       ((enable BAGDIFF BAGINT
+                COMMUTATIVITY-OF-TIMES 
+                SUBBAGP-BAGINT1
+                SUBBAGP-BAGINT2 
+                TIMES-FRINGE
+                TIMES-TREE
+                TIMES-TREE-APPEND
+                TIMES-TREE-OF-TIMES-FRINGE 
+                TIMES-ZERO)
+        (use (cancel-equal-times-preserves-inequality
+              (z (bagint (times-fringe x) (times-fringe y)))
+              (x (times-fringe x))
+              (y (times-fringe y))))))
+
+(disable cancel-equal-times-preserves-inequality-bridge)
+                    
+(prove-lemma correctness-of-cancel-equal-times ((meta equal))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-equal-times x) a))
+       ((enable CANCEL-EQUAL-TIMES
+                CANCEL-EQUAL-TIMES-PRESERVES-INEQUALITY-BRIDGE
+                EVAL$-EQUAL
+                EVAL$-EQUAL-TIMES-TREE-BAGDIFF 
+                EVAL$-TIMES
+                SUBBAGP-BAGINT1 
+                SUBBAGP-BAGINT2 
+                TIMES-TREE-OF-TIMES-FRINGE
+                ZEROP-MAKES-EQUAL-TRUE-BRIDGE)))
+
+
+
+
+
+
+; ---------- REMAINDER ----------
+
+(prove-lemma lessp-remainder (rewrite generalize)
+       (equal (lessp (remainder x y) y) 
+              (not (zerop y))))
+
+(prove-lemma remainder-noop (rewrite)
+       (implies (lessp a b)
+                (equal (remainder a b)
+                       (fix a))))
+
+(prove-lemma remainder-of-non-number (rewrite)
+       (implies (not (numberp a))
+                (equal (remainder a n)
+                       (remainder 0 n))))
+
+(prove-lemma remainder-zero (rewrite)
+       (implies (zerop x)
+                (equal (remainder y x) 
+                       (fix y))))
+
+(prove-lemma plus-remainder-times-quotient (rewrite)
+       (equal (plus (remainder x y) (times y (quotient x y)))
+              (fix x))
+       ((enable commutativity2-of-plus
+                commutativity-of-plus
+                times-zero
+                times-add1
+                commutativity-of-times)))
+
+(DISABLE PLUS-REMAINDER-TIMES-QUOTIENT)
+
+(prove-lemma remainder-quotient-elim (elim)
+       (implies (and (not (zerop y))
+                     (numberp x))
+                (equal (plus (remainder x y) (times y (quotient x y)))
+                       x))
+       ((enable plus-remainder-times-quotient)))
+
+; (prove-lemma remainder-sub1 (rewrite)
+;        (implies (and (not (zerop a))
+;                    (not (zerop b)))
+;               (equal (remainder (sub1 a) b)
+;                      (if (equal (remainder a b) 0)
+;                          (sub1 b)
+;                          (sub1 (remainder a b)))))
+;        ((enable lessp-remainder
+;               remainder-noop
+;               remainder-quotient-elim)
+;       (enable-theory addition)
+;       (induct (remainder a b))))
+
+(prove-lemma remainder-add1 (rewrite)
+       (implies (equal (remainder a b) 0)
+                (equal (remainder (add1 a) b)
+                       (remainder 1 b)))
+       ((enable remainder-noop)
+        (induct (remainder a b))))
+
+(prove-lemma remainder-plus-proof ()
+       (implies (equal (remainder b c) 0)
+                (equal (remainder (plus a b) c)
+                       (remainder a c)))
+       ((enable remainder-noop)
+        (induct (remainder b c))))
+
+(prove-lemma remainder-plus (rewrite)
+       (implies (equal (remainder a c) 0)
+                (and (equal (remainder (plus a b) c)
+                            (remainder b c))
+                     (equal (remainder (plus b a) c)
+                            (remainder b c))
+                     (equal (remainder (plus x y a) c)
+                            (remainder (plus x y) c))))
+       ((use (remainder-plus-proof (a b) (b a) (c c))
+             (remainder-plus-proof (a a) (b b) (c c))
+             (remainder-plus-proof (b a) (a (plus x y)) (c c)))
+        (enable commutativity-of-plus commutativity2-of-plus associativity-of-plus)))
+
+(prove-lemma equal-remainder-plus-0-proof ()
+       (implies (equal (remainder a c) 0)
+                (equal (equal (remainder (plus a b) c) 0)
+                       (equal (remainder b c) 0)))
+       ((enable remainder-plus)))
+
+(prove-lemma equal-remainder-plus-0 (rewrite)
+       (implies (equal (remainder a c) 0)
+                (and (equal (equal (remainder (plus a b) c) 0)
+                            (equal (remainder b c) 0))
+                     (equal (equal (remainder (plus b a) c) 0)
+                            (equal (remainder b c) 0))
+                     (equal (equal (remainder (plus x y a) c) 0)
+                            (equal (remainder (plus x y) c) 0))))
+       ((use (equal-remainder-plus-0-proof (a a) (b b) (c c))
+             (equal-remainder-plus-0-proof (a b) (b a) (c c))
+             (equal-remainder-plus-0-proof (a a) (b (plus x y)) (c c)))
+        (enable associativity-of-plus commutativity-of-plus commutativity2-of-plus)
+        (do-not-induct t)))
+
+(prove-lemma equal-remainder-plus-remainder-proof ()
+       (implies (lessp a c)
+                (equal (equal (remainder (plus a b) c)
+                              (remainder b c))
+                       (zerop a)))
+       ((enable remainder-noop)
+        (induct (remainder b c))))
+
+(prove-lemma equal-remainder-plus-remainder (rewrite)
+       (implies (lessp a c)
+                (and (equal (equal (remainder (plus a b) c)
+                                   (remainder b c))
+                            (zerop a))
+                     (equal (equal (remainder (plus b a) c)
+                                   (remainder b c))
+                            (zerop a))))
+       ((use (equal-remainder-plus-remainder-proof (a a) (b b) (c c)))
+        (enable commutativity-of-plus)
+        (do-not-induct t)))
+
+(DISABLE EQUAL-REMAINDER-PLUS-REMAINDER)
+
+(prove-lemma remainder-times1-proof ()
+       (implies (equal (remainder b c) 0)
+                (equal (remainder (times a b) c) 0))
+       ((enable remainder-plus
+                remainder-noop
+                remainder-zero)))
+
+(prove-lemma remainder-times1 (rewrite)
+       (implies (equal (remainder b c) 0)
+                (and (equal (remainder (times a b) c) 0)
+                     (equal (remainder (times b a) c) 0)))
+       ((use (remainder-times1-proof (a a) (b b) (c c))
+             (remainder-times1-proof (a b) (b a) (c c)))
+        (enable commutativity-of-times)))
+
+(prove-lemma remainder-times1-instance-proof ()
+       (equal (remainder (times x y) y) 0)
+       ((enable commutativity-of-times 
+                difference-plus-cancellation
+                remainder-zero)
+        (induct (times x y))))
+
+(prove-lemma remainder-times1-instance (rewrite)
+       (and (equal (remainder (times x y) y) 0)
+            (equal (remainder (times x y) x) 0))
+       ((use (remainder-times1-instance-proof (x x) (y y))
+             (remainder-times1-instance-proof (x y) (y x)))
+        (enable commutativity-of-times)))
+
+(prove-lemma remainder-times-times-proof ()
+       (equal (remainder (times x y) (times x z))
+              (times x (remainder y z)))
+       ((enable remainder-zero)
+        (induct (remainder y z))))
+
+(prove-lemma remainder-times-times (rewrite)
+       (and (equal (remainder (times x y) (times x z))
+                   (times x (remainder y z)))
+            (equal (remainder (times x z) (times y z))
+                   (times (remainder x y) z)))
+       ((use (remainder-times-times-proof (x x) (y y) (z z))
+             (remainder-times-times-proof (x z) (y x) (z y)))
+        (enable commutativity-of-times)))
+
+(DISABLE REMAINDER-TIMES-TIMES)
+
+(prove-lemma remainder-times2-proof ()
+       (implies (equal (remainder a z) 0)
+                (equal (remainder a (times z y))
+                       (times z (remainder (quotient a z) y))))
+       ((enable lessp-remainder
+                remainder-noop
+                remainder-plus
+                remainder-quotient-elim
+                remainder-times-times
+                remainder-times1-instance
+                remainder-zero)
+        (do-not-induct t)))
+
+(prove-lemma remainder-times2 (rewrite)
+       (implies (equal (remainder a z) 0)
+                (and (equal (remainder a (times y z))
+                            (times z (remainder (quotient a z) y)))
+                     (equal (remainder a (times z y))
+                            (times z (remainder (quotient a z) y)))))
+       ((use (remainder-times2-proof (a a) (y y) (z z)))
+        (enable commutativity-of-times)))
+
+(prove-lemma remainder-times2-instance (rewrite)
+       (and (equal (remainder (times x y) (times x z))
+                   (times x (remainder y z)))
+            (equal (remainder (times x z) (times y z))
+                   (times (remainder x y) z)))
+       ((enable remainder-times-times)))
+
+(prove-lemma remainder-difference1 (rewrite)
+       (implies (equal (remainder a c)
+                       (remainder b c))
+                (equal (remainder (difference a b) c)
+                       (difference (remainder a c) 
+                                   (remainder b c))))
+       ((enable lessp-remainder
+                equal-remainder-plus-remainder
+                remainder-plus
+                remainder-quotient-elim
+                remainder-times1-instance)
+        (do-not-induct t)))
+
+(defn double-remainder-induction (a b c)
+  (if (zerop c)
+      0
+      (if (lessp a c)
+          0
+          (if (lessp b c)
+              0
+              (double-remainder-induction (difference a c) (difference b c) c)))))
+
+(prove-lemma remainder-difference2 (rewrite)
+       (implies (and (equal (remainder a c) 0)
+                     (not  (equal (remainder b c) 0)))
+                (equal (remainder (difference a b) c)
+                       (if (lessp b a)
+                           (difference c (remainder b c))
+                           0)))
+       ((enable equal-remainder-plus-0
+                lessp-remainder
+                remainder-noop
+                remainder-of-non-number
+                remainder-quotient-elim
+                remainder-times1-instance
+                remainder-zero)
+        (disable times-distributes-over-plus)
+        (induct (double-remainder-induction a b c))))
+
+(prove-lemma remainder-difference3 (rewrite)
+       (implies (and (equal (remainder b c) 0)
+                     (not (equal (remainder a c) 0)))
+                (equal (remainder (difference a b) c)
+                       (if (lessp b a)
+                           (remainder a c)
+                           0)))
+       ((enable remainder-noop
+                remainder-of-non-number
+                remainder-zero)
+        (induct (double-remainder-induction a b c))))
+
+(DISABLE REMAINDER-DIFFERENCE3)
+
+(prove-lemma equal-remainder-difference-0 (rewrite)
+       (equal (equal (remainder (difference a b) c) 0)
+              (if (leq b a)
+                  (equal (remainder a c) (remainder b c))
+                  t))
+       ((enable lessp-remainder
+                remainder-difference1
+                remainder-of-non-number
+                remainder-plus
+                remainder-quotient-elim
+                remainder-times1-instance
+                remainder-zero)
+        (do-not-induct t)))
+
+(DISABLE EQUAL-REMAINDER-DIFFERENCE-0)
+
+(prove-lemma lessp-plus-fact (rewrite)
+       (implies (and (equal (remainder b x) 0)
+                     (equal (remainder c x) 0)
+                     (lessp b c)
+                     (lessp a x))
+                (equal (lessp (plus a b) c) t))
+       ((induct (double-remainder-induction b c x))))
+
+(DISABLE LESSP-PLUS-FACT)
+
+(prove-lemma remainder-plus-fact ()
+       (implies (and (equal (remainder b x) 0)
+                     (equal (remainder c x) 0)
+                     (lessp a x))
+                (equal (remainder (plus a b) c)
+                       (plus a (remainder b c))))
+       ((enable lessp-plus-fact remainder-noop remainder-difference1)
+        (induct (remainder b c))))
+
+(prove-lemma remainder-plus-times-times-proof ()
+       (implies (lessp a b)
+                (equal (remainder (plus a (times b c)) (times b d))
+                       (plus a (remainder (times b c) (times b d)))))
+       ((use (remainder-plus-fact (a a) (x b) (b (times b c)) (c (times b d))))
+        (enable remainder-times1-instance remainder-times2-instance)
+        (do-not-induct t)))
+
+(prove-lemma remainder-plus-times-times (rewrite)
+       (implies (lessp a b)
+                (and (equal (remainder (plus a (times b c)) (times b d))
+                            (plus a (remainder (times b c) (times b d))))
+                     (equal (remainder (plus a (times c b)) (times d b))
+                            (plus a (remainder (times c b) (times d b))))))
+       ((use (remainder-plus-times-times-proof (a a) (b b) (c c) (d d)))
+        (enable commutativity-of-times)
+        (do-not-induct t)))
+
+; REMAINDER-PLUS-TIMES-TIMES-INSTANCE is the completion of the rules
+; TIMES-DISTRIBUTES-OVER-PLUS, REMAINDER-TIMES-TIMES and REMAINDER-PLUS-TIMES-TIMES
+
+(prove-lemma remainder-plus-times-times-instance (rewrite)
+       (implies (lessp a b)
+                (and (equal (remainder (plus a (times b c) (times b d))
+                                       (times b e))
+                            (plus a (times b (remainder (plus c d) e))))
+                     (equal (remainder (plus a (times c b) (times d b))
+                                       (times e b))
+                            (plus a (times b (remainder (plus c d) e))))))
+       ((enable commutativity-of-times
+                remainder-times-times
+                remainder-plus-times-times)
+        (disable times-distributes-over-plus)
+        (use (times-distributes-over-plus (x b) (y c) (z d)))
+        (do-not-induct t)))
+
+(prove-lemma remainder-remainder (rewrite)
+       (implies (equal (remainder b a) 0)
+                (equal (remainder (remainder n b) a)
+                       (remainder n a)))
+       ((induct (remainder n b))
+        (enable remainder-plus
+                remainder-quotient-elim
+                remainder-zero)))
+
+
+(prove-lemma remainder-1-arg1 (rewrite)
+       (equal (remainder 1 x)
+              (if (equal x 1) 0 1))
+       ((disable remainder-add1)))
+
+(prove-lemma remainder-1-arg2 (rewrite)
+       (equal (remainder y 1) 0))
+
+(prove-lemma remainder-x-x (rewrite)
+       (equal (remainder x x) 0)
+       ((enable equal-difference-0)))
+
+(prove-lemma transitivity-of-divides ()
+       (implies (and (equal (remainder a b) 0)
+                     (equal (remainder b c) 0))
+                (equal (remainder a c) 0))
+       ((enable remainder
+                remainder-noop
+                remainder-plus)))
+
+
+
+
+; ---------- QUOTIENT, DIVIDES  ----------
+
+(prove-lemma quotient-noop (rewrite)
+       (implies (equal b 1)
+                (equal (quotient a b)
+                       (fix a))))
+
+(prove-lemma quotient-of-non-number (rewrite)
+       (implies (not (numberp a))
+                (equal (quotient a n)
+                       (quotient 0 n))))
+
+(prove-lemma quotient-zero (rewrite)
+       (implies (zerop x)
+                (equal (quotient y x)
+                       0)))
+
+(prove-lemma quotient-add1 (rewrite)
+       (implies (equal (remainder a b) 0)
+                (equal (quotient (add1 a) b)
+                       (if (equal b 1)
+                           (add1 (quotient a b))
+                           (quotient a b))))
+       ((enable quotient-noop)
+        (induct (remainder a b))))
+
+(prove-lemma equal-quotient-0 (rewrite)
+       (equal (equal (quotient a b) 0)
+              (or (zerop b)
+                  (lessp a b)))
+       ((induct (quotient a b))))
+
+(prove-lemma quotient-sub1 (rewrite)
+       (implies (and (not (zerop a))
+                     (not (zerop b)))
+                (equal (quotient (sub1 a) b)
+                       (if (equal (remainder a b) 0)
+                           (sub1 (quotient a b))
+                           (quotient a b))))
+       ((disable equal-difference-0 remainder-quotient-elim)
+        (enable quotient-noop equal-quotient-0)
+        (induct (remainder a b))))
+
+(prove-lemma quotient-plus-proof ()
+       (implies (equal (remainder b c) 0)
+                (equal (quotient (plus a b) c) 
+                       (plus (quotient a c) (quotient b c))))
+       ((enable remainder-noop)
+        (induct (remainder b c))))
+
+(prove-lemma quotient-plus (rewrite)
+       (implies (equal (remainder a c) 0)
+                (and (equal (quotient (plus a b) c)
+                            (plus (quotient a c) (quotient b c)))
+                     (equal (quotient (plus b a) c)
+                            (plus (quotient a c) (quotient b c)))
+                     (equal (quotient (plus x y a) c)
+                            (plus (quotient (plus x y) c) (quotient a c)))))
+       ((use (quotient-plus-proof (a b) (b a) (c c))
+             (quotient-plus-proof (a a) (b b) (c c))
+             (quotient-plus-proof (a (plus x y)) (b a) (c c)))
+        (enable commutativity-of-plus commutativity2-of-plus associativity-of-plus)
+        (do-not-induct t)))
+
+; I need QUOTIENT-TIMES-INSTANCE to prove the more general QUOTIENT-TIMES,
+; but I want QUOTIENT-TIMES-INSTANCE to be tried first (i.e. come after
+; QUOTIENT-TIMES in the event list.) So first, prove QUOTIENT-TIMES-INSTANCE-TEMP,
+; then prove QUOTIENT-TIMES, and finally give QUOTIENT-TIMES-INSTANCE.
+
+(prove-lemma quotient-times-instance-temp-proof ()
+       (equal (quotient (times y x) y) 
+              (if (zerop y) 
+                  0
+                  (fix x)))
+       ((enable times-zero commutativity-of-times difference-plus-cancellation)))
+
+(prove-lemma quotient-times-instance-temp (rewrite)
+       (and (equal (quotient (times y x) y) 
+                   (if (zerop y) 
+                       0
+                       (fix x)))
+            (equal (quotient (times x y) y) 
+                   (if (zerop y) 
+                       0
+                       (fix x))))
+       ((use (quotient-times-instance-temp-proof (x x) (y y))
+             (quotient-times-instance-temp-proof (x y) (y x)))
+        (enable commutativity-of-times)))
+
+(DISABLE QUOTIENT-TIMES-INSTANCE-TEMP)
+
+(prove-lemma quotient-times-proof ()
+       (implies (equal (remainder a c) 0)
+                (equal (quotient (times a b) c)
+                       (times b (quotient a c))))
+       ((enable quotient-plus quotient-noop equal-quotient-0
+                quotient-times-instance-temp)
+        (induct (remainder a c))))
+
+(prove-lemma quotient-times (rewrite)
+       (implies (equal (remainder a c) 0)
+                (and (equal (quotient (times a b) c)
+                            (times b (quotient a c)))
+                     (equal (quotient (times b a) c)
+                            (times b (quotient a c)))))
+       ((enable commutativity-of-times)
+        (use (quotient-times-proof (a a) (b b) (c c)))
+        (do-not-induct t)))
+
+(prove-lemma quotient-times-instance (rewrite)
+       (and (equal (quotient (times y x) y) 
+                   (if (zerop y) 
+                       0
+                       (fix x)))
+            (equal (quotient (times x y) y) 
+                   (if (zerop y) 
+                       0
+                       (fix x))))
+       ((enable quotient-times-instance-temp)))
+
+(prove-lemma quotient-times-times-proof ()
+       (equal (quotient (times x y) (times x z))
+              (if (zerop x)
+                  0
+                  (quotient y z)))
+       ((enable lessp-times-cancellation1 equal-times-0 times-zero 
+                commutativity-of-times times-distributes-over-difference)
+        (induct (quotient y z))))
+
+(prove-lemma quotient-times-times (rewrite)
+       (and (equal (quotient (times x y) (times x z))
+                   (if (zerop x)
+                       0
+                       (quotient y z)))
+            (equal (quotient (times x z) (times y z))
+                   (if (zerop z)
+                       0
+                       (quotient x y))))
+       ((use (quotient-times-times-proof (x x) (y y) (z z))
+             (quotient-times-times-proof (x z) (y x) (z y)))
+        (enable commutativity-of-times)))
+
+(disable quotient-times-times)
+
+(prove-lemma quotient-difference1 (rewrite)
+       (implies (equal (remainder a c) (remainder b c))
+                (equal (quotient (difference a b) c)
+                       (difference (quotient a c) (quotient b c))))
+       ((enable quotient-plus
+                quotient-times-instance
+                equal-remainder-plus-remainder)
+        (do-not-induct t)))
+
+(prove-lemma quotient-lessp-arg1 (rewrite)
+       (implies (lessp a b)
+                (equal (quotient a b) 0)))
+
+(prove-lemma quotient-difference2 (rewrite)
+       (implies (and (equal (remainder a c) 0)
+                     (not (equal (remainder b c) 0)))
+                (equal (quotient (difference a b) c)
+                       (if (lessp b a)
+                           (difference (quotient a c)
+                                       (add1 (quotient b c)))
+                           0)))
+       ((disable times-distributes-over-plus
+                 quotient-difference1
+                 difference-leq-arg1
+                 remainder-difference2
+                 equal-remainder-difference-0
+                 remainder-difference3)
+        (induct (double-remainder-induction a b c))))
+
+(prove-lemma quotient-difference3 (rewrite)
+       (implies (and (equal (remainder b c) 0)
+                     (not (equal (remainder a c) 0)))
+                (equal (quotient (difference a b) c)
+                       (if (lessp b a)
+                           (difference (quotient a c)
+                                       (quotient b c))
+                           0)))
+       ((disable times-distributes-over-plus remainder-difference1
+                 difference-difference-arg1
+                 equal-remainder-difference-0 diff-diff-arg1
+                 remainder-noop remainder-quotient-elim
+                 remainder-difference3 quotient-difference1)
+        (induct (double-remainder-induction a b c))))
+
+(prove-lemma remainder-equals-its-first-argument (rewrite)
+       (equal (equal a (remainder a b))
+              (and (numberp a)
+                   (or (zerop b)
+                       (lessp a b))))
+       ((induct (remainder a b))
+        (enable lessp-remainder 
+                remainder-noop 
+                remainder-zero)))
+
+(DISABLE REMAINDER-EQUALS-ITS-FIRST-ARGUMENT)
+
+(prove-lemma quotient-remainder-times (rewrite)
+       (equal (quotient (remainder x (times a b)) a)
+              (remainder (quotient x a) b))
+       ((enable ;lessp-plus-times2
+                remainder-equals-its-first-argument
+                quotient-noop
+                quotient-plus
+                quotient-times-instance
+                quotient-zero)
+        (do-not-induct t)))
+
+(prove-lemma quotient-remainder (rewrite)
+       (implies (equal (remainder c a) 0)
+                (equal (quotient (remainder b c) a)
+                       (remainder (quotient b a) (quotient c a))))
+       ((enable quotient-noop
+                quotient-plus
+                quotient-remainder-times
+                quotient-times-instance
+                quotient-zero)
+        (do-not-induct t)))
+
+(prove-lemma quotient-remainder-instance (rewrite)
+       (equal (quotient (remainder x (times a b)) a)
+              (remainder (quotient x a) b))
+       ((enable quotient-remainder
+                quotient-times-instance
+                remainder-times1-instance)
+        (do-not-induct t)))
+
+(prove-lemma quotient-plus-fact ()
+       (implies (and (equal (remainder b x) 0)
+                     (equal (remainder c x) 0)
+                     (lessp a x))
+                (equal (quotient (plus a b) c)
+                       (quotient b c)))
+       ((enable quotient-lessp-arg1 lessp-plus-fact)
+        (induct (quotient b c))))
+
+(prove-lemma quotient-plus-times-times-proof ()
+       (implies (lessp a b)
+                (equal (quotient (plus a (times b c)) (times b d))
+                       (quotient (times b c) (times b d))))
+       ((use (quotient-plus-fact (a a) (x b) (b (times b c)) (c (times b d))))
+        (enable remainder-times1-instance)
+        (do-not-induct t)))
+
+(prove-lemma quotient-plus-times-times (rewrite)
+       (implies (lessp a b)
+                (and (equal (quotient (plus a (times b c)) (times b d))
+                            (quotient (times b c) (times b d)))
+                     (equal (quotient (plus a (times b c)) (times b d))
+                            (quotient (times b c) (times b d)))))
+       ((use (quotient-plus-times-times-proof (a a) (b b) (c c) (d d)))
+        (enable commutativity-of-times)
+        (do-not-induct t)))
+
+; QUOTIENT-PLUS-TIMES-TIMES-INSTANCE is the completion of the rules
+; QUOTIENT-TIMES-TIMES, QUOTIENT-PLUS-TIMES-TIMES and TIMES-DISTRIBUTES-OVER-PLUS
+
+(prove-lemma quotient-plus-times-times-instance (rewrite)
+       (implies (lessp a b)
+                (and (equal (quotient (plus a (times b c) (times b d)) (times b e))
+                            (if (zerop b)
+                                0
+                                (quotient (plus c d) e)))
+                     (equal (quotient (plus a (times c b) (times d b)) (times e b))
+                            (if (zerop b)
+                                0
+                                (quotient (plus d c) e)))))
+       ((disable times-distributes-over-plus)
+        (enable quotient-times-times)
+        (use (times-distributes-over-plus (x b) (y c) (z d)))
+        (do-not-induct t)))
+
+(prove-lemma quotient-quotient (rewrite)
+       (equal (quotient (quotient b a) c)
+              (quotient b (times a c)))
+       ((disable times-distributes-over-plus)
+        (enable quotient-lessp-arg1
+                quotient-plus
+                quotient-plus-times-times
+                quotient-times-instance
+                quotient-times-times
+                quotient-noop
+                quotient-zero)
+        (do-not-induct t)))
+
+(prove-lemma leq-quotient ()
+       (implies (lessp a b)
+                (leq (quotient a c) (quotient b c)))
+       ((induct (double-remainder-induction a b c))
+        (enable quotient-lessp-arg1
+                quotient-zero)))
+
+(prove-lemma quotient-1-arg2 (rewrite)
+       (equal (quotient n 1)
+              (fix n)))
+
+(prove-lemma quotient-1-arg1-casesplit ()
+       (or (zerop n)
+           (equal n 1)
+           (lessp 1 n)))
+
+(prove-lemma quotient-1-arg1 (rewrite)
+       (equal (quotient 1 n)
+              (if (equal n 1)
+                  1
+                  0))
+       ((enable quotient-lessp-arg1)
+        (use (quotient-1-arg1-casesplit))))
+
+
+(prove-lemma quotient-x-x (rewrite)
+       (implies (not (zerop x))
+                (equal (quotient x x) 1))
+       ((enable difference-x-x)))
+
+(prove-lemma lessp-quotient (rewrite)
+       (equal (lessp (quotient i j) i)
+              (and (not (zerop i))
+                   (not (equal j 1)))))
+
+
+;; Metalemma to cancel quotient-times expressions
+
+;; ex.
+;; (quotient (times a b) (times c (times d a)))  -> 
+;;                                           (if (not (zerop a))
+;;                                               (quotient (fix b) (times c d))
+;;                                            (zero))
+;;
+
+(defn cancel-quotient-times (x)
+  (if (and (equal (car x) 'quotient)
+           (equal (caadr x) 'times)
+           (equal (caaddr x) 'times))
+      (if (listp (bagint (times-fringe (cadr x))
+                         (times-fringe (caddr x))))
+          (list 'if
+                (and-not-zerop-tree (bagint (times-fringe (cadr x))
+                                            (times-fringe (caddr x))))
+                (list 'quotient
+                      (times-tree (bagdiff (times-fringe (cadr x)) 
+                                           (bagint (times-fringe (cadr x))
+                                                   (times-fringe (caddr x)))))
+                      (times-tree (bagdiff (times-fringe (caddr x)) 
+                                           (bagint (times-fringe (cadr x))
+                                                   (times-fringe (caddr x))))))
+                '(zero))
+        x)
+    x))
+
+
+(prove-lemma zerop-makes-quotient-zero-bridge (rewrite)
+       (implies (and (equal (car x) 'times)
+                     (equal (car y) 'times)
+                     (not (eval$ t (and-not-zerop-tree 
+                                    (bagint (times-fringe x)
+                                            (times-fringe y)))
+                                 a)))
+                (equal (quotient (times (eval$ t (cadr x) a)
+                                        (eval$ t (caddr x) a))
+                                 (times (eval$ t (cadr y) a)
+                                        (eval$ t (caddr y) a)))
+                       0))
+       ((use (zerop-makes-times-tree-zero (x (bagint (times-fringe x)
+                                                     (times-fringe y)))
+                                          (y (times-fringe x)))
+             (zerop-makes-times-tree-zero (x (bagint (times-fringe x)
+                                                     (times-fringe y)))
+                                          (y (times-fringe y))))
+        (enable AND-NOT-ZEROP-TREE
+                BAGINT
+                DELETE 
+                EQUAL-QUOTIENT-0
+                EQUAL-TIMES-0
+                EVAL$-TIMES
+                ;MEMBER-CONS 
+                 ;MEMBER-NON-LIST
+                SUBBAGP-BAGINT1 
+                SUBBAGP-BAGINT2
+                TIMES-FRINGE 
+                TIMES-TREE
+                TIMES-TREE-APPEND 
+                TIMES-TREE-OF-TIMES-FRINGE
+                ZEROP-MAKES-LESSP-FALSE-BRIDGE)))
+
+(disable zerop-makes-quotient-zero-bridge)
+
+(prove-lemma eval$-quotient-times-tree-bagdiff (rewrite)
+       (implies (and (subbagp x y)
+                     (subbagp x z)
+                     (eval$ t (and-not-zerop-tree x) a))
+                (equal (quotient (eval$ t (times-tree (bagdiff y x)) a)
+                                 (eval$ t (times-tree (bagdiff z x)) a))
+                       (quotient (eval$ t (times-tree y) a)
+                                 (eval$ t (times-tree z) a))))
+       ((enable AND-NOT-ZEROP-TREE 
+                BAGDIFF
+                EQUAL-QUOTIENT-0
+                EVAL$-TIMES-MEMBER
+                NUMBERP-EVAL$-TIMES-TREE
+                QUOTIENT-TIMES-TIMES
+                SUBBAGP
+                SUBBAGP-CDR1
+                SUBBAGP-CDR2
+                TIMES-TREE
+                ZEROP-MAKES-TIMES-TREE-ZERO)))
+
+(disable eval$-quotient-times-tree-bagdiff)
+
+(prove-lemma correctness-of-cancel-quotient-times ((meta quotient))
+       (equal (eval$ t x a) 
+              (eval$ t (cancel-quotient-times x) a))
+       ((enable CANCEL-QUOTIENT-TIMES 
+                EVAL$-QUOTIENT-TIMES-TREE-BAGDIFF
+                EVAL$-QUOTIENT
+                EVAL$-TIMES
+                SUBBAGP-BAGINT1
+                SUBBAGP-BAGINT2 
+                TIMES-TREE-OF-TIMES-FRINGE
+                ZEROP-MAKES-QUOTIENT-ZERO-BRIDGE)))
+
+
+;;; exp, log, and gcd
+
+(defn exp (i j)
+  (if (zerop j)
+      1
+      (times i (exp i (sub1 j)))))
+
+
+(defn log (base n)
+  (if (lessp base 2)
+      0
+      (if (zerop n)
+          0
+          (add1 (log base (quotient n base))))))
+
+
+
+(defn gcd (x y)
+  (if (zerop x)
+      (fix y)
+      (if (zerop y)
+          x
+          (if (lessp x y)
+              (gcd  x (difference y x))
+              (gcd (difference x y) y))))
+  ((ord-lessp (cons (add1 x) (fix y)))))
+
+
+
+(prove-lemma remainder-exp (rewrite)
+       (implies (not (zerop k))
+                (equal (remainder (exp n k) n) 0))
+       ((enable exp remainder-times1-instance)))
+
+
+(defn double-number-induction (i j)
+  (if (zerop i)
+      0
+      (if (zerop j)
+          0
+          (double-number-induction (sub1 i) (sub1 j)))))
+
+
+(prove-lemma remainder-exp-exp (rewrite)
+       (implies (leq i j)
+                (equal (remainder (exp a j) (exp a i)) 0))
+       ((enable exp
+                remainder-1-arg2
+                remainder-times2-instance)
+        (induct (double-number-induction i j))))
+
+
+(prove-lemma quotient-exp (rewrite)
+       (implies (not (zerop k))
+                (equal (quotient (exp n k) n)
+                       (if (zerop n)
+                           0
+                           (exp n (sub1 k)))))
+       ((enable exp quotient-times-instance)))
+
+
+(prove-lemma exp-zero (rewrite)
+       (implies (zerop k)
+                (equal (exp n k) 1))
+       ((enable exp)))
+
+(prove-lemma exp-add1 (rewrite)
+       (equal (exp n (add1 k))
+              (times n (exp n k)))
+       ((enable exp)))
+
+(prove-lemma exp-plus (rewrite)
+       (equal (exp i (plus j k))
+              (times (exp i j) (exp i k)))
+       ((enable exp 
+                associativity-of-times
+                commutativity-of-times)))
+
+(prove-lemma exp-0-arg1 (rewrite)
+       (equal (exp 0 k)
+              (if (zerop k) 1 0))
+       ((enable exp)))
+
+(prove-lemma exp-1-arg1 (rewrite)
+       (equal (exp 1 k) 1)
+       ((enable exp)))
+
+(prove-lemma exp-0-arg2 (rewrite)
+       (equal (exp n 0) 1)
+       ((enable exp)))
+
+(prove-lemma exp-times (rewrite)
+       (equal (exp (times i j) k)
+              (times (exp i k) (exp j k)))
+       ((enable exp
+                associativity-of-times 
+                commutativity2-of-times
+                exp-zero)))
+
+(prove-lemma exp-exp (rewrite)
+       (equal (exp (exp i j) k)
+              (exp i (times j k)))
+       ((enable exp
+                exp-zero
+                exp-1-arg1
+                exp-plus
+                exp-times)))
+
+(prove-lemma equal-exp-0 (rewrite)
+       (equal (equal (exp n k) 0)
+              (and (zerop n)
+                   (not (zerop k))))
+       ((enable exp equal-times-0)
+        (induct (exp n k))))
+
+(prove-lemma equal-exp-1 (rewrite)
+       (equal (equal (exp n k) 1)
+              (if (zerop k)
+                  t
+                  (equal n 1)))           
+       ((enable exp times-zero times-add1)))
+
+(prove-lemma exp-difference (rewrite)
+       (implies (and (leq c b)
+                     (not (zerop a)))
+                (equal (exp a (difference b c))
+                       (quotient (exp a b) (exp a c))))
+       ((enable exp)))
+
+
+
+(prove-lemma equal-log-0 (rewrite)
+       (equal (equal (log base n) 0)
+              (or (lessp base 2)
+                  (zerop n)))
+       ((enable log)
+        (induct (log base n))))
+
+(prove-lemma log-0 (rewrite)
+       (implies (zerop n)
+                (equal (log base n) 0))
+       ((enable log)))
+
+(prove-lemma log-1 (rewrite)
+       (implies (lessp 1 base)
+                (equal (log base 1) 1))
+       ((enable log)
+        (induct (log base n))))
+
+(defn double-log-induction (base a b)
+  (if (lessp base 2)
+      0
+      (if (zerop a)
+          0
+          (if (zerop b)
+              0
+              (double-log-induction base (quotient a base) (quotient b base))))))
+
+(prove-lemma leq-log-log nil
+       (implies (leq n m)
+                (leq (log c n) (log c m)))
+       ((enable log)
+        (induct (double-log-induction c n m))
+        (use (leq-quotient (a n) (b m) (c c)))))
+
+(prove-lemma log-quotient (rewrite)
+       (implies (lessp 1 c)
+                (equal (log c (quotient n c))
+                       (sub1 (log c n))))
+       ((enable log)))
+
+(prove-lemma log-quotient-times-proof ()
+       (implies (lessp 1 c)
+                (equal (log c (quotient n (times c m)))
+                       (sub1 (log c (quotient n m)))))
+       ((enable log)))
+
+(prove-lemma log-quotient-times (rewrite)
+       (implies (lessp 1 c)
+                (and (equal (log c (quotient n (times c m)))
+                            (sub1 (log c (quotient n m))))
+                     (equal (log c (quotient n (times m c)))
+                            (sub1 (log c (quotient n m))))))
+       ((use (log-quotient-times-proof (c c) (n n) (m m)))
+        (enable commutativity-of-times)))
+
+(prove-lemma log-quotient-exp (rewrite)
+       (implies (lessp 1 c)
+                (equal (log c (quotient n (exp c m)))
+                       (difference (log c n) m)))
+       ((enable exp log log-quotient-times)))
+
+(prove-lemma log-times-proof ()
+       (implies (and (lessp 1 c)
+                     (not (zerop n)))
+                (equal (log c (times c n))
+                       (add1 (log c n))))
+       ((enable log)))
+
+
+(prove-lemma log-times (rewrite)
+       (implies (and (lessp 1 c)
+                     (not (zerop n)))
+                (and (equal (log c (times c n))
+                            (add1 (log c n)))
+                     (equal (log c (times n c))
+                            (add1 (log c n)))))
+       ((use (log-times-proof (c c) (n n)))
+        (enable commutativity-of-times)))
+
+(prove-lemma log-times-exp-proof ()
+       (implies (and (lessp 1 c)
+                     (not (zerop n)))
+                (equal (log c (times n (exp c m)))
+                       (plus (log c n) m)))
+       ((enable log exp)))
+
+
+
+(prove-lemma log-times-exp (rewrite)
+       (implies (and (lessp 1 c)
+                     (not (zerop n)))
+                (and (equal (log c (times n (exp c m)))
+                            (plus (log c n) m))
+                     (equal (log c (times (exp c m) n))
+                            (plus (log c n) m))))
+       ((use (log-times-exp-proof (c c) (n n) (m m)))
+        (enable commutativity-of-times)))
+
+(prove-lemma log-exp (rewrite)
+       (implies (lessp 1 c)
+                (equal (log c (exp c n))
+                       (add1 n)))
+       ((enable log exp log-1)))
+
+
+
+
+
+(prove-lemma commutativity-of-gcd (rewrite)
+       (equal (gcd b a) (gcd a b))
+       ((enable gcd)))
+
+
+(defn single-number-induction (n)
+  (if (zerop n)
+      0
+      (single-number-induction (sub1 n))))
+
+(prove-lemma gcd-0 (rewrite)
+       (and (equal (gcd 0 x) (fix x))
+            (equal (gcd x 0) (fix x)))
+       ((enable gcd)))
+
+(prove-lemma gcd-1 (rewrite)
+       (and (equal (gcd 1 x) 1)
+            (equal (gcd x 1) 1))
+       ((enable gcd)
+        (induct (single-number-induction x))))
+
+(prove-lemma equal-gcd-0 (rewrite)
+       (equal (equal (gcd a b) 0)
+              (and (zerop a)
+                   (zerop b)))
+       ((enable gcd)
+        (induct (gcd a b))))
+
+(prove-lemma lessp-gcd (rewrite)
+       (implies (not (zerop b))
+                (and (equal (lessp b (gcd a b)) f)
+                     (equal (lessp b (gcd b a)) f)))
+       ((enable gcd commutativity-of-gcd)))
+
+
+(prove-lemma gcd-plus-instance-temp-proof ()
+       (equal (gcd a (plus a b))
+              (gcd a b))
+       ((enable gcd commutativity-of-gcd)
+        (induct (gcd a b))))
+
+(prove-lemma gcd-plus-instance-temp (rewrite)
+       (and (equal (gcd a (plus a b))
+                   (gcd a b))
+            (equal (gcd a (plus b a))
+                   (gcd a b)))
+       ((enable commutativity-of-plus)
+        (use (gcd-plus-instance-temp-proof (a a) (b b)))
+        (do-not-induct t)))
+
+(prove-lemma gcd-plus-proof ()
+       (implies (equal (remainder b a) 0)
+                (equal (gcd a (plus b c))
+                       (gcd a c)))
+       ((enable gcd commutativity-of-gcd
+                gcd-1 
+                gcd-plus-instance-temp)
+        (induct (remainder b a))))
+
+(prove-lemma gcd-plus (rewrite)
+       (implies (equal (remainder b a) 0)
+                (and (equal (gcd a (plus b c))
+                            (gcd a c))
+                     (equal (gcd a (plus c b))
+                            (gcd a c))
+                     (equal (gcd (plus b c) a)
+                            (gcd a c))
+                     (equal (gcd (plus c b) a)
+                            (gcd a c))))
+       ((enable commutativity-of-plus commutativity-of-gcd)
+        (use (gcd-plus-proof (a a) (b b) (c c)))
+        (do-not-induct t)))
+
+(prove-lemma gcd-plus-instance (rewrite)
+       (and (equal (gcd a (plus a b))
+                   (gcd a b))
+            (equal (gcd a (plus b a))
+                   (gcd a b)))
+       ((enable gcd-plus-instance-temp)
+        (do-not-induct t)))
+
+(prove-lemma remainder-gcd (rewrite)
+       (and (equal (remainder a (gcd a b)) 0)
+            (equal (remainder b (gcd a b)) 0))
+       ((enable gcd)))
+
+
+(prove-lemma distributivity-of-times-over-gcd-proof ()
+       (equal (gcd (times x z)
+                   (times y z))
+              (times z (gcd x y)))
+       ((enable gcd
+                commutativity-of-gcd
+                gcd-0
+                gcd-plus)))
+
+
+(prove-lemma distributivity-of-times-over-gcd (rewrite)
+       (and (equal (gcd (times x z) (times y z))
+                   (times z (gcd x y)))
+            (equal (gcd (times z x) (times y z))
+                   (times z (gcd x y)))
+            (equal (gcd (times x z) (times z y))
+                   (times z (gcd x y)))
+            (equal (gcd (times z x) (times z y))
+                   (times z (gcd x y))))
+       ((use (distributivity-of-times-over-gcd-proof (x x) (y y) (z z)))
+        (enable commutativity-of-times)
+        (do-not-induct t)))
+
+(prove-lemma gcd-is-the-greatest nil
+       (implies (and (not (zerop x))
+                     (not (zerop y))
+                     (equal (remainder x z) 0)
+                     (equal (remainder y z) 0))
+                (leq z (gcd x y)))
+       ((enable gcd
+                commutativity-of-gcd
+                distributivity-of-times-over-gcd
+                equal-gcd-0)
+        (do-not-induct t)))
+
+(prove-lemma common-divisor-divides-gcd (rewrite)
+       (implies (and (equal (remainder x z) 0)
+                     (equal (remainder y z) 0))
+                (equal (remainder (gcd x y) z) 0))
+       ((enable gcd
+                commutativity-of-gcd
+                distributivity-of-times-over-gcd
+                equal-gcd-0)
+        (do-not-induct t)))
+
+; We prove ASSOCIATIVITY-OF-GCD and COMMUTATIVITY2-OF-GCD roughly the same way.
+; Use GCD-IS-THE-GREATEST twice to show that each side of the equality is
+; less than or equal to the other side.
+
+(prove-lemma associativity-of-gcd-zero-case ()
+       (implies (or (zerop a) (zerop b) (zerop c))
+                (equal (gcd (gcd a b) c)
+                       (gcd a (gcd b c))))
+       ((enable gcd gcd-0)
+        (do-not-induct t)))
+
+(prove-lemma associativity-of-gcd (rewrite)
+       (equal (gcd (gcd a b) c)
+              (gcd a (gcd b c)))
+       ((enable equal-gcd-0
+                remainder-gcd)
+        (use (gcd-is-the-greatest (x a) (y (gcd b c)) (z (gcd (gcd a b) c)))
+             (gcd-is-the-greatest (x (gcd a b)) (y c) (z (gcd a (gcd b c))))
+             (associativity-of-gcd-zero-case (a a) (b b) (c c))
+             (transitivity-of-divides (a a) (b (gcd a b)) (c (gcd (gcd a b) c)))
+             (transitivity-of-divides (a b) (b (gcd a b)) (c (gcd (gcd a b) c)))
+             (transitivity-of-divides (a b) (b (gcd b c)) (c (gcd a (gcd b c))))
+             (transitivity-of-divides (a c) (b (gcd b c)) (c (gcd a (gcd b c))))
+             (common-divisor-divides-gcd (x b) (y c) (z (gcd (gcd a b) c)))
+             (common-divisor-divides-gcd (x a) (y b) (z (gcd a (gcd b c))))
+             )
+        (disable common-divisor-divides-gcd transitivity-of-divides
+                 gcd-is-the-greatest commutativity-of-gcd gcd
+                 remainder-zero remainder-of-non-number gcd-0
+                 difference-leq-arg1 equal-sub1-0 remainder-noop)
+        (do-not-induct t)))
+
+(prove-lemma commutativity2-of-gcd-zero-case ()
+       (implies (or (zerop a) (zerop b) (zerop c))
+                (equal (gcd b (gcd a c))
+                       (gcd a (gcd b c))))
+       ((enable gcd gcd-0 commutativity-of-gcd)
+        (do-not-induct t)))
+
+(prove-lemma commutativity2-of-gcd (rewrite)
+       (equal (gcd b (gcd a c))
+              (gcd a (gcd b c)))
+       ((enable equal-gcd-0
+                remainder-gcd)
+        (disable common-divisor-divides-gcd transitivity-of-divides
+                 gcd-is-the-greatest commutativity-of-gcd gcd
+                 remainder-zero remainder-of-non-number gcd-0
+                 difference-leq-arg1 equal-sub1-0 remainder-noop)
+        (use (gcd-is-the-greatest (x a) (y (gcd b c)) (z (gcd b (gcd a c))))
+             (gcd-is-the-greatest (x b) (y (gcd a c)) (z (gcd a (gcd b c))))
+             (commutativity2-of-gcd-zero-case (a a) (b b) (c c))
+             (transitivity-of-divides (a a) (b (gcd a c)) (c (gcd b (gcd a c))))
+             (transitivity-of-divides (a c) (b (gcd a c)) (c (gcd b (gcd a c))))
+             (transitivity-of-divides (a b) (b (gcd b c)) (c (gcd a (gcd b c))))
+             (transitivity-of-divides (a c) (b (gcd b c)) (c (gcd a (gcd b c))))
+             (common-divisor-divides-gcd (x b) (y c) (z (gcd b (gcd a c))))
+             (common-divisor-divides-gcd (x a) (y c) (z (gcd a (gcd b c))))
+             )
+        (do-not-induct t)))
+
+(prove-lemma gcd-x-x (rewrite)
+       (equal (gcd x x)
+              (fix x))
+       ((enable gcd)
+        (induct (single-number-induction x))))
+
+(prove-lemma gcd-idempotence (rewrite)
+       (and (equal (gcd x (gcd x y)) (gcd x y))
+            (equal (gcd y (gcd x y)) (gcd x y)))
+       ((enable gcd gcd-x-x
+                gcd-plus
+                remainder-gcd
+                gcd-1
+                commutativity-of-gcd)
+        (induct (gcd x y))))
+
+;;; new stuff
+
+(prove-lemma gcd-zero (rewrite)
+       (implies
+        (zerop x)
+        (and (equal (gcd x y) (fix y))
+             (equal (gcd y x) (fix y))))
+       ((enable gcd)))
+
+(prove-lemma remainder-quotient-gcd-0 (rewrite)
+             (implies
+              (equal (remainder x a) 0)
+              (equal (remainder x (quotient x a)) 0)))
+       
+(prove-lemma remainder-gcd-0
+             (rewrite)
+             (implies (equal (remainder x a) 0)
+                      (and (equal (remainder x (gcd a b)) 0)
+                           (equal (remainder x (gcd b a)) 0))))
+
+;I think this is not important
+;(prove-lemma gcd-of-reduce-numbers-helper-helper (rewrite)
+;            (equal
+;             (remainder a (gcd (quotient a (gcd a b)) (quotient b (gcd a b))))
+;             0))
+
+; I believe that the following works just as well as this one because
+; of commutativity-of-gcd 
+;(prove-lemma gcd-of-reduced-numbers-helper (rewrite)
+;       (implies
+;       (not (zerop a))
+;       (and
+;        (equal (gcd (quotient a (gcd a b))
+;                  (quotient b (gcd a b)))
+;             1)
+;        (equal (gcd (quotient b (gcd a b))
+;                  (quotient a (gcd a b)))
+;             1)
+;        (equal (gcd (quotient b (gcd b a))
+;                  (quotient a (gcd b a)))
+;             1)
+;        (equal (gcd (quotient a (gcd b a))
+;                  (quotient b (gcd b a)))
+;             1))))
+
+(prove-lemma gcd-quotient-gcd (rewrite)
+       (implies
+        (not (zerop a))
+        (and
+         (equal (gcd (quotient a (gcd a b))
+                     (quotient b (gcd a b)))
+                1)
+         (equal (gcd (quotient b (gcd b a))
+                     (quotient a (gcd b a)))
+                1))))
+
+(prove-lemma lessp-gcd2 (rewrite)
+      (and
+         (equal (lessp b (gcd a b)) (and (zerop b) (not (zerop a))))
+         (equal (lessp b (gcd b a)) (and (zerop b) (not (zerop a))))))
+
+
+(prove-lemma gcd-times-proof nil
+       (equal
+        (gcd y (times x y))
+        (fix y)))
+
+(prove-lemma gcd-times (rewrite)
+       (and
+        (equal
+         (gcd y (times x y))
+         (fix y))
+        (equal
+         (gcd y (times y x))
+         (fix y)))
+       ((use (gcd-times-proof))))
+
+;; replaced by gcd-zero
+;(lemma gcd-zerop (rewrite)
+;       (implies
+;       (zerop x)
+;       (and
+;        (equal (gcd x z) (fix z))
+;        (equal (gcd z x) (fix z))))
+;       ((enable-theory naturals)
+;       (enable gcd)))
+
+; (disable gcd-zerop) ; subsumed by gcd-remainder
+
+(prove-lemma gcd-remainder (rewrite)
+             (implies
+              (equal (remainder x z) 0)
+              (and 
+               (equal (gcd x z) (fix z))
+               (equal (gcd z x) (fix z)))))
+
+(disable gcd-zero) ; subsumed by gcd-remainder
+
+; no longer needed
+;(lemma equal-times-x-x-fact (rewrite)
+;       (implies (and (not (equal x 0))
+;                    (not (equal y 1)))
+;               (and
+;                (equal (equal (times x y) x) f)
+;                (equal (equal (times y x) x) f)))
+;       ((enable-theory naturals)
+;       (induct (times y x))))
+
+(prove-lemma equal-times-x-x (rewrite)
+             (and (equal (equal (times x y) x) 
+                         (or (and (numberp x) (equal y 1)) 
+                             (equal x 0)))
+                  (equal (equal (times y x) x) 
+                         (or (and (numberp x) (equal y 1)) 
+                             (equal x 0))))
+             ((induct (times y x))))
+
+
+(prove-lemma equal-x-gcd-x-y (rewrite)
+       (implies
+        (numberp y)
+        (and
+         (equal
+          (equal x (gcd x y))
+          (and
+           (numberp x)
+           (equal (remainder y x) 0)))
+         (equal
+          (equal x (gcd y x))
+          (and
+           (numberp x)
+           (equal (remainder y x) 0))))))
+
+
+(prove-lemma quotient-difference (rewrite)
+       (equal
+        (quotient (difference x y) z)
+         (if (lessp (remainder x z) (remainder y z))
+             (sub1 (difference (quotient x z) (quotient y z)))
+           (difference (quotient x z) (quotient y z))))
+       ((disable quotient-difference1 quotient-difference2
+                 quotient-difference3)
+        (induct (quotient y z))))
+
+
+(prove-lemma equal-as-remainder (rewrite)
+             (implies
+              (and
+               (equal (remainder x y) 0)
+               (equal (remainder y x) 0)
+               (numberp x) (numberp y))
+              (equal (equal x y) t)))
+
+(disable equal-as-remainder)
+
+;; add so as to control rewriting equal better
+(lemma equal-gcd-gcd-as-remainder (rewrite)
+       (implies
+        (and
+         (equal (remainder (gcd x y) (gcd a b)) 0)
+         (equal (remainder (gcd a b) (gcd x y)) 0))
+        (equal (equal (gcd a b) (gcd x y)) t))
+       ((enable equal-as-remainder)))
+
+(prove-lemma remainder-gcd-0-means (rewrite)
+       (and
+        (implies (equal (remainder (gcd a b) c) 0)
+                 (equal (remainder b c) 0))
+        (implies (equal (remainder (gcd b a) c) 0)
+                 (equal (remainder b c) 0)))
+       ((use (transitivity-of-divides 
+              (a b) (b (gcd a b)) (c c)))))
+
+(prove-lemma remainder-gcd-arg1 (rewrite)
+       (equal
+        (equal (remainder (gcd a b) c) 0)
+        (if (equal (remainder a c) 0)
+            (if (equal (remainder b c) 0)
+                t
+              f)
+          f)))
+
+(prove-lemma remainder-diff1 (rewrite)
+             (implies
+              (and
+               (equal (remainder x d) 0)
+               (not (lessp (times w x) z)))
+              (equal
+               (equal (remainder (difference (times w x) z) d) 0)
+               (equal (remainder z d) 0))))
+
+(prove-lemma remainder-diff2 (rewrite)
+             (implies
+              (and
+               (equal (remainder x d) 0)
+               (not (lessp (times w x) z))
+               (equal (remainder (difference (times w x) z) d) 0))
+              (equal (remainder z d) 0)))
+
+(prove-lemma remainder-gcd-difference-times-hack (rewrite)
+       (implies
+        (not (lessp (times w x) z))
+        (equal (remainder z
+                          (gcd x (difference (times w x) z)))
+               0))
+       ((use (remainder-diff2 
+              (d (gcd x (difference (times w x) z)))))
+        (disable remainder-gcd)))
+
+(prove-lemma gcd-difference1 (rewrite)
+       (implies
+        (equal (remainder y x) 0)
+        (equal
+         (gcd x (difference y z))
+         (if (lessp y z)
+             (fix x)
+           (gcd x z)))))
+
+(prove-lemma gcd-difference2 (rewrite)
+       (implies
+        (equal (remainder y x) 0)
+        (equal
+         (gcd x (difference z y))
+         (if (lessp z y)
+             (fix x)
+         (gcd x z)))))
+
+
+(deftheory addition
+  (EQUAL-PLUS-0 
+   EQUAL-DIFFERENCE-0 
+   COMMUTATIVITY-OF-PLUS
+   COMMUTATIVITY2-OF-PLUS
+   PLUS-ZERO-ARG2 
+   PLUS-ADD1-ARG2
+   PLUS-ADD1-ARG1
+   ASSOCIATIVITY-OF-PLUS
+   PLUS-DIFFERENCE-ARG1 
+   PLUS-DIFFERENCE-ARG2
+   diff-diff-arg1
+   diff-diff-arg2
+   CORRECTNESS-OF-CANCEL-EQUAL-PLUS
+   CORRECTNESS-OF-CANCEL-DIFFERENCE-PLUS
+   DIFFERENCE-ELIM
+   DIFFERENCE-LEQ-ARG1 
+   DIFFERENCE-ADD1-ARG2 
+   DIFFERENCE-SUB1-ARG2
+   DIFFERENCE-DIFFERENCE-ARG1 
+   DIFFERENCE-DIFFERENCE-ARG2
+   DIFFERENCE-X-X 
+   CORRECTNESS-OF-CANCEL-LESSP-PLUS))
+
+(deftheory multiplication
+  (EQUAL-TIMES-0
+   EQUAL-TIMES-1 
+   equal-sub1-0
+   TIMES-ZERO 
+   TIMES-ADD1
+   COMMUTATIVITY-OF-TIMES 
+   TIMES-DISTRIBUTES-OVER-PLUS
+   COMMUTATIVITY2-OF-TIMES 
+   ASSOCIATIVITY-OF-TIMES
+   TIMES-DISTRIBUTES-OVER-DIFFERENCE 
+   TIMES-QUOTIENT
+   TIMES-1-ARG1
+   LESSP-TIMES1 
+   LESSP-TIMES2 
+   lessp-times3
+   LESSP-PLUS-TIMES1 
+   LESSP-PLUS-TIMES2
+   LESSP-1-TIMES
+   correctness-of-cancel-lessp-times
+   correctness-of-cancel-equal-times
+   equal-times-x-x))
+
+(deftheory remainders
+  (LESSP-REMAINDER 
+   REMAINDER-NOOP 
+   REMAINDER-OF-NON-NUMBER 
+   REMAINDER-ZERO
+   REMAINDER-QUOTIENT-ELIM 
+   REMAINDER-ADD1 
+   REMAINDER-PLUS
+   EQUAL-REMAINDER-PLUS-0 
+   REMAINDER-TIMES1 
+   REMAINDER-TIMES1-INSTANCE
+   REMAINDER-TIMES2 
+   REMAINDER-TIMES2-INSTANCE 
+   REMAINDER-DIFFERENCE1
+   REMAINDER-DIFFERENCE2 
+   REMAINDER-PLUS-TIMES-TIMES
+   REMAINDER-PLUS-TIMES-TIMES-INSTANCE 
+   REMAINDER-REMAINDER
+   REMAINDER-1-ARG1 
+   REMAINDER-1-ARG2 
+   REMAINDER-X-X
+   remainder-quotient-gcd-0 ;; bad name - not a gcd fact
+   remainder-gcd-0
+   remainder-gcd-arg1
+   remainder-diff1 
+   remainder-diff2))
+
+(deftheory quotients
+  (QUOTIENT-NOOP
+   QUOTIENT-OF-NON-NUMBER
+   QUOTIENT-ZERO 
+   QUOTIENT-ADD1
+   EQUAL-QUOTIENT-0
+   QUOTIENT-SUB1
+   QUOTIENT-PLUS 
+   QUOTIENT-TIMES
+   QUOTIENT-TIMES-INSTANCE 
+   QUOTIENT-DIFFERENCE1
+   QUOTIENT-LESSP-ARG1 
+   QUOTIENT-DIFFERENCE2 
+   QUOTIENT-DIFFERENCE3
+   QUOTIENT-REMAINDER-TIMES 
+   QUOTIENT-REMAINDER
+   QUOTIENT-REMAINDER-INSTANCE 
+   QUOTIENT-PLUS-TIMES-TIMES
+   QUOTIENT-PLUS-TIMES-TIMES-INSTANCE 
+   QUOTIENT-QUOTIENT
+   QUOTIENT-1-ARG2 
+   QUOTIENT-1-ARG1 
+   QUOTIENT-X-X 
+   LESSP-QUOTIENT
+   correctness-of-cancel-quotient-times
+   quotient-difference))
+
+(deftheory exponentiation
+  (equal-exp-0 
+   equal-exp-1
+   exp-exp
+   exp-add1
+   exp-times
+   exp-1-arg1
+   exp-zero
+   exp-0-arg2
+   exp-0-arg1
+   exp-difference
+   exp-plus
+   quotient-exp
+   remainder-exp-exp
+   remainder-exp))
+
+(deftheory logs
+  (LOG-EXP
+   LOG-TIMES-EXP
+   LOG-TIMES
+   LOG-QUOTIENT-EXP
+   LOG-QUOTIENT-TIMES
+   LOG-QUOTIENT 
+   LOG-1
+   LOG-0 
+   EQUAL-LOG-0 EXP-EXP))
+
+
+(deftheory gcds
+  (commutativity2-of-gcd
+    associativity-of-gcd
+    common-divisor-divides-gcd
+    distributivity-of-times-over-gcd
+    lessp-gcd
+    equal-gcd-0
+;    gcd-0 subsumed by gcd-zero
+    gcd-idempotence
+    gcd-x-x 
+    remainder-gcd
+    gcd-plus
+    gcd-plus-instance
+    gcd-1
+    commutativity-of-gcd
+    gcd-zero
+    lessp-gcd2
+    gcd-times
+    gcd-remainder
+    equal-x-gcd-x-y
+    equal-gcd-gcd-as-remainder ;; this probably makes sense, but risky
+    remainder-gcd-0-means
+    gcd-quotient-gcd
+    gcd-difference1
+    gcd-difference2 ))
+
+
+(deftheory naturals
+  (addition
+   multiplication
+   remainders
+   quotients
+   exponentiation
+   logs
+   gcds))
+
+(make-lib "naturals" t)

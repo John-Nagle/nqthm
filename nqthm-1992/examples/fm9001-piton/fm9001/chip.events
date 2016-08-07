@@ -1,0 +1,1551 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    CHIP.EVENTS
+;;;
+;;;    The DUAL-EVAL model of the FM9001 chip.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    CHIP-MODULE
+;;;
+;;;    The entire chip, sans pads, as a module.
+;;;
+;;; INPUTS:
+;;;
+;;;    CLK  -- The system clock
+;;;
+;;;    TI   -- Test input (Scan in)
+;;;    TE   -- Test enable (Scan enable)
+;;;
+;;;    DTACK-  --  DTACK input
+;;;    RESET-  --  RESET input
+;;;    HOLD-   --  HOLD input
+;;;
+;;;    DISABLE-REGFILE-   --  Must be high to write enable the register
+;;;                           file RAM.  During scan-in, DISABLE-REGFILE- is
+;;;                           held low to avoid spurious writes to the RAM.
+;;;
+;;;    TEST-REGFILE-    --  Normally high.  When low, forces the register file
+;;;                         output mux to pass data directly from the register 
+;;;                         file RAM.
+;;;
+;;;    PC-REG-IN[0..3]    --  The PC-REG inputs.
+;;;
+;;;    DATA-IN[0..31]  --  The input data bus.  We consider the bus as two
+;;;                        unidirectional busses at this level.
+;;;
+;;; OUTPUTS:
+;;;
+;;;    TO      --  Test Output (Scan out)
+;;;    TIMING  --  The net corresponding to the longest combinational path.
+;;;                Used to verify the speed of the device.  This is currently
+;;;                the ZERO flag computed by the ALU.
+;;;
+;;;    HDACK-   --  Hold Acknowledge
+;;;
+;;;    EN-ADDR-OUT-  -- The inverse of HDACK-, with high drive for ADDR-BUS
+;;;                     and memory control lines.
+;;;
+;;;    RW-      --  Memory control lines  (High Drive for DATA-OUT)
+;;;    STROBE-
+;;;
+;;;    ADDR-OUT[0..31]  --  Address bus
+;;;    DATA-OUT[0..31]  --  Data output bus
+;;;
+;;;    FLAGS[0..3]     --  Observability pins
+;;;    CNTL-STATE[0..4]
+;;;    I-REG[28..31]
+;;;
+;;;    
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(module-generator
+ (chip-module*)
+
+ 'chip-module
+
+ (list* 'clk 'ti 'te 'dtack- 'reset- 'hold-
+        'disable-regfile- 'test-regfile-
+        (append #i(pc-reg-in 0 4) #i(data-in 0 32)))
+
+ (list* 'to 'timing 'hdack- 'en-addr-out- 'rw- 'strobe-
+        (append #i(addr-out 0 32)
+                (append #i(data-out 0 32)
+                        (append #i(flags 0 4)
+                                (append #i(cntl-state 0 5)
+                                        (subrange #i(i-reg 0 32) 28 31))))))
+ (list
+
+  ;;  The sequential modules, in specification order except for CNTL-STATE,
+  ;;  which must appear first since its combinational outputs control the
+  ;;  combinational output of the register file.
+
+  ;;  CNTL-STATE.  Scan TI to #i(ALU-MPG 6)
+  (list 'cntl-state
+        (list* 'rw-sig- 'strobe- 'hdack-
+               'we-regs 'we-a-reg 'we-b-reg 'we-i-reg
+               'we-data-out 'we-addr-out 'we-hold- 'we-pc-reg
+               'data-in-select 'dec-addr-out 'select-immediate
+               'alu-c 'alu-zero
+               (append #i(cntl-state 0 5)
+                       (append #i(we-flags 0 4)
+                               (append #i(regs-address 0 4)
+                                       (append #i(alu-op 0 4)
+                                               #i(alu-mpg 0 7))))))
+        #i(reg 40)
+        (list* 'clk 'te-sig 'ti #i(next-state 0 40)))
+
+  ;;  REGS.  Scan #i(ALU-MPG 6) to REGFILE-TO
+  (list 'regs
+        (cons 'regfile-to #i(regfile-out 0 32))
+        'regfile
+        (list* 'clk 'te-sig #i(alu-mpg 6)
+               'we-regs 'disable-regfile- 'test-regfile-
+               (append #i(regs-address 0 4) (bv #i(alu-bus 0 35)))))
+
+  ;;  FLAGS.  Scan REGFILE-TO to #i(FLAGS 3)
+  (list 'cvnz-flags
+        #i(flags 0 4)
+        'flags
+        (list* 'clk 'te-sig 'regfile-to (append #i(we-flags 0 4)
+                                            #i(alu-bus 0 35))))
+  ;;  A-REG.  Scan #i(FLAGS 3) to #i(A-REG 31)
+  (list 'a-reg
+        #i(a-reg 0 32)
+        #i(we-reg 32)
+        (list* 'clk 'we-a-reg 'te-sig #i(FLAGS 3) #i(abi-bus 0 32)))
+  ;;  B-REG.  Scan #i(A-REG 31) to #i(B-REG 31)
+  (list 'b-reg
+        #i(b-reg 0 32)
+        #i(we-reg 32)
+        (list* 'clk 'we-b-reg 'te-sig #i(a-reg 31) #i(abi-bus 0 32)))
+  ;;  I-REG.  Scan #i(B-REG 31) to #i(I-REG 31)
+  (list 'i-reg
+        #i(i-reg 0 32)
+        #i(we-reg 32)
+        (list* 'clk 'we-i-reg 'te-sig #i(b-reg 31) #i(abi-bus 0 32)))
+  ;;  DATA-OUT.  Scan #i(I-REG 31) to #i(DATA-OUT 31)
+  (list 'data-out
+        #i(data-out 0 32)
+        #i(we-reg 32)
+        (list* 'clk 'we-data-out 'te-sig #i(i-reg 31) (bv #i(alu-bus 0 35))))
+  ;;  ADDR-OUT.  Scan #i(DATA-OUT 31) to #i(ADDR-OUT 31)
+  (list 'addr-out
+        #i(addr-out 0 32)
+        #i(we-reg 32)
+        (list* 'clk 'we-addr-out 'te-sig #i(data-out 31)
+               #i(addr-out-bus 0 32)))
+  ;;  RESET.  Scan #i(ADDR-OUT 31) to LAST-RESET-
+  (list 'reset-latch
+        '(last-reset- last-reset-inv)
+        'fd1s
+        (list 'reset- 'clk #i(addr-out 31) 'te-sig))
+  ;;  DTACK.  Scan LAST-RESET- to LAST-DTACK-
+  ;;
+  ;;  The DTACK- input is ORed with STROBE-, to insure that the DTACK- state
+  ;;  is initializable, and remains boolean.
+  '(dtack--or (dtack--or-strobe-) b-or (strobe- dtack-))
+  (list 'dtack-latch
+        '(last-dtack- last-dtack-inv)
+        'fd1s
+        '(dtack--or-strobe- clk last-reset- te-sig))
+  ;;  HOLD.  Scan LAST-DTACK- to LAST-HOLD-
+  (list 'hold-latch
+        '(last-hold- last-hold-inv)
+        'fd1slp
+        '(hold- clk we-hold- last-dtack- te-sig))
+
+  ;;  PC-REG.  Scan LAST-HOLD- to #i(PC-REG 3) [Renamed to TO later].
+  (list 'pc-reg
+        #i(pc-reg 0 4)
+        #i(we-reg 4)
+        (list* 'clk 'we-pc-reg 'te-sig 'last-hold- #i(pc-reg-in 0 4)))
+
+  ;;  Now, the combinational modules.
+
+  ;;  IMMEDIATE/PASS
+  (list 'immediate-pass
+        #i(reg-bus 0 32)
+        'extend-immediate
+        (cons 'select-immediate
+              (append (a-immediate #i(i-reg 0 32))
+                      #i(regfile-out 0 32))))
+  ;;  DEC/PASS
+  (list 'dec-pass
+        #i(addr-out-bus 0 32)
+        #i(dec-pass 32)
+        (cons 'dec-addr-out #i(reg-bus 0 32)))
+  ;;  DATA-IN-MUX
+  ;;
+  ;;  The data input bus is only selected when DTACK- is asserted, in order to
+  ;;  avoid passing garbage onto the ABI-BUS.
+  '(mux-cntl (abi-cntl) b-nand (data-in-select last-dtack-inv))
+  (list 'data-in-mux
+        #i(abi-bus 0 32)
+        #i(tv-if (tree-number (make-tree 32)))
+        (cons 'abi-cntl (append #i(reg-bus 0 32) #i(data-in 0 32))))
+  ;;  ALU
+  (list 'alu
+        #i(alu-bus 0 35)
+        #i(core-alu (tree-number (make-tree 32)))
+        (cons 'alu-c (append #i(a-reg 0 32)
+                             (append #i(b-reg 0 32)
+                                     (cons 'alu-zero
+                                           (append #i(alu-mpg 0 7)
+                                                   #i(alu-op 0 4)))))))
+
+  ;;  NEXT-STATE
+  (list 'next-state
+        #i(next-state 0 40)
+        'next-cntl-state
+        (list* 'last-reset- 'last-dtack- 'last-hold- 'rw-sig-
+               (append #i(cntl-state 0 5)
+                       (append #i(i-reg 0 32)
+                               (append #i(flags 0 4)
+                                       (append #i(pc-reg 0 4)
+                                               #i(regs-address 0 4)))))))
+
+  ;;  TE is buffered due to its high load.
+
+  '(te-buffer (te-sig) b-buf-pwr (te))
+
+  ;;  RW- is buffered to enable the DATA-OUT pads.
+
+  '(rw-buffer (rw-) b-buf (rw-sig-))
+
+  ;;  ADDR-OUT, RW- and STROBE- drivers are enabled whenever HDACK- is not
+  ;;  asserted.
+
+  '(en-addr-out-gate (en-addr-out-) b-not (hdack-))
+
+  ;;  We believe the longest combinational net is the ALU ZERO
+  ;;  computation.
+
+  (list 'timing-gate '(timing) 'id (list #i(alu-bus 2)))
+ 
+  ;;  Rename the scan out
+
+  (list 'scanout '(to) 'id (list #i(pc-reg 3))))
+
+ ;;  States
+
+ '(regs cvnz-flags a-reg b-reg i-reg data-out addr-out
+        reset-latch dtack-latch hold-latch
+        pc-reg cntl-state))
+
+ 
+(disable *1*chip-module*)
+
+(defn chip-module& (netlist)
+  (and (equal (lookup-module 'chip-module netlist)
+              (chip-module*))
+       (let ((netlist (delete-module 'chip-module netlist)))
+         (and
+          (regfile& netlist)
+          (flags& netlist)
+          (we-reg& netlist 32)
+          (fd1s& netlist)
+          (fd1slp& netlist)
+          (we-reg& netlist 4)
+          (reg& netlist 40)
+          (id& netlist)
+          (b-buf-pwr& netlist)
+          (b-buf& netlist)
+          (b-not& netlist)
+          (extend-immediate& netlist)
+          (dec-pass& netlist 32)
+          (tv-if& netlist (make-tree 32))
+          (core-alu& netlist (make-tree 32))
+          (next-cntl-state& netlist)))))
+
+(disable chip-module&)
+
+(defn chip-module$netlist ()
+  (cons
+   (chip-module*)
+   (union (regfile$netlist)
+          (union (union (union (union (flags$netlist)
+                                      (we-reg$netlist 32))
+                               (union (fd1s$netlist)
+                                      (fd1slp$netlist)))
+                        (union (union (union (we-reg$netlist 4)
+                                             (reg$netlist 40))
+                                      (union (id$netlist)
+                                             (extend-immediate$netlist)))
+                               (union (union (dec-pass$netlist 32)
+                                             (tv-if$netlist (make-tree 32)))
+                                      (union (core-alu$netlist (make-tree 32))
+                                             (next-cntl-state$netlist)))))
+                 (union (b-buf-pwr$netlist)
+                        (union (b-buf$netlist)
+                               (b-not$netlist)))))))
+
+;;;  A few crocks for the coming proof.
+
+(prove-lemma equal-length-40-as-collected-nth+subrange ()
+  (implies
+   (and (equal (length l) 40)
+        (properp l))
+   (equal l (append (list-as-collected-nth l 16 0)
+                    (subrange l 16 39))))
+  ;;Hint
+  ((enable open-nth properp-as-null-nthcdr our-car-cdr-elim
+           open-subrange)
+   (disable car-cdr-elim)))
+
+(prove-lemma list-as-cntl-state-crock ()
+  (implies
+   (and (properp list)
+        (equal (length list) 40))
+   (equal list
+          (list*
+           (rw-              list)
+           (strobe-          list)
+           (hdack-           list)
+           (we-regs          list)
+           (we-a-reg         list)
+           (we-b-reg         list)
+           (we-i-reg         list)
+           (we-data-out      list)
+           (we-addr-out      list)
+           (we-hold-         list)
+           (we-pc-reg        list)
+           (data-in-select   list)
+           (dec-addr-out     list)
+           (select-immediate list)
+           (alu-c            list)
+           (alu-zero         list)
+           (append (state list)
+                   (append (we-flags list)
+                           (append (regs-address list)
+                                   (append (alu-op list)
+                                           (alu-mpg list))))))))
+  ;;Hint
+  ((enable-theory control-state-accessor-theory)
+   (enable open-subrange)
+   (use (equal-length-40-as-collected-nth+subrange (l list)))))
+
+(prove-lemma reg-40$value-as-cntl-state (rewrite)
+  (implies
+   (and (reg& netlist 40)
+        (properp state)
+        (equal (length state) 40))
+   (equal (dual-eval 0 #i(reg 40) args state netlist)
+          (list*
+           (rw-              (v-threefix state))
+           (strobe-          (v-threefix state))
+           (hdack-           (v-threefix state))
+           (we-regs          (v-threefix state))
+           (we-a-reg         (v-threefix state))
+           (we-b-reg         (v-threefix state))
+           (we-i-reg         (v-threefix state))
+           (we-data-out      (v-threefix state))
+           (we-addr-out      (v-threefix state))
+           (we-hold-         (v-threefix state))
+           (we-pc-reg        (v-threefix state))
+           (data-in-select   (v-threefix state))
+           (dec-addr-out     (v-threefix state))
+           (select-immediate (v-threefix state))
+           (alu-c            (v-threefix state))
+           (alu-zero         (v-threefix state))
+           (append (state (v-threefix state))
+                   (append (we-flags (v-threefix state))
+                           (append (regs-address (v-threefix state))
+                                   (append (alu-op (v-threefix state))
+                                           (alu-mpg (v-threefix state)))))))))
+  ;;Hint
+  ((enable reg$value)
+   (use (list-as-cntl-state-crock (list (v-threefix state))))))
+
+(disable reg-40$value-as-cntl-state)
+
+(prove-lemma bv-as-subrange (rewrite)
+  (implies
+   (and (geq (length x) 3)
+        (properp x))
+   (equal (bv x) (subrange x 3 (sub1 (length x)))))
+  ;;Hint
+  ((enable bv subrange subrange-0)))
+
+(disable bv-as-subrange)  
+
+;;;  Lemmas
+
+(defn machine-state-invariant (machine-state)
+  (let
+    ((regs               (car machine-state))
+     (flags              (cadr machine-state))
+     (a-reg              (caddr machine-state))
+     (b-reg              (cadddr machine-state))
+     (i-reg              (caddddr machine-state))
+     (data-out           (cadddddr machine-state))
+     (addr-out           (caddddddr machine-state))
+     (last-reset-        (cadddddddr machine-state))
+     (last-dtack-        (caddddddddr machine-state))
+     (last-hold-         (cadddddddddr machine-state))
+     (pc-reg             (caddddddddddr machine-state))
+     (cntl-state         (cadddddddddddr machine-state)))
+    (let
+      ((regs-regs    (car regs))
+       (regs-we      (cadr regs))
+       (regs-data    (caddr regs))
+       (regs-address (cadddr regs)))
+      (and
+       (all-ramp-mem 4 regs-regs)
+       (memory-properp 4 32 regs-regs)
+       (properp regs-data) (equal (length regs-data) 32)
+       (properp regs-address) (equal (length regs-address) 4)
+       (properp flags) (equal (length flags) 4)
+       (properp a-reg) (equal (length a-reg) 32)
+       (properp b-reg) (equal (length b-reg) 32)
+       (properp i-reg) (equal (length i-reg) 32)
+       (properp data-out) (equal (length data-out) 32)
+       (properp addr-out) (equal (length addr-out) 32)
+       (properp pc-reg) (equal (length pc-reg) 4)
+       (properp cntl-state) (equal (length cntl-state) 40)))))
+
+(prove-lemma chip-module$state (rewrite)
+  (let
+    ((regs (list regs-regs regs-we regs-data regs-addr)))
+    (let
+      ((machine-state
+        (list
+         regs flags a-reg b-reg i-reg data-out addr-out
+         last-reset- last-dtack- last-hold- last-pc-reg
+         cntl-state))
+       (inputs
+        (list* clk ti te dtack- reset- hold-
+               disable-regfile- test-regfile-
+               (append pc-reg-in data-in))))
+      (implies
+       (and (chip-module& netlist)
+            (machine-state-invariant machine-state)
+            (equal te f)
+            (equal disable-regfile- t)
+            (equal test-regfile- t)
+            (properp pc-reg-in) (equal (length pc-reg-in) 4)
+            (properp data-in) (equal (length data-in) 32))
+       (equal (dual-eval 2 'chip-module inputs machine-state netlist)
+              (let
+                ((state            (state            (v-threefix cntl-state)))
+                 (rw-              (rw-              (v-threefix cntl-state)))
+                 (strobe-          (strobe-          (v-threefix cntl-state)))
+                 (hdack-           (hdack-           (v-threefix cntl-state)))
+                 (we-regs          (we-regs          (v-threefix cntl-state)))
+                 (we-flags         (we-flags         (v-threefix cntl-state)))
+                 (we-a-reg         (we-a-reg         (v-threefix cntl-state)))
+                 (we-b-reg         (we-b-reg         (v-threefix cntl-state)))
+                 (we-i-reg         (we-i-reg         (v-threefix cntl-state)))
+                 (we-data-out      (we-data-out      (v-threefix cntl-state)))
+                 (we-addr-out      (we-addr-out      (v-threefix cntl-state)))
+                 (we-hold-         (we-hold-         (v-threefix cntl-state)))
+                 (we-pc-reg        (we-pc-reg        (v-threefix cntl-state)))
+                 (data-in-select   (data-in-select   (v-threefix cntl-state)))
+                 (dec-addr-out     (dec-addr-out     (v-threefix cntl-state)))
+                 (select-immediate (select-immediate (v-threefix cntl-state)))
+                 (regs-address     (regs-address     (v-threefix cntl-state)))
+                 (alu-c            (alu-c            (v-threefix cntl-state)))
+                 (alu-op           (alu-op           (v-threefix cntl-state)))
+                 (alu-zero         (alu-zero         (v-threefix cntl-state)))
+                 (alu-mpg          (alu-mpg          (v-threefix cntl-state))))
+                (let
+                  ((reg-bus (f$extend-immediate
+                             select-immediate
+                             (a-immediate (v-threefix i-reg))
+                             (f$read-regs regs-address regs)))
+                   (alu-bus (f$core-alu alu-c
+                                        (v-threefix a-reg)
+                                        (v-threefix b-reg)
+                                        alu-zero alu-mpg alu-op
+                                        (make-tree 32))))
+                  (let
+                    ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+                     (abi-bus (fv-if (f-nand data-in-select
+                                             (f-not last-dtack-))
+                                     reg-bus
+                                     data-in)))
+                    (list
+                     (f$write-regs we-regs regs-address regs (bv alu-bus))
+                     (f$update-flags flags we-flags alu-bus)
+                     (fv-if we-a-reg abi-bus a-reg)
+                     (fv-if we-b-reg abi-bus b-reg)
+                     (fv-if we-i-reg abi-bus i-reg)
+                     (fv-if we-data-out (bv alu-bus) data-out)
+                     (fv-if we-addr-out addr-out-bus addr-out)
+                     (f-buf reset-)
+                     (f-or strobe- dtack-)
+                     (f-if we-hold- hold- last-hold-)
+                     (fv-if we-pc-reg pc-reg-in last-pc-reg)
+                     (v-threefix (f$next-cntl-state
+                                  (f-buf last-reset-)
+                                  (f-buf last-dtack-)
+                                  (f-buf last-hold-)
+                                  rw-
+                                  state
+                                  (v-threefix i-reg)
+                                  (v-threefix flags)
+                                  (v-threefix last-pc-reg)
+                                  regs-address))))))))))
+  ;;Hint
+  ((enable chip-module& chip-module*$destructure
+           regfile$value regfile$state flags$value flags$state
+           we-reg$value we-reg$state fd1s$value fd1s$state
+           fd1slp$value fd1slp$state reg$value reg$state id$value
+           b-buf-pwr$value b-buf$value b-not$value dec-pass$value tv-if$value
+           core-alu$value next-cntl-state$value extend-immediate$value
+           reg-40$value-as-cntl-state b-or$value b-nand$value
+           bv-as-subrange a-immediate f-buf-delete-lemmas)
+   (disable indices *1*indices open-indices nth open-nth *1*nth
+            make-tree *1*make-tree threefix f-gates=b-gates
+            open-v-threefix)
+   (disable-theory f-gates b-gates)
+   (enable-theory control-state-accessor-theory)))
+
+(prove-lemma chip-module$value (rewrite)
+  (let
+    ((regs (list regs-regs regs-we regs-data regs-addr)))
+    (let
+      ((machine-state
+        (list
+         regs flags a-reg b-reg i-reg data-out addr-out
+         last-reset- last-dtack- last-hold- last-pc-reg
+         cntl-state))
+       (inputs
+        (list* clk ti te dtack- reset- hold-
+               disable-regfile- test-regfile-
+               (append pc-reg-in data-in))))
+      (implies
+       (and (chip-module& netlist)
+            (machine-state-invariant machine-state)
+            (properp pc-reg-in) (equal (length pc-reg-in) 4)
+            (properp data-in) (equal (length data-in) 32))
+       (equal (dual-eval 0 'chip-module inputs machine-state netlist)
+              (let
+                ((state            (state            (v-threefix cntl-state)))
+                 (rw-              (rw-              (v-threefix cntl-state)))
+                 (strobe-          (strobe-          (v-threefix cntl-state)))
+                 (hdack-           (hdack-           (v-threefix cntl-state)))
+                 (we-regs          (we-regs          (v-threefix cntl-state)))
+                 (we-flags         (we-flags         (v-threefix cntl-state)))
+                 (we-a-reg         (we-a-reg         (v-threefix cntl-state)))
+                 (we-b-reg         (we-b-reg         (v-threefix cntl-state)))
+                 (we-i-reg         (we-i-reg         (v-threefix cntl-state)))
+                 (we-data-out      (we-data-out      (v-threefix cntl-state)))
+                 (we-addr-out      (we-addr-out      (v-threefix cntl-state)))
+                 (we-hold-         (we-hold-         (v-threefix cntl-state)))
+                 (we-pc-reg        (we-pc-reg        (v-threefix cntl-state)))
+                 (data-in-select   (data-in-select   (v-threefix cntl-state)))
+                 (dec-addr-out     (dec-addr-out     (v-threefix cntl-state)))
+                 (select-immediate (select-immediate (v-threefix cntl-state)))
+                 (regs-address     (regs-address     (v-threefix cntl-state)))
+                 (alu-c            (alu-c            (v-threefix cntl-state)))
+                 (alu-op           (alu-op           (v-threefix cntl-state)))
+                 (alu-zero         (alu-zero         (v-threefix cntl-state)))
+                 (alu-mpg          (alu-mpg          (v-threefix cntl-state))))
+                (let
+                  ((reg-bus (f$extend-immediate
+                             select-immediate
+                             (a-immediate (v-threefix i-reg))
+                             (f$read-regs regs-address regs)))
+                   (alu-bus (f$core-alu alu-c
+                                        (v-threefix a-reg)
+                                        (v-threefix b-reg)
+                                        alu-zero alu-mpg alu-op
+                                        (make-tree 32))))
+                  (let
+                    ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+                     (abi-bus (fv-if (f-nand data-in-select
+                                             (f-not last-dtack-))
+                                     reg-bus
+                                     data-in)))
+                    (list* (nth 3 (v-threefix last-pc-reg))
+                           (nth 2 alu-bus)
+                           hdack-
+                           (f-not hdack-)
+                           (f-buf rw-)
+                           strobe-
+                           (append5
+                            (v-threefix addr-out)
+                            (v-threefix data-out)
+                            (v-threefix flags)
+                            state
+                            (subrange (v-threefix i-reg) 28 31))))))))))
+  ;;Hint
+  ((enable chip-module& chip-module*$destructure
+           regfile$value regfile$state flags$value flags$state
+           we-reg$value we-reg$state fd1s$value fd1s$state
+           fd1slp$value fd1slp$state reg$value reg$state id$value
+           b-buf-pwr$value b-buf$value b-not$value dec-pass$value tv-if$value
+           core-alu$value next-cntl-state$value extend-immediate$value
+           reg-40$value-as-cntl-state b-or$value b-nand$value
+           bv-as-subrange a-immediate f-buf-delete-lemmas)
+   (disable indices *1*indices open-indices nth open-nth *1*nth
+            make-tree *1*make-tree threefix f-gates=b-gates
+            open-v-threefix)
+   (disable-theory f-gates b-gates)
+   (enable-theory control-state-accessor-theory)))
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    CHIP
+;;;
+;;;    The entire chip, with pads, as a module.
+;;;
+;;; INPUTS:
+;;;
+;;;  The system clock input is a special two-pad, clock-driver buffer.
+;;;  The other inputs are ordinary TTL inputs.
+;;;
+;;;    CLK  -- The system clock
+;;;
+;;;    TI   -- Test input (Scan in)
+;;;    TE   -- Test enable (Scan enable)
+;;;
+;;;    DTACK-  --  DTACK input
+;;;    RESET-  --  RESET input
+;;;    HOLD-   --  HOLD input
+;;;
+;;;    DISABLE-REGFILE-   --  Must be high to write enable the register
+;;;                           file RAM.  During scan-in, DISABLE-REGFILE- is
+;;;                           held low to avoid spurious writes to the RAM.
+;;;
+;;;    TEST-REGFILE-    --  Normally high.  When low, forces the register file
+;;;                         output mux to pass data directly from the RAM.
+;;;
+;;;    PC-REG-IN[0..3]  --  The PC-REG inputs.
+;;;
+;;;
+;;; BI-DIRECTS:
+;;;
+;;;    DATA-BUS[0..31]  --  The bi-directional data bus. (Controlled by RW-)
+;;;
+;;; OUTPUTS:
+;;;
+;;;  The memory control lines and the ADDR-OUT lines are tri-state.
+;;;  The other output signals are ordinary TTL outputs.
+;;;
+;;;    PO      --  Parametric Output.
+;;;    TO      --  Test Output (Scan out)
+;;;    TIMING  --  The net corresponding to the longest combinational path.
+;;;                Used to verify the speed of the device.
+;;;                
+;;;    HDACK-   --  Hold Acknowledge
+;;;
+;;;    RW-      --  Memory control lines  (Tristate)
+;;;    STROBE-
+;;;
+;;;    ADDR-OUT[0..31]  --  Address bus (Tristate)
+;;;
+;;;    FLAGS[0..3]     --  Observability pins
+;;;    CNTL-STATE[0..4]
+;;;    I-REG[28..31]
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(module-generator
+ (chip*)
+
+ 'chip
+
+ (list* 'clk 'ti 'te 'dtack- 'reset- 'hold-
+        'disable-regfile- 'test-regfile-
+        (append #i(pc-reg-in 0 4)
+                #i(data-bus 0 32)))
+
+ (list* 'po 'to 'timing 'hdack- 'rw- 'strobe- 
+        (append #i(addr-out 0 32)
+                (append #i(data-bus 0 32)
+                        (append #i(flags 0 4)
+                                (append #i(cntl-state 0 5)
+                                        #i(i-reg 28 4))))))
+ (list
+
+  ;;  The processor core.
+
+  (list 'body
+        (list* 'i-to 'i-timing 'i-hdack- 'i-en-addr-out- 'i-rw- 'i-strobe-
+               (append #i(i-addr-out 0 32)
+                       (append #i(i-data-out 0 32)
+                               (append #i(i-flags 0 4)
+                                       (append #i(i-cntl-state 0 5)
+                                               #i(i-i-reg 28 4))))))
+
+        'chip-module
+        (list* 'i-clk 'i-ti 'i-te 'i-dtack- 'i-reset-
+               'i-hold- 'i-disable-regfile- 'i-test-regfile-
+               (append #i(i-pc-reg 0 4)
+                       #i(i-data-in 0 32))))
+
+  ;;  The input pads.  The pads are ordered such that the inputs to PROCMON are
+  ;;  not from bidirect pads (as required), while maintaining the ordering
+  ;;  required by the DUAL-EVAL interpreter.
+
+  '(plus-5 (b-true-p) vdd-parametric())
+
+  '(clock-pad (i-clk clk-po) ttl-clk-input (clk b-true-p))
+  '(ti-pad    (i-ti  ti-po)  ttl-input     (ti b-true-p))
+  '(te-pad    (i-te  te-po)  ttl-input     (te ti-po))
+
+  '(dtack-pad (i-dtack- dtack-po) ttl-input (dtack- te-po))
+  '(reset-pad (i-reset- reset-po) ttl-input (reset- dtack-po))
+  '(hold-pad  (i-hold- hold-po)   ttl-input (hold- reset-po))
+
+  '(disable-regfile-pad (i-disable-regfile- disable-regfile-po)
+                        ttl-input (disable-regfile- hold-po))
+  '(test-regfile-pad (i-test-regfile- test-regfile-po)
+                     ttl-input (test-regfile- disable-regfile-po))
+
+  ;;  DATA-BUS
+
+  (list 'data-bus-pads
+        (cons 'data-bus-po (append #i(data-bus 0 32) #i(i-data-in 0 32)))
+        #i(ttl-bidirect-pads 32)
+        (list* 'i-rw- 'test-regfile-po
+               (append #i(data-bus 0 32) #i(i-data-out 0 32))))
+
+  ;;  PC-REG
+
+  (list 'pc-reg-pads
+        (cons 'pc-reg-po #i(i-pc-reg 0 4))
+        #i(ttl-input-pads 4)
+        (cons 'data-bus-po #i(pc-reg-in 0 4)))
+
+  ;;  The process monitor -- required by LSI Logic.
+
+  '(monitor (i-po) procmon (pc-reg-po clk-po b-true-p b-true-p))
+
+  ;;  The output pads.
+
+  '(po-pad     (po)      ttl-output-parametric (i-po))
+  '(to-pad     (to)      ttl-output (i-to))
+  '(timing-pad (timing)  ttl-output-fast (i-timing))
+
+  '(hdack-pad   (hdack-)  ttl-output-fast (i-hdack-))
+  '(rw-pad      (rw-)     ttl-tri-output-fast (i-rw- i-en-addr-out-))
+  '(strobe-pad  (strobe-) ttl-tri-output-fast (i-strobe- i-en-addr-out-))
+
+  ;;  ADDR-OUT
+
+  (list 'addr-out-pads
+        #i(addr-out 0 32)
+        #i(ttl-tri-output-pads 32)
+        (cons 'i-en-addr-out- #i(i-addr-out 0 32)))
+
+  ;;  FLAGS
+
+  (list 'flags-pads
+        #i(flags 0 4)
+        #i(ttl-output-pads 4)
+        #i(i-flags 0 4))
+
+  ;;  CNTL-STATE
+
+  (list 'cntl-state-pads
+        #i(cntl-state 0 5)
+        #i(ttl-output-pads 5)
+        #i(i-cntl-state 0 5))
+
+  ;;  I-REG [28..31]
+
+  (list 'i-reg-pads
+        #i(i-reg 28 4)
+        #i(ttl-output-pads 4)
+        #i(i-i-reg 28 4))
+
+  )
+ ;;  The processor state
+ 
+ 'body)
+
+(disable *1*chip*)
+
+
+(defn chip& (netlist)
+  (and (equal (lookup-module 'chip netlist)
+              (chip*))
+       (let ((netlist (delete-module 'chip netlist)))
+         (and
+          (vdd-parametric& netlist)
+          (ttl-clk-input& netlist)
+          (ttl-input& netlist)
+          (ttl-input-pads& netlist 4)
+          (chip-module& netlist)
+          (ttl-bidirect-pads& netlist 32)
+          (ttl-output-parametric& netlist)
+          (ttl-output& netlist)
+          (ttl-output-fast& netlist)
+          (ttl-tri-output-fast& netlist)
+          (ttl-tri-output-pads& netlist 32)
+          (ttl-output-pads& netlist 4)
+          (ttl-output-pads& netlist 5)
+          (procmon& netlist)))))
+
+(disable chip&)
+
+(defn chip$netlist ()
+  (cons
+   (chip*)
+   (union (union (union (union (ttl-bidirect-pads$netlist 32)
+                               (chip-module$netlist))
+                        (union (ttl-input$netlist)
+                               (ttl-input-pads$netlist 4)))
+                 (union (union (ttl-clk-input$netlist)
+                               (vdd-parametric$netlist))
+                        (union (ttl-output-parametric$netlist)
+                               (ttl-output$netlist))))
+          (union (union (union (ttl-output-fast$netlist)
+                               (ttl-tri-output-fast$netlist))
+                        (union (ttl-tri-output-pads$netlist 32)
+                               (ttl-output-pads$netlist 4)))
+                 (union (ttl-output-pads$netlist 5)
+                        (procmon$netlist))))))
+
+
+(prove-lemma chip$state (rewrite)
+  (let
+    ((regs (list regs-regs regs-we regs-data regs-addr)))
+    (let
+      ((machine-state
+        (list
+         regs flags a-reg b-reg i-reg data-out addr-out
+         last-reset- last-dtack- last-hold- last-pc-reg
+         cntl-state))
+       (inputs
+        (list* clk ti te dtack- reset- hold-
+               disable-regfile- test-regfile-
+               (append pc-reg-in data-in))))
+      (implies
+       (and (chip& netlist)
+            (machine-state-invariant machine-state)
+            (equal te f)
+            (equal disable-regfile- t)
+            (equal test-regfile- t)
+            (properp pc-reg-in) (equal (length pc-reg-in) 4)
+            (properp data-in) (equal (length data-in) 32))
+       (equal (dual-eval 2 'chip inputs machine-state netlist)
+              (let
+                ((state            (state            (v-threefix cntl-state)))
+                 (rw-              (rw-              (v-threefix cntl-state)))
+                 (strobe-          (strobe-          (v-threefix cntl-state)))
+                 (hdack-           (hdack-           (v-threefix cntl-state)))
+                 (we-regs          (we-regs          (v-threefix cntl-state)))
+                 (we-flags         (we-flags         (v-threefix cntl-state)))
+                 (we-a-reg         (we-a-reg         (v-threefix cntl-state)))
+                 (we-b-reg         (we-b-reg         (v-threefix cntl-state)))
+                 (we-i-reg         (we-i-reg         (v-threefix cntl-state)))
+                 (we-data-out      (we-data-out      (v-threefix cntl-state)))
+                 (we-addr-out      (we-addr-out      (v-threefix cntl-state)))
+                 (we-hold-         (we-hold-         (v-threefix cntl-state)))
+                 (we-pc-reg        (we-pc-reg        (v-threefix cntl-state)))
+                 (data-in-select   (data-in-select   (v-threefix cntl-state)))
+                 (dec-addr-out     (dec-addr-out     (v-threefix cntl-state)))
+                 (select-immediate (select-immediate (v-threefix cntl-state)))
+                 (regs-address     (regs-address     (v-threefix cntl-state)))
+                 (alu-c            (alu-c            (v-threefix cntl-state)))
+                 (alu-op           (alu-op           (v-threefix cntl-state)))
+                 (alu-zero         (alu-zero         (v-threefix cntl-state)))
+                 (alu-mpg          (alu-mpg          (v-threefix cntl-state))))
+                (let
+                  ((reg-bus (f$extend-immediate
+                             select-immediate
+                             (a-immediate (v-threefix i-reg))
+                             (f$read-regs regs-address regs)))
+                   (alu-bus (f$core-alu alu-c
+                                        (v-threefix a-reg)
+                                        (v-threefix b-reg)
+                                        alu-zero alu-mpg alu-op
+                                        (make-tree 32))))
+                  (let
+                    ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+                     (abi-bus
+                      (fv-if (f-nand data-in-select
+                                     (f-not last-dtack-))
+                             reg-bus
+                             (v-wire data-in 
+                                     (vft-buf (f-not (f-buf rw-))
+                                              (v-threefix data-out))))))
+                    (list
+                     (f$write-regs we-regs regs-address regs (bv alu-bus))
+                     (f$update-flags flags we-flags alu-bus)
+                     (fv-if we-a-reg abi-bus a-reg)
+                     (fv-if we-b-reg abi-bus b-reg)
+                     (fv-if we-i-reg abi-bus i-reg)
+                     (fv-if we-data-out (bv alu-bus) data-out)
+                     (fv-if we-addr-out addr-out-bus addr-out)
+                     (f-buf reset-)
+                     (f-or strobe- (f-buf dtack-))
+                     (f-if we-hold- (f-buf hold-) last-hold-)
+                     (fv-if we-pc-reg pc-reg-in last-pc-reg)
+                     (v-threefix (f$next-cntl-state
+                                  (f-buf last-reset-)
+                                  (f-buf last-dtack-)
+                                  (f-buf last-hold-)
+                                  rw-
+                                  state
+                                  (v-threefix i-reg)
+                                  (v-threefix flags)
+                                  (v-threefix last-pc-reg)
+                                  regs-address))))))))))
+  ;;Hint
+  ((enable chip& chip*$destructure
+           chip-module$value chip-module$state
+           vdd-parametric$value
+           ttl-clk-input$value ttl-input$value
+           ttl-output$value ttl-tri-output$value
+           ttl-output-fast$value ttl-tri-output-fast$value
+           ttl-input-pads$value ttl-output-pads$value
+           ttl-bidirect-pads$value ttl-tri-output-pads$value
+           f-buf-delete-lemmas)
+   (disable indices *1*indices open-indices nth open-nth *1*nth
+            make-tree *1*make-tree threefix f-gates=b-gates
+            open-v-threefix append-v-threefix)
+   (disable-theory f-gates b-gates)))
+
+(prove-lemma chip$value (rewrite)
+  (let
+    ((regs (list regs-regs regs-we regs-data regs-addr)))
+    (let
+      ((machine-state
+        (list
+         regs flags a-reg b-reg i-reg data-out addr-out
+         last-reset- last-dtack- last-hold- last-pc-reg
+         cntl-state))
+       (inputs
+        (list* clk ti te dtack- reset- hold-
+               disable-regfile- test-regfile-
+               (append pc-reg-in data-in))))
+      (implies
+       (and (chip& netlist)
+            (machine-state-invariant machine-state)
+            (properp pc-reg-in) (equal (length pc-reg-in) 4)
+            (properp data-in) (equal (length data-in) 32))
+       (equal (cdr (dual-eval 0 'chip inputs machine-state netlist))
+              (let
+                ((state            (state            (v-threefix cntl-state)))
+                 (rw-              (rw-              (v-threefix cntl-state)))
+                 (strobe-          (strobe-          (v-threefix cntl-state)))
+                 (hdack-           (hdack-           (v-threefix cntl-state)))
+                 (we-regs          (we-regs          (v-threefix cntl-state)))
+                 (we-flags         (we-flags         (v-threefix cntl-state)))
+                 (we-a-reg         (we-a-reg         (v-threefix cntl-state)))
+                 (we-b-reg         (we-b-reg         (v-threefix cntl-state)))
+                 (we-i-reg         (we-i-reg         (v-threefix cntl-state)))
+                 (we-data-out      (we-data-out      (v-threefix cntl-state)))
+                 (we-addr-out      (we-addr-out      (v-threefix cntl-state)))
+                 (we-hold-         (we-hold-         (v-threefix cntl-state)))
+                 (we-pc-reg        (we-pc-reg        (v-threefix cntl-state)))
+                 (data-in-select   (data-in-select   (v-threefix cntl-state)))
+                 (dec-addr-out     (dec-addr-out     (v-threefix cntl-state)))
+                 (select-immediate (select-immediate (v-threefix cntl-state)))
+                 (regs-address     (regs-address     (v-threefix cntl-state)))
+                 (alu-c            (alu-c            (v-threefix cntl-state)))
+                 (alu-op           (alu-op           (v-threefix cntl-state)))
+                 (alu-zero         (alu-zero         (v-threefix cntl-state)))
+                 (alu-mpg          (alu-mpg          (v-threefix cntl-state))))
+                (let
+                  ((reg-bus (f$extend-immediate
+                             select-immediate
+                             (a-immediate (v-threefix i-reg))
+                             (f$read-regs regs-address regs)))
+                   (alu-bus (f$core-alu alu-c
+                                        (v-threefix a-reg)
+                                        (v-threefix b-reg)
+                                        alu-zero alu-mpg alu-op
+                                        (make-tree 32))))
+                  (let
+                    ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+                     (abi-bus
+                      (fv-if (f-nand data-in-select
+                                     (f-not last-dtack-))
+                             reg-bus
+                             (v-wire data-in 
+                                     (vft-buf (f-not rw-)
+                                              (v-threefix data-out))))))
+                    (list* (f-buf (nth 3 (v-threefix last-pc-reg)))
+                           (f-buf (nth 2 alu-bus))
+                           (f-buf hdack-)
+                           (ft-buf (f-buf hdack-) (f-buf rw-))
+                           (ft-buf (f-buf hdack-) strobe-)
+                           (append5
+                            (vft-buf (f-buf hdack-) (v-threefix addr-out))
+                            (vft-buf (f-not (f-buf rw-)) (v-threefix data-out))
+                            (v-threefix flags)
+                            (v-threefix state)
+                            (v-threefix
+                             (subrange (v-threefix i-reg) 28 31)))))))))))
+  ;;Hint
+  ((enable chip& chip*$destructure
+           chip-module$value ;chip-module$state
+           vdd-parametric$value
+           ttl-clk-input$value ttl-input$value
+           ttl-output$value ttl-tri-output$value
+           ttl-output-fast$value ttl-tri-output-fast$value
+           ttl-input-pads$value ttl-output-pads$value
+           ttl-bidirect-pads$value ttl-tri-output-pads$value
+           f-not-f-not=f-buf state)
+   (disable indices *1*indices open-indices nth open-nth *1*nth
+            make-tree *1*make-tree make-list *1*make-list
+            threefix f-gates=b-gates open-v-threefix append-v-threefix)
+   (disable-theory f-gates b-gates)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    CHIP-SYSTEM
+;;;
+;;;    CHIP + MEMORY
+;;;
+;;; INPUTS:
+;;;
+;;;    CLK  -- The system clock
+;;;
+;;;    TI   -- Test input (Scan in)
+;;;    TE   -- Test enable (Scan enable)
+;;;
+;;;    RESET-  --  RESET input
+;;;    HOLD-   --  HOLD input
+;;;
+;;;    DISABLE-REGFILE-   --  Must be high to write enable the register
+;;;                           file RAM.  During scan-in, DISABLE-REGFILE- is
+;;;                           held low to avoid spurious writes to the RAM.
+;;;
+;;;    TEST-REGFILE-    --  Normally high.  When low, forces the register file
+;;;                         output mux to pass data directly from the RAM.
+;;;
+;;;    PC-REG-IN[0..3]  --  The PC-REG inputs.
+;;;
+;;;
+;;; OUTPUTS:
+;;;
+;;;    None.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(module-generator
+ (chip-system*)
+ 'chip-system
+ ;;  Inputs
+ (list* 'clk 'ti 'te 'reset- 'hold-
+        'disable-regfile- 'test-regfile-
+        #i(pc-reg 0 4))
+ ;;  Outputs
+ ()
+ ;;  Body
+ (list
+  ;;  The FM9001.
+  (list 'fm9001
+        (list* 'po 'to 'timing 'hdack- 'rw- 'strobe- 
+               (append #i(addr-out 0 32)
+                       (append #i(fm9001-data 0 32)
+                               (append #i(flags 0 4)
+                                       (append #i(cntl-state 0 5)
+                                               #i(i-reg 28 4))))))
+        'chip
+        (list* 'clk 'ti 'te 'dtack- 'reset- 'hold-
+               'disable-regfile- 'test-regfile-
+               (append #i(pc-reg 0 4)
+                       #i(data-bus 0 32))))
+  ;;  Memory control busses.
+  '(pullup-rw- (rw-bus) pullup (rw-))
+
+  '(pullup-strobe- (strobe-bus) pullup (strobe-))
+
+  (list 'address
+        #i(addr-bus 0 32)
+        #i(v-pullup 32)
+        #i(addr-out 0 32))
+  
+  ;;  Memory
+  (list 'mem
+        (list* 'dtack- #i(mem-data 0 32))
+        'mem-32x32
+        (list* 'rw-bus 'strobe-bus
+               (append #i(addr-bus 0 32) #i(data-bus 0 32))))
+
+  ;;  Data busses.
+  (list 'data-wire
+        #i(data-wire 0 32)
+        #i(v-wire 32)
+        (append #i(fm9001-data 0 32) #i(mem-data 0 32)))
+
+  (list 'data
+        #i(data-bus 0 32)
+        #i(v-pullup 32)
+        #i(data-wire 0 32)))
+
+ ;;  State
+ '(fm9001 mem))
+
+(disable *1*chip-system*)
+
+(defn chip-system& (netlist)
+  (and (equal (lookup-module 'chip-system netlist)
+              (chip-system*))
+       (let ((netlist (delete-module 'chip-system netlist)))
+         (and (chip& netlist)
+              (pullup& netlist)
+              (v-pullup& netlist 32)
+              (mem-32x32& netlist)
+              (v-wire& netlist 32)))))
+              
+
+(disable chip-system&)
+
+(defn chip-system$netlist ()
+  (cons (chip-system*)
+        (union
+         (pullup$netlist)
+         (union
+          (v-pullup$netlist 32)
+          (union
+           (mem-32x32$netlist)
+           (union (v-wire$netlist 32)
+                  (chip$netlist)))))))
+
+
+(defn memory-state-invariant (mem-state)
+  (let
+    ((mem              (car mem-state))
+     (mem-cntl         (cadr mem-state))
+     (mem-clock        (caddr mem-state))
+     (mem-count        (cadddr mem-state))
+     (mem-dtack        (caddddr mem-state))
+     (mem-last-rw-     (cadddddr mem-state))
+     (mem-last-address (caddddddr mem-state))
+     (mem-last-data    (cadddddddr mem-state)))
+    (and (memory-properp 32 32 mem)
+         (properp mem-last-address)
+         (properp mem-last-data)
+         (equal (length mem-last-data) 32))))
+
+(defn chip-system-invariant (state)
+  (and (machine-state-invariant (car state))
+       (memory-state-invariant (cadr state))))
+
+(prove-lemma equal-memory-value-for-chip-system$state (rewrite)
+  (equal (memory-value state strobe rw- address (collect-value args alist))
+         (memory-value state strobe rw- address
+                       (make-list (length args) (x)))))
+
+(prove-lemma chip-system$state-help (rewrite)
+  (let
+    ((regs (list regs-regs regs-we regs-data regs-addr)))
+    (let
+      ((machine-state
+        (list
+         regs flags a-reg b-reg i-reg data-out addr-out
+         last-reset- last-dtack- last-hold- last-pc-reg
+         cntl-state))
+       (inputs
+        (list* clk ti te reset- hold-
+               disable-regfile- test-regfile-
+               pc-reg-in)))
+      (implies
+       (and (chip-system& netlist)
+            (chip-system-invariant (list machine-state mem-state))
+            (equal te f)
+            (equal disable-regfile- t)
+            (equal test-regfile- t)
+            (properp pc-reg-in) (equal (length pc-reg-in) 4))
+       (equal (dual-eval 2 'chip-system
+                         inputs (list machine-state mem-state) netlist)
+              (let
+                ((state            (state            (v-threefix cntl-state)))
+                 (rw-              (rw-              (v-threefix cntl-state)))
+                 (strobe-          (strobe-          (v-threefix cntl-state)))
+                 (hdack-           (hdack-           (v-threefix cntl-state)))
+                 (we-regs          (we-regs          (v-threefix cntl-state)))
+                 (we-flags         (we-flags         (v-threefix cntl-state)))
+                 (we-a-reg         (we-a-reg         (v-threefix cntl-state)))
+                 (we-b-reg         (we-b-reg         (v-threefix cntl-state)))
+                 (we-i-reg         (we-i-reg         (v-threefix cntl-state)))
+                 (we-data-out      (we-data-out      (v-threefix cntl-state)))
+                 (we-addr-out      (we-addr-out      (v-threefix cntl-state)))
+                 (we-hold-         (we-hold-         (v-threefix cntl-state)))
+                 (we-pc-reg        (we-pc-reg        (v-threefix cntl-state)))
+                 (data-in-select   (data-in-select   (v-threefix cntl-state)))
+                 (dec-addr-out     (dec-addr-out     (v-threefix cntl-state)))
+                 (select-immediate (select-immediate (v-threefix cntl-state)))
+                 (regs-address     (regs-address     (v-threefix cntl-state)))
+                 (alu-c            (alu-c            (v-threefix cntl-state)))
+                 (alu-op           (alu-op           (v-threefix cntl-state)))
+                 (alu-zero         (alu-zero         (v-threefix cntl-state)))
+                 (alu-mpg          (alu-mpg          (v-threefix cntl-state))))
+                (let
+                  ((ext-addr-out
+                    (v-pullup (vft-buf (f-buf hdack-)
+                                       (v-threefix addr-out))))
+                   (ext-rw-
+                    (f-pullup (ft-buf (f-buf hdack-) (f-buf  rw-))))
+                   (ext-strobe-
+                    (f-pullup (ft-buf (f-buf hdack-) strobe-)))
+                   (ext-data-out
+                    (vft-buf (f-not (f-buf rw-)) (v-threefix data-out))))
+                  (let
+                    ((mem-response
+                      (memory-value mem-state ext-strobe- ext-rw-
+                                    ext-addr-out
+                                    (make-list 32 (x)))))
+                    (let
+                      ((dtack- (car mem-response))
+                       (ext-data-bus (v-pullup
+                                      (v-wire ext-data-out
+                                              (cdr mem-response)))))
+                      (let
+                        ((reg-bus (f$extend-immediate
+                                   select-immediate
+                                   (a-immediate (v-threefix i-reg))
+                                   (f$read-regs regs-address regs)))
+                         (alu-bus (f$core-alu alu-c
+                                              (v-threefix a-reg)
+                                              (v-threefix b-reg)
+                                              alu-zero alu-mpg alu-op
+                                              (make-tree 32)))
+                         (data-in (v-threefix
+                                   (v-wire ext-data-bus
+                                           ext-data-out))))
+                        (let
+                          ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+                           (abi-bus
+                            (fv-if (f-nand data-in-select
+                                           (f-not last-dtack-))
+                                   reg-bus
+                                   data-in)))
+                          (list
+                           (list
+                            (f$write-regs we-regs regs-address regs
+                                          (bv alu-bus))
+                            (f$update-flags flags we-flags alu-bus)
+                            (fv-if we-a-reg abi-bus a-reg)
+                            (fv-if we-b-reg abi-bus b-reg)
+                            (fv-if we-i-reg abi-bus i-reg)
+                            (fv-if we-data-out (bv alu-bus) data-out)
+                            (fv-if we-addr-out addr-out-bus addr-out)
+                            (f-buf reset-)
+                            (f-or strobe- (f-buf dtack-))
+                            (f-if we-hold- (f-buf hold-) last-hold-)
+                            (fv-if we-pc-reg pc-reg-in last-pc-reg)
+                            (v-threefix (f$next-cntl-state
+                                         (f-buf last-reset-)
+                                         (f-buf last-dtack-)
+                                         (f-buf last-hold-)
+                                         rw-
+                                         state
+                                         (v-threefix i-reg)
+                                         (v-threefix flags)
+                                         (v-threefix last-pc-reg)
+                                         regs-address)))
+                           (next-memory-state
+                            mem-state ext-strobe- ext-rw-
+                            ext-addr-out
+                            ext-data-bus))))))))))))
+  ;;Hint
+  ((enable chip-system& chip-system*$destructure
+           chip$value chip$state
+           mem-32x32$structured-value mem-32x32$structured-state
+           pullup$value v-pullup$value v-wire$value)
+   (disable indices *1*indices open-indices nth open-nth *1*nth
+            make-tree *1*make-tree threefix f-gates=b-gates
+            open-v-threefix append-v-threefix
+            next-memory-state memory-value *1*make-list)
+   (disable-theory f-gates b-gates)))
+
+(disable chip-system$state-help)
+
+(prove-lemma chip-system$state (rewrite)
+  (let
+    ((regs (list regs-regs regs-we regs-data regs-addr)))
+    (let
+      ((machine-state
+        (list
+         regs flags a-reg b-reg i-reg data-out addr-out
+         last-reset- last-dtack- last-hold- last-pc-reg
+         cntl-state))
+       (inputs
+        (list* clk ti te reset- hold-
+               disable-regfile- test-regfile-
+               pc-reg-in)))
+      (implies
+       (and (chip-system& netlist)
+            (chip-system-invariant (list machine-state mem-state))
+            (equal te f)
+            (equal disable-regfile- t)
+            (equal test-regfile- t)
+            (properp pc-reg-in) (equal (length pc-reg-in) 4))
+       (equal (dual-eval 2 'chip-system
+                         inputs (list machine-state mem-state) netlist)
+              (fm9001-next-state (list machine-state mem-state)
+                                 (list* reset- hold- pc-reg-in))))))
+  ;;Hint
+  ((enable chip-system$state-help fm9001-next-state open-nth
+           subrange-cons)
+   (disable indices *1*indices open-indices nth *1*nth
+            make-tree *1*make-tree threefix f-gates=b-gates
+            open-v-threefix append-v-threefix
+            next-memory-state memory-value *1*make-list
+            machine-state-invariant memory-state-invariant)
+   (enable-theory fm9001-hardware-state-accessors
+                  fm9001-external-input-accessors)
+   (disable-theory f-gates b-gates)))
+
+(disable chip-system$state)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Induction proofs and specifications.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(prove-lemma next-memory-state-preserves-memory-invariant (rewrite)
+  (implies
+   (and (memory-state-invariant mem-state)
+        (properp data)
+        (equal (length data) 32)
+        (equal (length address) 32))
+   (memory-state-invariant
+    (next-memory-state mem-state strobe- rw- address data)))
+  ;;Hint
+  ((enable next-memory-state)))
+
+(prove-lemma memory-properp-dual-port-ram-state-crock (rewrite)
+  (implies
+   (and
+    (memory-properp 4 32 regs)
+    (equal (length a-address) 4)
+    (equal (length b-address) 4)
+    (properp data)
+    (equal (length data) 32))
+   (memory-properp
+    4 32
+    (dual-port-ram-state
+     32 4
+     (append a-address (append b-address (cons we data))) regs))))
+
+(prove-lemma all-ramp-mem-dual-port-ram-state-crock (rewrite)
+  (implies
+   (and
+    (all-ramp-mem 4 regs)
+    (equal (length a-address) 4)
+    (equal (length b-address) 4)
+    (properp data)
+    (equal (length data) 32))
+   (all-ramp-mem
+    4
+    (dual-port-ram-state
+     32 4
+     (append a-address (append b-address (cons we data))) regs))))
+
+(prove-lemma fm9001-preserves-chip-system-invariant (rewrite)
+  (implies
+   (and (chip-system-invariant state)
+        (properp (pc-reg-input inputs))
+        (equal (length (pc-reg-input inputs)) 4))
+   (chip-system-invariant
+    (fm9001-next-state state inputs)))
+  ;;Hint
+  ((enable fm9001-next-state f$write-regs regs-address cntl-state open-nth)
+   (disable *1*make-tree *1*make-list open-v-threefix threefix
+            dual-port-ram-state)
+   (enable-theory fm9001-hardware-state-accessors)
+   (disable-theory f-gates)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    CHIP-SYSTEM-OPERATING-INPUTS-P
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn chip-system-input-invariant (inputs)
+  (let
+    ((clk              (car inputs))
+     (ti               (cadr inputs))
+     (te               (caddr inputs))
+     (reset-           (cadddr inputs))
+     (hold-            (caddddr inputs))
+     (disable-regfile- (cadddddr inputs))
+     (test-regfile-    (caddddddr inputs))
+     (pc-reg-in        (cdddddddr inputs)))
+    (and (equal te f)
+         (equal disable-regfile- t)
+         (equal test-regfile- t)
+         (properp pc-reg-in)
+         (equal (length pc-reg-in) 4))))
+
+(prove-lemma rewrite-chip-system-input-invariant ()
+  (equal (chip-system-input-invariant inputs)
+         (let
+           ((clk              (car inputs))
+            (ti               (cadr inputs))
+            (te               (caddr inputs))
+            (reset-           (cadddr inputs))
+            (hold-            (caddddr inputs))
+            (disable-regfile- (cadddddr inputs))
+            (test-regfile-    (caddddddr inputs))
+            (pc-reg-in        (cdddddddr inputs)))
+           (and (equal inputs
+                       (list* clk ti te reset- hold-
+                              disable-regfile- test-regfile-
+                              pc-reg-in))
+                (equal te f)
+                (equal disable-regfile- t)
+                (equal test-regfile- t)
+                (properp pc-reg-in)
+                (equal (length pc-reg-in) 4)))))
+
+(defn chip-system-operating-inputs-p (inputs n)
+  (if (zerop n)
+      t
+    (let
+      ((clk              (caar inputs))
+       (ti               (cadar inputs))
+       (te               (caddar inputs))
+       (reset-           (cadddar inputs))
+       (hold-            (caddddar inputs))
+       (disable-regfile- (cadddddar inputs))
+       (test-regfile-    (caddddddar inputs))
+       (pc-reg-in        (cdddddddar inputs)))
+      (and (chip-system-input-invariant (car inputs))
+           (chip-system-operating-inputs-p (cdr inputs) (sub1 n))))))
+
+(disable chip-system-operating-inputs-p)
+
+(prove-lemma open-chip-system-operating-inputs-p (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (chip-system-operating-inputs-p inputs n)
+           t))
+   (implies
+    (not (zerop n))
+    (equal (chip-system-operating-inputs-p inputs n)
+           (and (chip-system-input-invariant (car inputs))
+                (chip-system-operating-inputs-p (cdr inputs) (sub1 n))))))
+  ;;Hint
+  ((enable chip-system-operating-inputs-p)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    MAP-UP-1-INPUT and MAP-UP-INPUTS
+;;;
+;;;    Convert low-level input streams to mid-level input streams.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn map-up-1-input (inputs)
+  (let
+    ((clk              (car inputs))
+     (ti               (cadr inputs))
+     (te               (caddr inputs))
+     (reset-           (cadddr inputs))
+     (hold-            (caddddr inputs))
+     (disable-regfile- (cadddddr inputs))
+     (test-regfile-    (caddddddr inputs))
+     (pc-reg-in        (cdddddddr inputs)))
+    (list* reset- hold- pc-reg-in)))
+
+(defn map-up-inputs (inputs)
+  (if (nlistp inputs)
+      nil
+    (cons (map-up-1-input (car inputs))
+          (map-up-inputs (cdr inputs)))))
+
+(disable map-up-inputs)
+
+(prove-lemma open-map-up-inputs (rewrite)
+  (and
+   (implies
+    (nlistp inputs)
+    (equal (map-up-inputs inputs)
+           nil))
+   (implies
+    (listp inputs)
+    (equal (map-up-inputs inputs)
+           (cons (map-up-1-input (car inputs))
+                 (map-up-inputs (cdr inputs))))))
+  ;;Hint
+  ((enable map-up-inputs)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    The proofs that the DUAL-EVAL model of the processor equal
+;;;    RUN-FM9001.
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma chip-system=fm9001$step (rewrite)
+  (implies
+   (and (chip-system& netlist)
+        (fm9001-state-structure state)
+        (chip-system-invariant state)
+        (chip-system-input-invariant inputs))
+   (equal (dual-eval 2 'chip-system inputs state netlist)
+          (fm9001-next-state state (map-up-1-input inputs))))
+  ;;hint
+  ((disable chip-system-invariant fm9001-state-structure
+            chip-system-input-invariant
+            car-cdr-elim cons-car-cdr)
+   (use (chip-system$state
+         (regs-regs        (caaar state))
+         (regs-we          (cadaar state))
+         (regs-data        (caddaar state))
+         (regs-addr        (cadddaar state))
+         (flags            (cadar state))
+         (a-reg            (caddar state))
+         (b-reg            (cadddar state))
+         (i-reg            (caddddar state))
+         (data-out         (cadddddar state))
+         (addr-out         (caddddddar state))
+         (last-reset-      (cadddddddar state))
+         (last-dtack-      (caddddddddar state))
+         (last-hold-       (cadddddddddar state))
+         (last-pc-reg      (caddddddddddar state))
+         (cntl-state       (cadddddddddddar state))
+         (mem-state        (list (caadr state) 
+                                 (cadadr state) 
+                                 (caddadr state) 
+                                 (cadddadr state) 
+                                 (caddddadr state) 
+                                 (cadddddadr state) 
+                                 (caddddddadr state) 
+                                 (cadddddddadr state)))
+         (clk              (car inputs))
+         (ti               (cadr inputs))
+         (te               (caddr inputs))
+         (reset-           (cadddr inputs))
+         (hold-            (caddddr inputs))
+         (disable-regfile- (cadddddr inputs))
+         (test-regfile-    (caddddddr inputs))
+         (pc-reg-in        (cdddddddr inputs)))
+        (fm9001-state-as-a-list)
+        (rewrite-chip-system-input-invariant))))
+
+(disable chip-system=fm9001$step)
+
+(defn chip-system=run-fm9001$induction (state inputs fm9001-inputs n)
+  (if (zerop n)
+      t
+    (chip-system=run-fm9001$induction
+     (fm9001-next-state state (car fm9001-inputs))
+     (cdr inputs) (cdr fm9001-inputs) (sub1 n))))
+
+(prove-lemma chip-system=run-fm9001 (rewrite)
+  (implies
+   (and (chip-system& netlist)
+        (fm9001-state-structure state)
+        (chip-system-invariant state)
+        (chip-system-operating-inputs-p inputs n)
+        (equal fm9001-inputs (map-up-inputs inputs))) 
+   (equal (simulate-dual-eval-2 'chip-system inputs state netlist n)
+          (run-fm9001 state fm9001-inputs n)))
+  ;;Hint
+  ((induct (chip-system=run-fm9001$induction state inputs fm9001-inputs n))
+   (enable chip-system=fm9001$step pc-reg-input open-subrange
+           run-fm9001-step-case)
+   (disable fm9001-state-structure chip-system-invariant
+            chip-system-input-invariant map-up-1-input)))

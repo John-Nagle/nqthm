@@ -1,0 +1,106 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    EXTEND-IMMEDIATE.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  This module selects either a 32-bit value, or a 32-bit value produced by
+;;;  sign-extending a 9-bit value into 32 bits.
+
+(module-generator
+ (extend-immediate*)
+ 'extend-immediate
+ (cons 'select-immediate (append #i(immediate 0 9) #i(reg-data 0 32)))
+ #i(z 0 32)
+ (list
+  (list 'buffer
+        '(sign-bit)
+        'b-buf-pwr
+        (list #i(immediate 8)))
+  (list 'mux
+        #i(z 0 32)
+        #i(tv-if (tree-number (make-tree 32)))
+        (cons 'select-immediate
+              (append (append #i(immediate 0 9)
+                              (make-list 23 'sign-bit))
+                      #i(reg-data 0 32)))))
+ nil)
+
+(disable *1*extend-immediate*)
+
+(defn extend-immediate& (netlist)
+  (and (equal (lookup-module 'extend-immediate netlist)
+              (extend-immediate*))
+       (let ((netlist (delete-module 'extend-immediate netlist)))
+         (and (b-buf-pwr& netlist)
+              (tv-if& netlist (make-tree 32))))))
+
+(disable extend-immediate&)
+
+(defn extend-immediate$netlist ()
+  (cons (extend-immediate*)
+        (union (b-buf-pwr$netlist)
+               (tv-if$netlist (make-tree 32)))))
+
+(prove-lemma check-extend-immediate$netlist ()
+  (extend-immediate& (extend-immediate$netlist))
+  ;;Hint
+  ((expand (extend-immediate*))))
+
+(defn f$extend-immediate (select-immediate immediate reg-data)
+  (fv-if select-immediate
+         (append immediate
+                 (if (boolp (nth 8 immediate))
+                     (make-list 23 (nth 8 immediate))
+                   (make-list 23 (x))))
+         reg-data))
+
+(disable f$extend-immediate)
+
+(prove-lemma properp-length-f$extend-immediate (rewrite)
+  (and (properp (f$extend-immediate select-immediate immediate reg-bus))
+       (implies
+        (equal (length immediate) 9)
+       (equal (length (f$extend-immediate select-immediate immediate reg-bus))
+              32)))
+  ;;Hint
+  ((enable f$extend-immediate)))
+
+(prove-lemma f$extend-immediate=extend-immediate (rewrite)
+  (implies
+   (and (bvp immediate) (equal (length immediate) 9)
+        (bvp reg-data) (equal (length reg-data) 32)
+        (boolp select-immediate))
+   (equal (f$extend-immediate select-immediate immediate reg-data)
+          (if* select-immediate
+              (sign-extend immediate 32)
+            reg-data)))
+  ;;Hint
+  ((enable f$extend-immediate sign-extend-as-append if*)
+   (disable associativity-of-append
+            make-list *1*make-list
+            indices *1*indices open-indices
+            make-tree *1*make-tree)))
+
+(prove-lemma extend-immediate$value (rewrite)
+  (implies
+   (and (extend-immediate& netlist)
+        (properp immediate) (equal (length immediate) 9)
+        (properp reg-data) (equal (length reg-data) 32))
+   (equal (dual-eval 0 'extend-immediate
+                     (cons select-immediate (append immediate reg-data))
+                     state netlist)
+          (f$extend-immediate select-immediate immediate reg-data)))
+  ;;Hint
+  ((enable f$extend-immediate extend-immediate& extend-immediate*$destructure
+           b-buf-pwr$value tv-if$value)
+   (disable associativity-of-append
+            make-list *1*make-list
+            indices *1*indices open-indices
+            make-tree *1*make-tree)))
+
+(disable extend-immediate$value)

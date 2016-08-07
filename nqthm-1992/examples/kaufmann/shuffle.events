@@ -1,0 +1,334 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; A solution to the Gilbreath card trick challenge.
+;; Matt Kaufmann, 10/92.
+
+;; The proof splits into two halves.  The lemma main-1 handles the
+;; case in which we do not make the final adjustment of rotating one
+;; card.  The lemma main-2 handles the other case.  We glue these
+;; together in the final theorem, main.
+
+(boot-strap nqthm)
+
+(defn length (x)
+  (if (listp x)
+      (add1 (length (cdr x)))
+    0))
+
+;; The following definition takes an arbitrary `oracle', which says
+;; whether the next card in the shuffle comes from the left pile or
+;; the right pile.  See below for the definition of shuffle-top,
+;; which makes the `move one card' adjustment when necessary.
+
+(defn shuffle (left right oracle)
+  (if (nlistp left)
+      right
+    (if (nlistp right)
+	left
+      (if (car oracle)
+	  (cons (car left)
+		(shuffle (cdr left) right (cdr oracle)))
+	(cons (car right)
+	      (shuffle left (cdr right) (cdr oracle))))))
+  ((lessp (plus (length left) (length right)))))
+
+;; To be really arbitrary, we postulate a color function that takes
+;; two values (which might as well be booleans), using the
+;; conservative CONSTRAIN principle to make this postulation.
+
+(constrain color-intro (rewrite)
+  (or (truep (color x))
+      (falsep (color x)))
+  ((color numberp)))
+
+(defn same-color (x y)
+  (iff (color x) (color y)))
+
+(defn altp (pile)
+  ;; predicate asserting that the colors in the pile of cards alternate
+  (if (listp pile)
+      (if (listp (cdr pile))
+	  (if (same-color (car pile) (cadr pile))
+	      f
+	    (altp (cdr pile)))
+	t)
+    t))
+
+(defn last (x)
+  (if (and (listp x)
+	   (listp (cdr x)))
+      (last (cdr x))
+    (car x)))
+
+(defn butlast (x)
+  (if (and (listp x)
+	   (listp (cdr x)))
+      (cons (car x)
+	    (butlast (cdr x)))
+    nil))
+
+(defn shuffle-top (left right oracle)
+  (let ((shuf (shuffle left right oracle)))
+    (if (not (same-color (last left) (last right)))
+	shuf
+      (cons (last shuf)
+	    (butlast shuf)))))
+
+(defn even-length-p-rec (x)
+  (if (listp x)
+      (not (even-length-p-rec (cdr x)))
+    t))
+
+(prove-lemma even-length-p-rec-rewrite (rewrite)
+  (implies (and (listp x)
+		(altp x))
+	   (equal (even-length-p-rec x)
+		  (not (same-color (car x) (last x))))))
+
+(prove-lemma even-length-p-rec-append (rewrite)
+  (equal (even-length-p-rec (append x y))
+	 (iff (even-length-p-rec x)
+	      (even-length-p-rec y))))
+
+;; A conditional rewrite rule with hypothesis
+;; (and (listp x) (listp y)) would probably suffice for most of the
+;; proof, but I believe that this version is needed somewhere late in
+;; the proof.
+
+(prove-lemma altp-append (rewrite)
+  (equal (altp (append x y))
+	 (and (altp x)
+	      (altp y)
+	      (implies (and (listp x) (listp y))
+		       (not (same-color (last x) (car y)))))))
+
+;; Probably the following lemma isn't needed till the end, but let's
+;; make sure that we can prove it.  Once we know this to be true,
+;; we'll use it implicitly by adding in the hypothesis
+;; (not (same-color (car left) (car right))) to main-1 (and similarly
+;; for main-2).
+
+(prove-lemma last-same-color-iff-first-same-color (rewrite)
+  (implies (and (listp left)
+		(listp right)
+		(altp (append left right))
+		(even-length-p-rec (append left right)))
+	   (iff (same-color (last left) (last right))
+		(same-color (car left) (car right))))
+  ((use (even-length-p-rec-rewrite (x left))
+	(even-length-p-rec-rewrite (x right)))
+   (disable even-length-p-rec-rewrite)))
+
+;; Here is the induction scheme we use for main-1, and in fact also
+;; for main-2 (actually main-2-lemma).
+
+(defn main-1-induction (left right oracle)
+  (if (or (nlistp left) (nlistp right))
+      t
+    (if (car oracle)
+	(if (cadr oracle)
+	    (main-1-induction (cddr left) right (cddr oracle))
+	  (main-1-induction (cdr left) (cdr right) (cddr oracle)))
+      (if (cadr oracle)
+	  (main-1-induction (cdr left) (cdr right) (cddr oracle))
+	(main-1-induction left (cddr right) (cddr oracle)))))
+  ((lessp (plus (length left) (length right)))))
+
+(defn alt2-p (x)
+  ;; recognizes when successive (disjoint) pairs of cards from the
+  ;; pile each have one card of each color
+  (if (listp x)
+      (if (listp (cdr x))
+	  (and (not (same-color (car x) (cadr x)))
+	       (alt2-p (cddr x)))
+	f)
+    t))
+
+(prove-lemma altp-implies-alt2-p (rewrite)
+  (implies (altp x)
+	   (equal (alt2-p x)
+		  (even-length-p-rec x)))
+  ((induct (alt2-p x))))
+
+(prove-lemma last-append (rewrite)
+  (implies (listp y)
+	   (equal (last (append x y))
+		  (last y))))
+
+;; Now we may prove a version of the first half.
+
+(prove-lemma main-1 ()
+  (implies (and (listp left)
+		(listp right)
+		(even-length-p-rec (append left right))
+		(altp left)
+		(altp right)
+		(not (same-color (car left) (car right)))
+		(not (same-color (last left) (last right))))
+	   (alt2-p (shuffle left right oracle)))
+  ((induct (main-1-induction left right oracle))))
+
+;; For the other half, we modify the notion of alt2-p (calling the
+;; result by the weird name alt3-p), except that we expect an odd
+;; number of cards.  Our strategy is to first prove that in the second
+;; case, the CDR of the shuffle has this alt3-p property
+;; (main-2-lemma).  Then we can show that when we move the final card
+;; of the shuffle to the top, the result is an alt2-p.  The lemma
+;; alt3-p-to-alt2-p below lets us do that little adjustment, once we
+;; know (by the lemma shuffle-preserves-reds-equal-blacks) that the
+;; shuffle has the property that the numbers of red and black cards in
+;; it are the same.
+
+(defn alt3-p (x)
+  ;; just like alt2-p, except there should be an odd number of elements
+  (if (listp x)
+      (if (listp (cdr x))
+	  (and (not (same-color (car x) (cadr x)))
+	       (alt3-p (cddr x)))
+	t)
+    f))
+
+;; The following lemma is analogous to one proved for main-1; then the
+;; proof of main-2-lemma goes through.
+
+(prove-lemma altp-implies-alt3-p (rewrite)
+  (implies (altp x)
+	   (equal (alt3-p x)
+		  (not (even-length-p-rec x))))
+  ((induct (alt3-p x))))
+
+(prove-lemma main-2-lemma ()
+  (implies (and (listp left)
+		(listp right)
+		(even-length-p-rec (append left right))
+		(altp left)
+		(altp right)
+		(same-color (car left) (car right))
+		(same-color (last left) (last right)))
+	   (alt3-p (cdr (shuffle left right oracle))))
+  ((induct (main-1-induction left right oracle))))
+
+(defn count-color (color x)
+  ;; the number of cards in the pile x with the indicated color
+  (if (listp x)
+      (if (equal color (color (car x)))
+	  (add1 (count-color color (cdr x)))
+	(count-color color (cdr x)))
+    0))
+
+(defn reds-equal-blacks (x)
+  (equal (count-color t x) (count-color f x)))
+
+(prove-lemma alt-implies-reds-equal-blacks ()
+  (implies (altp x)
+	   (if (even-length-p-rec x)
+	       (equal (count-color t x)
+		      (count-color f x))
+	     (if (color (car x))
+		 (equal (count-color t x)
+			(add1 (count-color f x)))
+	       (equal (add1 (count-color t x))
+		      (count-color f x)))))
+  ((induct (alt2-p x))))
+
+(prove-lemma count-color-shuffle (rewrite)
+  (equal (count-color color (shuffle x y oracle))
+	 (plus (count-color color x) (count-color color y))))
+
+(prove-lemma shuffle-preserves-reds-equal-blacks (rewrite)
+  (implies (and (altp (append x y))
+		(even-length-p-rec (append x y)))
+	   (reds-equal-blacks (shuffle x y oracle)))
+  ((use (alt-implies-reds-equal-blacks)
+	(alt-implies-reds-equal-blacks (x y)))
+   (disable alt-implies-reds-equal-blacks)))
+
+(prove-lemma alt3-p-to-alt2-p ()
+  (implies (and (reds-equal-blacks (cons a x))
+		(alt3-p x))
+	   (alt2-p (cons (last x) (butlast (cons a x)))))
+  ((induct (alt3-p x))))
+
+(prove-lemma shuffle-cdr (rewrite)
+  (implies (and (listp x)
+		(listp y))
+	   (and (listp (shuffle x y oracle))
+       (listp (cdr (shuffle x y oracle))))))
+
+(prove-lemma main-2 ()
+  (implies (and (listp left)
+		(listp right)
+		(even-length-p-rec (append left right))
+		(altp left)
+		(altp right)
+		(altp (append left right))
+		(same-color (car left) (car right))
+		(same-color (last left) (last right)))
+	   (alt2-p (shuffle-top left right oracle)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable shuffle-top
+	   shuffle-cdr
+	   shuffle-preserves-reds-equal-blacks
+	   even-length-p-rec-append)
+   (expand (last (shuffle (cons x z)
+			  (cons v w)
+			  oracle)))
+   (use (main-2-lemma)
+	(alt3-p-to-alt2-p
+	 (x (cdr (shuffle left right oracle)))
+	 (a (car (shuffle left right oracle)))))))
+
+;; The following three events are there simply to show that our
+;; definition of ``even length'' is honest.
+
+(defn even-length-p (x)
+  (equal (remainder (length x) 2) 0))
+
+(prove-lemma remainder-2-add1 (rewrite)
+  (equal (equal (remainder (add1 x) 2) 0)
+	 (not (equal (remainder x 2) 0)))
+  ((expand (difference x 2)
+	   (difference (sub1 x) 1)
+	   (remainder x 2)
+	   (remainder (add1 x) 2))))
+
+(prove-lemma even-length-p-is-even-length-p-rec (rewrite)
+  (equal (even-length-p x)
+	 (even-length-p-rec x)))
+
+(prove-lemma main (rewrite)
+  (implies (and (listp left)
+		(listp right)
+		(even-length-p (append left right))
+		(altp (append left right)))
+	   (alt2-p (shuffle-top left right oracle)))
+  ((use (main-1) (main-2))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable even-length-p-is-even-length-p-rec
+	   last-append shuffle-top
+	   even-length-p-rec-rewrite altp-append
+	   last-same-color-iff-first-same-color)))

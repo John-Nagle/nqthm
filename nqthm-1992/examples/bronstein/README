@@ -1,0 +1,235 @@
+This directory contains work by Alex Bronstein and Carolyn Talcott.
+
+Information concerning events on this directory may be found in these
+publications:
+
+@PhDThesis(Bronstein89a,
+        key="Bronstein",
+        author="A. Bronstein",
+        title="MLP: String-functional semantics and Boyer-Moore mechanization for the formal verification of synchronous circuits",
+        school="Stanford University",
+        year="1989")
+
+@techreport(bronstein88,
+        key=Bronstein,
+        author="A. Bronstein and C. Talcott",
+        year=1988,
+        title="String-Functional Semantics for Formal Verification of Synchronous Circuits, Report No. STAN-CS-88-1210",
+        institution="Computer Science Department, Stanford University")
+
+@inproceedings(Bronstein89b,
+        key=bronstein,
+        author="A. Bronstein and C. Talcott",
+        year=1989,
+        title="Formal Verification of Synchronous Circuits based on String-Functional Semantics: The 7 Paillet Circuits in Boyer-Moore",
+        booktitle="C-Cube 1989 Workshop on Automatic Verification Methods for Finite State Systems.  LNCS 407",
+        year=1989,
+        pages="317-333")
+
+@inproceedings(bronstein89c,    
+        key=bronstein,
+        author="A. Bronstein and C. Talcott",
+        year=1989,
+        title="Formal Verification of Pipelines based on String-Functional Semantics",
+        booktitle="IFIP International Workshop on Applied Formal Methods for Correct VLSI Design, Leuven, Belgium")
+
+------------------------------------------------------------
+
+We obtained these files, with the permission of Alex Bronstein and
+Carolyn Talcott.  The files came packaged together in a file we got
+from Talcott named bronstein.tar.uu.Z on March 16, 1991.  Here are their
+permission messages:
+
+    From: Alex Bronstein <alex@obelix.pa.dec.com>
+    To: boyer@cli.com
+    Subject: Re: Nqthm files 
+
+    Bob,
+
+            I gladly release my work to you for release with Nqthm.  If you
+    guys ever get extremely rich from it, just take me to lunch.. :)
+
+            Carolyn had a neatly packaged (tar, uuencode, compress) version of
+    my work, which she might be able to send you.  (Otherwise I'll have to dig
+    thru my archives...)
+
+            Regards,
+
+                                    ALex
+
+    From: Carolyn Talcott <clt@sail.stanford.edu>
+    To: alex@obelix.pa.dec.com
+    Cc: boyer@cli.com, kaufmann@cli.com, moore@cli.com
+    Subject: Nqthm files 
+
+    the file now is available via anonymous ftp to sail.stanford.edu
+    under pub/clt/bronstein.tar.uu.Z
+
+    If you have problems extracting bits let me know.
+
+------------------------------------------------------------
+
+
+The selection of events included in this directory is just what it
+takes to run the `megatest' that Bronstein describes thus in one of
+his files:
+
+
+;;; MEGATEST.BM 
+;;; 
+;;; contains a script which reruns all major proofs I've done.  The idea
+;;; comes from BoyerMoore's XXX.  It is useful for testing "improvements"
+;;; to the fundamental theory, to make sure that "improving" is really
+;;; monotonic...
+;;;
+;;; note: we must do a note-lib between circuits so that their proofs are
+;;; independent.
+
+(progn 
+(system "date")
+
+(note-lib "Lib/mlp")
+(load "corr_CIXA00.bm") 
+(proveall "corr_CIXA00" corr_CIXA00)
+
+(note-lib "Lib/mlp")
+(load "corr_CSXA00.bm") 
+(proveall "corr_CSXA00" corr_CSXA00)
+
+(note-lib "Lib/mlp")
+(load "acc_CSXA00.bm") 
+(proveall "acc_CSXA00" acc_CSXA00)
+
+(note-lib "Lib/mlp")
+(load "macc.bm") 
+(proveall "macc" macc)
+
+(note-lib "Lib/mlp")
+(load "prod0_CSXA00.bm") 
+(proveall "prod0_CSXA00" prod0_CSXA00)
+
+(note-lib "Lib/mlp")
+(load "funacc.bm") 
+(proveall "funacc" funacc)
+
+(note-lib "Lib/mlp")
+(load "theta.bm") 
+(proveall "theta" theta)
+
+(note-lib "Lib/mlp")
+(load "corrSL.bm") 
+(proveall "corrSL" corrSL)
+
+(note-lib "Lib/mlp")
+(load "counter.bm") 
+(proveall "counter" counter)
+
+(note-lib "Lib/mlp")
+(load "counterR.bm") 
+(proveall "counterR" counterR)
+
+(note-lib "Lib/mlp")
+(load "bcd.bm") 
+(proveall "bcd" bcd)
+
+(note-lib "Lib/mlp")
+(load "serial.bm") 
+(proveall "serial" serial)
+
+(note-lib "Lib/mlp")
+(load "sadder.bm") 
+(proveall "sadder" sadder)
+
+(note-lib "Lib/mlp")
+(load "bibo_exp.bm") 
+(proveall "bibo_exp" bibo_exp)
+
+(note-lib "Lib/mlp")
+(load "bcdS.bm") 
+(proveall "bcdS" bcdS)
+
+(note-lib "Lib/mlp")
+(load "bcdSbi.bm") 
+(proveall "bcdSbi" bcdSbi)
+
+(note-lib "Lib/mlp")
+(load "handrec.bm") 
+(proveall "handrec" handrec)
+
+(note-lib "Lib/mlp")
+(load "multadd.bm") 
+(proveall "multadd" multadd)
+
+(note-lib "Lib/mlp")
+(load "pplinc3.bm") 
+(proveall "pplinc3" pplinc3)
+
+(note-lib "Lib/mlp")
+(load "pplfun3.bm") 
+(proveall "pplfun3" pplfun3)
+
+(note-lib "Lib/mlp")
+(load "pplfadd.bm") 
+(proveall "pplfadd" pplfadd)
+
+(note-lib "Lib/mlp")
+(load "ppltcpu.bm") 
+(proveall "ppltcpu" ppltcpu)
+
+(note-lib "Lib/mlp")
+(load "ppltcpuM.bm") 
+(proveall "ppltcpuM" ppltcpuM)
+
+(note-lib "Lib/mlp")
+(load "countstut.bm") 
+(proveall "countstut" countstut)
+
+(note-lib "Lib/mlp")
+(load "srccpu.bm") 
+(proveall "srccpu" srccpu)
+
+(system "date")
+) ; end-progn
+
+;;; eof: megatest.bm
+
+------------------------------------------------------------
+
+
+In preparing Bronstein's files for this distribution with Nqthm, we
+have made only trivial changes and those only as necessary to get the
+events through `prove-file'.  None of the events were changed in the
+slightest.  But we have commented out certain top-level setq's at the
+beginnings of files, which seemed to be for purposes of documentation
+only.  We have moved into a single directory files that were included
+in the toplevel (BM) directory and in the ./Comp subdirectory.  And we
+have replaced interior invocations of `load' with the contents of the
+corresponding files.
+
+Our top level file, mlp.events, was built in the spirit of this
+original Bronstein file:
+
+;;; MAKELIB.BM 
+;;; 
+;;; contains a script which rebuilds the libraries from scratch.
+
+(system "date")
+
+(boot-strap thm)
+(load "th_arithmetic.bm")
+(proveall "Lib/ari" arithmetic)
+
+(load "th_stringadd.bm")
+(proveall "Lib/str0" stringadd)
+
+(load "th_strspec.bm")
+(proveall "Lib/str" strspec)
+
+(load "th_types.bm")
+(proveall "Lib/mlp" types)
+
+(system "date")
+;;; eof: makelib.bm
+
+
+

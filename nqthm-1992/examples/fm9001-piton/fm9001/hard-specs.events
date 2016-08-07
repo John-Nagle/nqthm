@@ -1,0 +1,1152 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    HARD-SPECS.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  X and Z
+
+(add-shell x () xp ())
+(add-shell z () zp ())
+
+;;;  BOOLP etc.
+
+(defn boolp (x)
+  (or (equal x t) (equal x f)))
+
+(disable boolp)
+
+(prove-lemma prove-boolp (rewrite)
+  (implies
+   (or (truep x) (falsep x))
+   (boolp x))
+  ;;Hint
+  ((enable boolp)))
+
+(prove-lemma boolp-lemmas (rewrite)
+  (and
+   (boolp t)
+   (boolp f)
+   (implies
+    (boolp b)
+    (equal (equal b t) b))
+   (implies
+    (boolp b)
+    (equal (equal b f) (not b))))
+  ;;Hint
+  ((enable boolp)))
+
+(prove-lemma boolp-implies-not-equal-z (rewrite)
+  (implies
+   (boolp x)
+   (not (equal x (z)))))
+
+(disable boolp-implies-not-equal-z)
+
+(defn boolfix (x)
+  (if x t f))
+
+(defn threep (x)
+  (or (equal x t) (equal x f) (equal x (x))))
+
+(defn threefix (x)
+  (if (boolp x)
+      x
+    (x)))
+
+(prove-lemma threefix-idempotent (rewrite)
+  (equal (threefix (threefix x))
+         (threefix x))
+  ;;Hint
+  ((enable threefix)))
+
+(prove-lemma threefix=x (rewrite)
+  (equal (equal (x) (threefix x))
+         (not (boolp x))))
+
+(disable threefix=x)
+
+(defn fourp (x)
+  (or (equal x t) (equal f x) (equal x (x)) (equal x (z))))
+
+(defn fourfix (x)
+  (if (fourp x)
+      x
+    (x)))
+
+
+;;;   BVP
+
+(defn bvp (x)
+  (if (nlistp x)
+      (equal x nil)
+    (and (boolp (car x))
+         (bvp (cdr x)))))
+
+(disable bvp)
+
+(prove-lemma bvp-nlistp (rewrite)
+  (implies
+   (nlistp x)
+   (equal (bvp x)
+          (equal x nil)))
+  ;;Hint
+  ((enable bvp)))
+
+(prove-lemma bvp-cons (rewrite)
+  (equal (bvp (cons x y))
+         (and (boolp x)
+              (bvp y)))
+  ;;Hint
+  ((enable bvp)))
+
+(prove-lemma bvp-firstn (rewrite)
+  (implies (bvp x)
+           (bvp (firstn n x)))
+  ;;Hint
+  ((enable bvp firstn)))
+
+(prove-lemma bvp-restn (rewrite)
+  (implies (bvp x)
+           (bvp (restn n x)))
+  ;;Hint
+  ((enable bvp restn)))
+
+(prove-lemma bvp-append (rewrite)
+  (implies (bvp a)
+           (equal (bvp (append a b))
+                  (bvp b)))
+  ;;Hint
+  ((enable bvp append)))
+
+(prove-lemma bvp-is-properp (rewrite)
+  (implies
+   (bvp v)
+   (properp v))
+  ;;Hint
+  ((enable bvp properp)))
+
+(prove-lemma bvp-make-list (rewrite)
+  (equal (bvp (make-list n v))
+         (or (zerop n) (boolp v)))
+  ;;Hint
+  ((enable bvp make-list)))
+
+(prove-lemma bvp-nthcdr (rewrite)
+  (implies
+   (and (bvp l)
+        (leq n (length l)))
+   (bvp (nthcdr n l)))
+  ;;Hint
+  ((enable bvp nthcdr length)))
+
+(prove-lemma bvp-if (rewrite)
+  (implies
+   (and (bvp a) (bvp b))
+   (bvp (if c a b))))
+
+(prove-lemma bvp-if* (rewrite)
+  (implies
+   (and (bvp a)
+        (bvp b))
+   (bvp (if* c a b)))
+  ;;Hint
+  ((enable if*)))
+
+;;;  BV2P
+
+(defn bv2p (x y)
+  (and (bvp x)
+       (bvp y)
+       (equal (length x) (length y))))
+
+
+;;;  BVP-LENGTH
+;;;
+;;;  BVP-LENGTH is a concept introduced in order to be able to decide 
+;;;  (BOOLP (CAR (CD...DR X))) if X is a long-enough BVP.  This decision is
+;;;  made by continually rewriting the hypothesis (BVP-LENGTH bvp n).
+
+(defn bvp-length (bvp n)
+  (and (bvp bvp)
+       (leq n (length bvp))))
+
+(disable bvp-length)
+
+(prove-lemma bvp-length-cdr (rewrite)
+  (implies
+   (bvp-length x (add1 n))
+   (bvp-length (cdr x) n))
+  ;;Hint
+  ((induct (firstn n x))
+   (enable bvp-length bvp length)))
+
+(prove-lemma boolfix-car-x=x (rewrite)
+  (implies
+   (bvp-length x 1)
+   (equal (boolfix (car x))
+          (car x)))
+  ;;Hint
+  ((enable boolfix bvp-length)))
+
+(prove-lemma boolp-car-x (rewrite)
+  (implies
+   (bvp-length x 1)
+   (boolp (car x)))
+  ;;Hint
+  ((enable boolp bvp-length)))
+
+(prove-lemma bvp-length-restn (rewrite)
+  (implies
+   (bvp bvp)
+   (equal (bvp-length (restn n bvp) m)
+          (leq m (difference (length bvp) n))))
+  ;;Hint
+  ((enable bvp-length)))
+
+
+;;;  NTH
+
+(prove-lemma show-that-nth=t (rewrite)
+  (implies
+   (and (nth n a)
+        (bvp a)
+        (lessp n (length a)))
+   (equal (nth n a)
+          t))
+  ;;Hint
+  ((induct (nth n a))
+   (enable bvp nth)))
+
+(disable show-that-nth=t)
+
+(prove-lemma boolp-nth (rewrite)
+  (implies
+   (bvp a)
+   (equal (boolp (nth n a))
+          (lessp n (length a))))
+  ;;Hint
+  ((induct (nth n a))
+   (enable nth bvp)))
+
+(prove-lemma another-way-to-look-at-boolp-nth (rewrite)
+  (implies
+   (and (bvp v)
+        (lessp n (length v)))
+   (equal (equal (if (nth n v) t f)
+                 (nth n v))
+          t)))
+
+
+;;;    PRIMITIVE SPECIFICATIONS
+;;;
+;;;    We use the "b-" functions instead of simply AND, OR, etc. in order to
+;;;    gain ENABLE/DISABLE control.
+
+(defn xor (a b)                 (if a (if b f t) (if b t f)))
+
+(defn b-buf (x)                 (if x t f))
+(defn b-not (x)                 (not x))
+
+(defn b-nand  (a b)             (not (and a b)))
+(defn b-nand3 (a b c)           (not (and a b c)))
+(defn b-nand4 (a b c d)         (not (and a b c d)))
+(defn b-nand5 (a b c d e)       (not (and a b c d e)))
+(defn b-nand6 (a b c d e g)     (not (and a b c d e g)))
+(defn b-nand8 (a b c d e g h i) (not (and a b c d e g h i)))
+
+(defn b-or   (a b)              (or a b))
+(defn b-or3  (a b c)            (or a b c))
+(defn b-or4  (a b c d)          (or a b c d))
+    
+(defn b-xor  (x y)              (if x (if y f t) (if y t f)))
+(defn b-xor3 (a b c)            (b-xor (b-xor a b) c))
+    
+(defn b-equv (x y)              (if x (if y t f) (if y f t)))
+(defn b-equv3 (a b c)           (b-equv a (b-xor b c)))
+    
+(defn b-and  (a b)              (and a b))
+(defn b-and3 (a b c)            (and a b c))
+(defn b-and4 (a b c d)          (and a b c d))
+
+(defn b-nor  (a b)              (not (or a b)))
+(defn b-nor3 (a b c)            (not (or a b c)))
+(defn b-nor4 (a b c d)          (not (or a b c d)))
+(defn b-nor5 (a b c d e)        (not (or a b c d e)))
+(defn b-nor6 (a b c d e g)      (not (or a b c d e g)))
+(defn b-nor8 (a b c d e g h i)  (not (or a b c d e g h i)))
+
+(defn b-if (c a b)              (if c (if a t f) (if b t f)))
+
+
+;;;  Force B-XOR's to open
+
+(prove-lemma open-b-xor (rewrite)
+  (equal (b-xor a b)
+         (if a (if b f t) (if b t f))))
+
+(prove-lemma open-b-xor3 (rewrite)
+  (equal (b-xor3 a b c)
+         (b-xor a (b-xor b c))))
+
+(prove-lemma open-b-equv (rewrite)
+  (equal (b-equv a b)
+         (if a (if b t f) (if b f t))))
+
+(prove-lemma open-b-equv3 (rewrite)
+  (equal (b-equv3 a b c)
+         (b-equv a (b-xor b c))))
+
+;;;  Some facts for those times when B-AND is disabled.
+
+(prove-lemma b-and-rewrite (rewrite)
+  (and
+   (not (b-and f x))
+   (not (b-and x f))
+   (implies
+    (and x y)
+    (b-and x y))))
+
+;;  Lets us use buffers in modules at will.
+
+(prove-lemma b-buf-x=x (rewrite)
+  (implies
+   (boolp x)
+   (equal (b-buf x) x)))
+
+
+;;;  A boolean gate theory.
+
+(deftheory b-gates
+  (
+   b-buf b-not
+   b-nand b-nand3 b-nand4 b-nand5 b-nand6 b-nand8
+   b-or b-or3 b-or4
+   b-xor b-xor3
+   b-equv b-equv3
+   b-and b-and3 b-and4 
+   b-nor b-nor3 b-nor4 b-nor5 b-nor6 b-nor8
+   b-if
+   open-b-xor open-b-xor3 
+   open-b-equv open-b-equv3
+   b-and-rewrite
+   b-buf-x=x))
+
+;;; This lemma allows us to prove that specifications written in 
+;;; terms of 4-valued gate-level functions (see below) are equivalent to
+;;; Boolean gate-level functions when the inputs are constrained to be Boolean,
+;;; without opening up the gate-level definitions, which would potentially
+;;; result in massive clauses and/or case splitting. 
+
+(prove-lemma boolp-b-gates (rewrite)
+  (and
+   (boolp (b-buf x))
+   (boolp (b-not x))
+   (boolp (b-nand a b))
+   (boolp (b-nand3 a b c))
+   (boolp (b-nand4 a b c d))
+   (boolp (b-nand5 a b c d e))
+   (boolp (b-nand6 a b c d e g))
+   (boolp (b-nand8 a b c d e g h i))
+   (boolp (b-or a b))
+   (boolp (b-or3 a b c))
+   (boolp (b-or4 a b c d))
+   (boolp (b-xor x y))
+   (boolp (b-xor3 a b c))
+   (boolp (b-equv x y))
+   (boolp (b-equv3 a b c))
+   (boolp (b-and a b))
+   (boolp (b-and3 a b c))
+   (boolp (b-and4 a b c d))
+   (boolp (b-nor a b))
+   (boolp (b-nor3 a b c))
+   (boolp (b-nor4 a b c d))
+   (boolp (b-nor5 a b c d e))
+   (boolp (b-nor6 a b c d e g))
+   (boolp (b-nor8 a b c d e g h i))
+   (boolp (b-if c a b)))
+  ;;Hint
+  ((enable boolp)))
+
+(disable boolp-b-gates)
+
+;;;  ID -- The "renaming" gate.
+
+(defn id (x) x)
+
+;;;  These "compound gates" correspond to LSI Logic macrocells.
+
+(defn ao2 (a b c d) (b-nor (b-and a b) (b-and c d)))
+
+(defn ao4 (a b c d) (b-nand (b-or a b) (b-or c d)))
+
+(defn ao6 (a b c)   (b-nor (b-and a b) c))
+
+(defn ao7 (a b c)   (b-nand (b-or a b) c))
+
+;;;  Power and ground
+
+(defn vss () f)
+
+(defn vdd () t)
+
+
+;;;  VECTOR SPECIFICATIONS
+;;;
+;;;  We now define our basic vector hardware specification functions.
+
+(defn v-buf (x)
+  (if (nlistp x)
+      nil
+    (cons (b-buf (car x))
+          (v-buf (cdr x)))))
+
+(disable v-buf)
+
+(defn v-not (x)
+  (if (nlistp x)
+      nil
+    (cons (b-not (car x))
+          (v-not (cdr x)))))
+
+(disable v-not)
+
+(defn v-and (x y)
+  (if (nlistp x)
+      nil
+    (cons (b-and (car x) (car y))
+          (v-and (cdr x) (cdr y)))))
+
+(disable v-and)
+
+(defn v-or (x y)
+  (if (nlistp x)
+      nil
+    (cons (b-or (car x) (car y))
+          (v-or (cdr x) (cdr y)))))
+
+(disable v-or)
+
+(defn v-xor (x y)
+  (if (nlistp x)
+      nil
+    (cons (b-xor (car x) (car y))
+          (v-xor (cdr x) (cdr y)))))
+
+(disable v-xor)
+
+(defn v-shift-right (a si)
+  (if (nlistp a)
+      nil
+    (append (v-buf (cdr a))
+            (cons (boolfix si) nil))))
+
+(disable v-shift-right)
+
+(defn v-lsr (a)
+  (v-shift-right a f))
+
+(defn v-ror (a si)
+  (v-shift-right a si))
+
+(defn v-asr (a)
+  (v-shift-right a (nth (sub1 (length a)) a)))
+
+(defn v-if (c a b)
+  (if (nlistp a)
+      nil
+    (cons (if (if c (car a) (car b)) t f)
+          (v-if c (cdr a) (cdr b)))))
+
+(disable v-if)
+
+;;;  Vector functions return bit vectors.
+
+(prove-lemma bvp-v-buf (rewrite)
+  (bvp (v-buf a))
+  ;;Hint
+  ((enable v-buf)))
+
+(prove-lemma bvp-v-not (rewrite)
+  (bvp (v-not a))
+  ;;Hint
+  ((enable v-not)))
+
+(prove-lemma bvp-v-and (rewrite)
+  (bvp (v-and a b))
+  ;;Hint
+  ((enable v-and)))
+
+(prove-lemma bvp-v-or (rewrite)
+  (bvp (v-or  a b))
+  ;;Hint
+  ((enable v-or)))
+
+(prove-lemma bvp-v-xor (rewrite)
+  (bvp (v-xor a b))
+  ;;Hint
+  ((enable v-xor)))
+
+(prove-lemma bvp-v-shift-right (rewrite)
+  (bvp (v-shift-right a si))
+  ;;Hint
+  ((enable v-shift-right)))
+
+(prove-lemma bvp-v-lsr (rewrite)
+  (bvp (v-lsr a))
+  ;;Hint
+  ((enable v-lsr)))
+
+(prove-lemma bvp-v-asr (rewrite)
+  (bvp (v-asr a))
+  ;;Hint
+  ((enable v-asr)))
+
+(prove-lemma bvp-v-ror (rewrite)
+  (bvp (v-ror a c))
+  ;;Hint
+  ((enable v-ror)))
+
+(prove-lemma bvp-v-if (rewrite)
+  (bvp (v-if c a b))
+  ;;Hint
+  ((enable v-if)))
+
+;;;  Lengths of vector functions
+
+(prove-lemma length-v-buf (rewrite)
+  (equal (length (v-buf a))
+         (length a))
+  ;;Hint
+  ((enable length v-buf)))
+
+(prove-lemma length-v-not (rewrite)
+  (equal (length (v-not a))
+         (length a))
+  ;;Hint
+  ((enable length v-not)))
+
+(prove-lemma length-v-and (rewrite)
+  (equal (length (v-and a b))
+         (length a))
+  ;;Hint
+  ((enable length v-and)))
+
+(prove-lemma length-v-or (rewrite)
+  (equal (length (v-or a b))
+         (length a))
+  ;;Hint
+  ((enable length v-or)))
+
+(prove-lemma length-v-xor (rewrite)
+  (equal (length (v-xor a b))
+         (length a))
+  ;;Hint
+  ((enable length v-xor)))
+
+(prove-lemma length-v-shift-right (rewrite)
+  (equal (length (v-shift-right a b))
+         (length a))
+  ;;Hint
+  ((enable length v-shift-right)))
+
+(prove-lemma length-v-lsr (rewrite)
+  (equal (length (v-lsr a))
+         (length a))
+  ;;Hint
+  ((enable length v-lsr)))
+
+(prove-lemma length-v-asr (rewrite)
+  (equal (length (v-asr a))
+         (length a))
+  ;;Hint
+  ((enable length v-asr)))
+
+(prove-lemma length-v-ror (rewrite)
+  (equal (length (v-ror a b))
+         (length a))
+  ;;Hint
+  ((enable length v-ror)))
+
+(prove-lemma length-v-if (rewrite)
+  (equal (length (v-if c a b))
+         (length a))
+  ;;Hint
+  ((enable length v-if)))
+
+
+;;;  APPEND lemmas for vector functions.
+
+(prove-lemma v-and-append-help (rewrite)
+  (implies (equal (length a) (length b))
+           (equal (append (v-and a b)
+                          (v-and d e))
+                  (v-and (append a d) (append b e))))
+  ;;Hint
+  ((enable append length v-and)))
+
+(prove-lemma v-or-append-help (rewrite)
+  (implies (equal (length a) (length b))
+           (equal (append (v-or a b)
+                          (v-or d e))
+                  (v-or (append a d) (append b e))))
+  ;;Hint
+  ((enable append length v-or)))
+
+(prove-lemma v-xor-append-help (rewrite)
+  (implies (equal (length a) (length b))
+           (equal (append (v-xor a b)
+                          (v-xor d e))
+                  (v-xor (append a d) (append b e))))
+  ;;Hint
+  ((enable append length v-xor)))
+
+(prove-lemma v-not-append-help (rewrite)
+  (equal (append (v-not a) (v-not b))
+         (v-not (append a b)))
+  ;;Hint
+  ((enable append length v-not)))
+
+(prove-lemma v-buf-append-help (rewrite)
+  (equal (append (v-buf a) (v-buf b))
+         (v-buf (append a b)))
+  ;;Hint
+  ((enable append length v-buf)))
+
+(prove-lemma v-if-append-help (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (equal (append (v-if c a b) (v-if c d e))
+          (v-if c (append a d) (append b e))))
+  ;;Hint
+  ((enable append length v-if)))
+
+;;;  A congruence for V-IF.
+
+(prove-lemma v-if-c-congruence (rewrite)
+  (implies
+   c
+   (equal (equal (v-if c a b) (v-if t a b))
+          t))
+  ;;Hint
+  ((enable v-if)))
+
+
+;;;   Vector functions with FIRSTN/RESTN
+
+(prove-lemma v-not-firstn (rewrite)
+  (equal (v-not (firstn n l))
+         (firstn n (v-not l)))
+  ;;Hint
+  ((enable firstn restn v-not)))
+
+(prove-lemma v-not-restn (rewrite)
+  (equal (v-not (restn n l))
+         (restn n (v-not l)))
+  ;;Hint
+  ((enable firstn restn v-not)))
+
+(prove-lemma firstn-v-not (rewrite)
+  (equal (firstn n (v-not l))
+         (v-not (firstn n l))))
+
+(disable firstn-v-not)
+
+(prove-lemma restn-v-not (rewrite)
+  (equal (restn n (v-not l))
+         (v-not (restn n l))))
+
+(disable restn-v-not)
+
+;;;  An interesting fact about V-NOT
+
+(prove-lemma v-not-inverts-all (rewrite)
+  (implies
+   (lessp n (length bvp))
+   (equal (nth n (v-not bvp))
+          (b-not (nth n bvp))))
+  ;;Hint
+  ((enable nth v-not length boolfix show-that-nth=t)))
+
+;;;  Another fascinating fact.
+
+(prove-lemma v-or-make-list-f (rewrite)
+  (implies
+   (and (bvp a)
+        (equal (length a) n))
+   (equal (v-or (make-list n f) a)
+          a))
+  ;;Hint
+  ((enable length make-list v-or)))
+
+
+;;;  V-TO-NAT and NAT-TO-V
+
+(defn v-to-nat (v)
+  (if (nlistp v)
+      0
+    (plus (if (car v) 1 0)
+          (times 2 (v-to-nat (cdr v))))))
+
+(disable v-to-nat)
+
+(defn nat-to-v (x n)
+  (if (zerop n)
+      nil
+    (cons (not (zerop (remainder x 2)))
+          (nat-to-v (quotient x 2) (sub1 n)))))
+
+(disable nat-to-v)
+
+(prove-lemma firstn-nat-to-v (rewrite)
+  (implies
+   (leq n m)
+   (equal (firstn n (nat-to-v nat m))
+          (nat-to-v nat n)))
+  ;;Hint
+  ((enable firstn nat-to-v)))
+
+(prove-lemma restn-nat-to-v-0-hack (rewrite)
+  (implies
+   (leq n m)
+   (equal (restn n (nat-to-v 0 m))
+          (nat-to-v 0 (difference m n))))
+  ;;Hint
+  ((enable restn nat-to-v difference)))
+
+(prove-lemma length-nat-to-v (rewrite)
+  (equal (length (nat-to-v n length))
+         (fix length))
+  ;;Hint
+  ((enable length nat-to-v)))
+
+(prove-lemma bvp-nat-to-v (rewrite)
+  (bvp (nat-to-v n length))
+  ;;Hint
+  ((enable bvp nat-to-v)))
+
+(prove-lemma car-nat-to-v-0-is-f (rewrite)
+  (implies
+   (not (zerop n))
+   (not (car (nat-to-v 0 n))))
+  ;;Hint
+  ((enable nat-to-v)))
+
+(prove-lemma any-of-nat-to-v-0-is-f (rewrite)
+  (implies
+   (lessp n m)
+   (not (nth n (nat-to-v 0 m))))
+  ;;Hint
+  ((enable nth nat-to-v)))
+
+
+;;;  V-NTH
+
+(defn v-nth (v-n lst)
+  (nth (v-to-nat v-n) lst))
+
+(disable v-nth)
+
+;;;  UPDATE-V-NTH
+
+(defn update-v-nth (v-n lst value)
+  (update-nth (v-to-nat v-n) lst value))
+
+(disable update-v-nth)
+
+
+;;;  V-NZEROP and V-ZEROP
+
+(defn v-nzerop (x)
+  (if (nlistp x)
+      f
+      (or (car x)
+          (v-nzerop (cdr x)))))
+
+(disable v-nzerop)
+
+(defn v-zerop (x)
+  (not (v-nzerop x)))
+
+(prove-lemma v-nzerop-as-or-crock (rewrite)
+  (and
+   (implies
+    (v-nzerop (firstn n a))
+    (v-nzerop a))
+   (implies
+    (v-nzerop (restn n a))
+    (v-nzerop a)))
+  ;;Hint
+  ((enable v-nzerop firstn restn)))
+
+(prove-lemma not-v-nzerop-as-and-crock (rewrite)
+  (implies
+   (and (not (v-nzerop (firstn n a)))
+        (not (v-nzerop (restn n a))))
+   (not (v-nzerop a)))
+  ;;Hint
+  ((enable v-nzerop firstn restn)))
+
+(prove-lemma not-v-nzerop-v-xor-x-x (rewrite)
+  (not (v-nzerop (v-xor x x)))
+  ;;Hint
+  ((enable v-xor v-nzerop)))
+       
+(prove-lemma v-xor-nzerop=not-equal (rewrite)
+  (implies
+   (bv2p a b)
+   (equal (v-nzerop (v-xor a b))
+          (not (equal a b))))
+  ;;Hint
+  ((enable v-nzerop v-xor length bvp boolp)))
+
+(prove-lemma v-zerop-make-list-f (rewrite)
+  (equal (v-zerop (make-list n f))
+         t)
+  ;;Hint
+  ((enable v-zerop v-nzerop make-list)))
+
+(prove-lemma not-v-nzerop-all-f (rewrite)
+  (not (v-nzerop (make-list n f)))
+  ;;Hint
+  ((enable v-nzerop make-list)))
+
+
+;;;  V-NEGP
+
+(defn v-negp (x)
+  (if (nlistp x)
+      f
+      (if (nlistp (cdr x))
+          (car x)
+          (v-negp (cdr x)))))
+
+(disable v-negp)
+
+(prove-lemma boolp-v-negp (rewrite)
+  (implies
+   (bvp v)
+   (boolp (v-negp v)))
+  ;;Hint
+  ((enable boolp bvp v-negp)))
+
+(prove-lemma v-negp-as-nth (rewrite)
+  (implies
+   (not (equal (length bv) 0))
+   (equal (v-negp bv)
+          (nth (sub1 (length bv)) bv)))
+  ;;Hint
+  ((enable v-negp nth)))
+
+(disable v-negp-as-nth)
+
+
+;;;  SIGN-EXTEND 
+
+(defn sign-extend (v n)
+  (if (zerop n)
+      nil
+    (if (nlistp v)
+        (make-list n f)
+      (if (nlistp (cdr v))
+          (cons (boolfix (car v)) (make-list (sub1 n) (boolfix (car v))))
+        (cons (boolfix (car v)) (sign-extend (cdr v) (sub1 n)))))))
+
+(disable sign-extend)
+
+(prove-lemma length-sign-extend (rewrite)
+  (equal (length (sign-extend v n)) (fix n))
+  ;;Hint
+  ((enable sign-extend length)))
+
+(prove-lemma bvp-sign-extend (rewrite)
+   (bvp (sign-extend v n))
+   ;;Hint
+   ((enable bvp sign-extend)))
+
+(prove-lemma sign-extend-as-append (rewrite)
+  (implies
+   (and (bvp v)
+        (leq (length v) n)
+        (not (equal (length v) 0)))
+   (equal (sign-extend v n)
+          (append v (make-list (difference n (length v))
+                               (nth (sub1 (length v)) v)))))
+  ;;Hint
+  ((induct (sign-extend v n))
+   (enable append sign-extend make-list nth difference)))
+
+(disable sign-extend-as-append)
+
+
+;;;  V-ADDER is a recursive definition of a binary adder.
+
+(defn v-adder (c a b)
+  (if (nlistp a)
+      (cons (boolfix c) nil)
+    (cons (b-xor3 c (car a) (car b))
+          (v-adder (b-or (b-and (car a) (car b))
+                         (b-or (b-and (car a) c)
+                               (b-and (car b) c)))
+                   (cdr a)
+                   (cdr b)))))
+
+(disable v-adder)
+
+(defn v-adder-output (c a b)
+  (firstn (length a) (v-adder c a b)))
+
+(defn v-adder-carry-out (c a b)
+  (nth (length a) (v-adder c a b)))
+
+
+(defn v-adder-overflowp (c a b)
+  (b-and (b-equv (nth (sub1 (length a)) a)
+                 (nth (sub1 (length b)) b))
+         (b-xor (nth (sub1 (length a)) a)
+                (nth (sub1 (length a)) (v-adder-output c a b)))))
+
+(defn v-subtracter-output (c a b)
+  (v-adder-output (b-not c) (v-not a) b))
+
+(defn v-subtracter-carry-out (c a b)
+  (b-not (v-adder-carry-out (b-not c) (v-not a) b)))
+
+(defn v-subtracter-overflowp (c a b)
+  (v-adder-overflowp (b-not c) (v-not a) b))
+
+(defn v-inc (x)
+  (v-adder-output t x (nat-to-v 0 (length x))))
+
+(disable v-inc)
+
+(defn v-dec (x)
+  (v-subtracter-output t (nat-to-v 0 (length x)) x))
+
+(disable v-dec)
+
+(prove-lemma length-of-v-adder (rewrite)
+  (equal (length (v-adder c a b))
+         (add1 (length a)))
+  ;;Hint
+  ((enable length v-adder)))
+
+(prove-lemma bvp-v-adder (rewrite)
+  (bvp (v-adder c a b))
+  ;;Hint
+  ((enable bvp v-adder)))
+
+(prove-lemma length-of-v-adder-output (rewrite)
+  (equal (length (v-adder-output c a b)) (length a)))
+
+(prove-lemma length-of-v-subtracter-output (rewrite)
+  (equal (length (v-subtracter-output c a b)) (length a)))
+
+(prove-lemma bvp-length-v-inc-v-dec (rewrite)
+  (and
+   (bvp (v-inc x))
+   (bvp (v-dec x))
+   (equal (length (v-inc x)) (length x))
+   (equal (length (v-dec x)) (length x)))
+  ;;Hint
+  ((enable v-inc v-dec)))
+
+;;;  Prove the correctness of the vector buffer, selector, and adder.
+
+(prove-lemma v-buf-works (rewrite)
+  (implies (bvp x)
+           (equal (v-buf x) x))
+  ;;Hint
+  ((enable bvp v-buf)))
+
+(prove-lemma v-if-works (rewrite)
+  (implies (bv2p x y)
+           (equal (v-if c x y)
+                  (if c x y)))
+  ;;Hint
+  ((enable bvp v-if length)))
+                 
+(prove-lemma v-adder-works (rewrite)
+  (implies (bv2p x y)
+           (equal (v-to-nat (v-adder c x y))
+                  (plus (if c 1 0)
+                        (v-to-nat x)
+                        (v-to-nat y))))
+  ;;Hint
+  ((enable boolfix bvp length v-to-nat v-adder plus)))
+
+;;; V-THREEFIX -- A useful concept for registers.
+
+(defn v-threefix (v)
+  (if (nlistp v)
+      nil
+    (cons (threefix (car v))
+          (v-threefix (cdr v)))))
+
+(disable v-threefix)
+
+(prove-lemma open-v-threefix (rewrite)
+  (and
+   (implies
+    (nlistp v)
+    (equal (v-threefix v)
+           nil))
+   (implies
+    (listp v)
+    (equal (v-threefix v)
+           (cons (threefix (car v))
+                 (v-threefix (cdr v))))))
+  ;;Hint
+  ((enable v-threefix)))
+
+(prove-lemma v-threefix-bvp (rewrite)
+  (implies
+   (bvp v)
+   (equal (v-threefix v)
+          v))
+  ;;Hint
+  ((enable bvp v-threefix)))
+
+(prove-lemma properp-v-threefix (rewrite)
+  (properp (v-threefix x))
+  ;;Hint
+  ((enable properp v-threefix)))
+
+(prove-lemma length-v-threefix (rewrite)
+  (equal (length (v-threefix x))
+         (length x))
+  ;;Hint
+  ((enable length v-threefix)))
+
+(prove-lemma append-v-threefix (rewrite)
+  (equal (append (v-threefix a)
+                 (v-threefix b))
+         (v-threefix (append a b)))
+  ;;Hint
+  ((enable append v-threefix)))
+
+(prove-lemma v-threefix-append (rewrite)
+  (equal (v-threefix (append a b))
+         (append (v-threefix a) (v-threefix b))))
+
+(disable v-threefix-append)
+
+(prove-lemma v-threefix-idempotence (rewrite)
+  (equal (v-threefix (v-threefix x))
+         (v-threefix x))
+  ;;Hint
+  ((enable v-threefix)))
+
+(prove-lemma bvp-v-threefix (rewrite)
+  (implies
+   (properp v)
+   (equal (bvp (v-threefix v))
+          (bvp v)))
+  ;;Hint
+  ((enable properp bvp v-threefix)))
+
+(prove-lemma v-threefix-make-list-x (rewrite)
+  (equal (v-threefix (make-list n (x)))
+         (make-list n (x)))
+  ;;Hint
+  ((enable v-threefix make-list)))
+
+
+;;;    V-FOURFIX
+
+(defn v-fourfix (v)
+  (if (nlistp v)
+      nil
+    (cons (fourfix (car v))
+          (v-fourfix (cdr v)))))
+
+(disable v-fourfix)
+
+(prove-lemma bvp-v-fourfix (rewrite)
+  (implies
+   (bvp v)
+   (equal (v-fourfix v) v))
+  ;;Hint
+  ((enable v-fourfix bvp)))
+
+(prove-lemma  v-fourfix-make-list (rewrite)
+  (implies
+   (or (equal x t)
+       (equal x f)
+       (equal x (x))
+       (equal x (z)))
+  (equal (v-fourfix (make-list n x))
+         (make-list n x)))
+  ;;Hint
+  ((enable v-fourfix make-list fourfix)))
+
+(prove-lemma v-threefix-v-fourfix (rewrite)
+  (equal (v-threefix (v-fourfix v))
+         (v-threefix v))
+  ;;Hint
+  ((enable v-threefix v-fourfix)))
+
+
+;;;  V-IFF -- A reducing vector IFF.  Vector equivalence.
+
+(defn v-iff (a b)
+  (if (nlistp a)
+      t
+    (and (iff (car a) (car b))
+         (v-iff (cdr a) (cdr b)))))
+
+(disable v-iff)
+
+(prove-lemma v-iff-x-x (rewrite)
+  (v-iff x x)
+  ;;Hint
+  ((enable v-iff)))
+
+(prove-lemma v-iff-rev1 (rewrite)
+  (implies
+   (and (equal (length a) (length b))
+        (equal (length x) (length y)))
+   (equal (v-iff (rev1 a x) (rev1 b y))
+          (and (v-iff a b)
+               (v-iff x y))))
+  ;;Hint
+  ((enable v-iff rev1)))
+
+(prove-lemma v-iff-reverse (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (equal (v-iff (reverse a) (reverse b))
+          (v-iff a b)))
+  ;;Hint
+  ((enable reverse)))
+
+(prove-lemma v-iff=equal (rewrite)
+  (implies
+   (bv2p a b)
+   (equal (v-iff a b)
+          (equal a b)))
+  ;;Hint
+  ((enable v-iff boolp)))
+
+
+;;;  Odds and ends...
+
+(prove-lemma bvp-subrange (rewrite)
+  (implies
+   (and (bvp v)
+        (lessp n (length v)))
+   (bvp (subrange v m n)))
+  ;;Hint
+  ((enable subrange bvp length)))
+
+(prove-lemma boolp-if* (rewrite)
+  (implies
+   (and (boolp a)
+        (boolp b))
+   (boolp (if* c a b)))
+  ;;Hint
+  ((enable if*)))

@@ -1,0 +1,2032 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer and J Strother Moore.  All Rights
+ Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer and J Strother Moore PROVIDE ABSOLUTELY NO WARRANTY.  THE
+ EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+ OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer or J Strother Moore BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+; This is the list of verification conditions for a version of our
+; majority vote algorithm.  For the details of the algorithm, see the
+; comment at the end of the file.  Boyer and Moore.
+
+; This list of events has been further edited, for processing by
+; DO-FILE, by (1) inserting the following NOTE-LIB, (2) commenting out
+; each FORTRAN-COMMENT and following the comment with the
+; corresponding macroexpansion, and (3) by commenting out each
+; (COMMENT ...).
+
+(NOTE-LIB "fortran" T)
+
+; (FORTRAN-COMMENT FORTRAN)
+(ADD-AXIOM FORTRAN NIL T)
+
+(DCL A$0 NIL)
+
+(DCL BOOLE$0 NIL)
+
+(DCL BOOLE$1 NIL)
+
+(DCL BOOLE$2 NIL)
+
+(DCL BOOLE$3 NIL)
+
+(DCL BOOLE$4 NIL)
+
+(DCL BOOLE$5 NIL)
+
+(DCL BOOLE$6 NIL)
+
+(DCL BOOLE$7 NIL)
+
+(DCL BOOLE$8 NIL)
+
+(DCL CAND$0 NIL)
+
+(DCL CAND$1 NIL)
+
+(DCL CAND$2 NIL)
+
+(DCL CAND$3 NIL)
+
+(DCL CAND$4 NIL)
+
+(DCL CAND$5 NIL)
+
+(DCL CAND$6 NIL)
+
+(DCL CAND$7 NIL)
+
+(DCL CAND$8 NIL)
+
+(DCL I$0 NIL)
+
+(DCL I$1 NIL)
+
+(DCL I$2 NIL)
+
+(DCL I$3 NIL)
+
+(DCL I$4 NIL)
+
+(DCL I$5 NIL)
+
+(DCL I$6 NIL)
+
+(DCL I$7 NIL)
+
+(DCL I$8 NIL)
+
+(DCL K$1 NIL)
+
+(DCL K$2 NIL)
+
+(DCL K$3 NIL)
+
+(DCL K$4 NIL)
+
+(DCL K$5 NIL)
+
+(DCL K$6 NIL)
+
+(DCL K$7 NIL)
+
+(DCL K$8 NIL)
+
+(DCL N$0 NIL)
+
+(DEFN CNT
+      (X A I N)
+      (IF (OR (ZEROP N) (LESSP N I))
+          0
+          (IF (ZEQP X (ELT1 A N))
+              (ADD1 (CNT X A I (SUB1 N)))
+              (CNT X A I (SUB1 N)))))
+
+(ADD-AXIOM INPUT-CONDITIONS
+           (REWRITE)
+           (IMPLIES (AND (LESSP '0 J)
+                         (AND (NOT (LESSP (N$0) J))
+                              (NOT (NEGATIVEP (ELT1 A J)))))
+                    (NUMBERP (ELT1 A J))))
+
+(DEFN GLOBAL-HYPS NIL
+      (AND (NOT (EQUAL (N$0) '0))
+           (AND (LESSP (ADD1 (N$0))
+                       (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+                (NUMBERP (N$0)))))
+
+(PROVE-LEMMA PLUS-1
+             (REWRITE)
+             (EQUAL (PLUS 1 X) (ADD1 X)))
+
+(PROVE-LEMMA DIFFERENCE-0
+             (REWRITE)
+             (IMPLIES (NOT (LESSP X Y))
+                      (EQUAL (DIFFERENCE Y X) 0)))
+
+(PROVE-LEMMA DIFFERENCE-1
+             (REWRITE)
+             (EQUAL (DIFFERENCE X 1) (SUB1 X)))
+
+(PROVE-LEMMA LESSP-X-1
+             (REWRITE)
+             (EQUAL (LESSP X 1) (ZEROP X)))
+
+(PROVE-LEMMA LESSP-REMAINDER2
+             (REWRITE GENERALIZE)
+             (EQUAL (LESSP (REMAINDER X Y) Y)
+                    (NOT (ZEROP Y))))
+
+(PROVE-LEMMA REMAINDER-QUOTIENT-ELIM
+             (ELIM)
+             (IMPLIES (AND (NOT (ZEROP Y)) (NUMBERP X))
+                      (EQUAL (PLUS (REMAINDER X Y)
+                                   (TIMES Y (QUOTIENT X Y)))
+                             X)))
+
+(PROVE-LEMMA QUOTIENT-BY-2-BOUND
+             (REWRITE)
+             (NOT (LESSP X (QUOTIENT X 2))))
+
+(PROVE-LEMMA LESSP-QUOTIENT-REWRITE
+             (REWRITE)
+             (EQUAL (LESSP (QUOTIENT N 2) M)
+                    (LESSP N (PLUS M M))))
+
+(PROVE-LEMMA ZNORMALIZE-ZERO
+             (REWRITE)
+             (IMPLIES (NUMBERP X)
+                      (EQUAL (EQUAL (ZNORMALIZE X) 0)
+                             (EQUAL X 0))))
+
+(DISABLE ZNORMALIZE)
+
+(PROVE-LEMMA CNT-BOUND
+             (REWRITE)
+             (NOT (LESSP N (CNT X A 1 N))))
+
+(PROVE-LEMMA INPUT-DEFINEDNESS NIL
+             (IMPLIES (GLOBAL-HYPS) '*1*TRUE))
+
+#| (COMMENT) |#
+
+; (FORTRAN-COMMENT INPUT)
+(ADD-AXIOM INPUT NIL T)
+
+(ADD-AXIOM ASSIGNMENT
+           (REWRITE)
+           (AND (EQUAL (BOOLE$1) (BOOLE$0))
+                (AND (EQUAL (CAND$1) (CAND$0))
+                     (AND (EQUAL (I$1) (I$0))
+                          (EQUAL (K$1) '0)))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-F)
+(ADD-AXIOM LOGICAL-IF-F NIL T)
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (BOOLE$2) (BOOLE$1))
+                (AND (EQUAL (CAND$2) (CAND$1))
+                     (AND (EQUAL (I$2) '1)
+                          (EQUAL (K$2) (K$1))))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (EQUAL (K$3) (K$2)))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) '*1*FALSE)
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) (K$3))))))
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (ZEQP (K$3) '0)
+                    (AND (I$2)
+                         (AND (ZGREATERP (I$2) (N$0))
+                              (GLOBAL-HYPS))))
+               (AND (OR (EQUAL (BOOLE$4) '*1*TRUE)
+                        (EQUAL (BOOLE$4) '*1*FALSE))
+                    (IF (BOOLE$4)
+                        (AND (ZNUMBERP (CAND$4))
+                             (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT (CAND$4) (A$0) '1 (N$0))))
+                        (NOT (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT INPUT F T T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) '*1*TRUE)
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) (K$3))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT NIL
+       (IMPLIES (AND (NOT (ZEQP (K$3) '0))
+                     (AND (I$2)
+                          (AND (ZGREATERP (I$2) (N$0))
+                               (GLOBAL-HYPS))))
+                (AND (NOT (ZEQP '2 '0))
+                     (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (N$0) '2)))))
+
+#| (COMMENT INPUT F T F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (ZGREATERP (K$4)
+                               (ZQUOTIENT (N$0) '2))
+                    (AND (NOT (ZEQP (K$3) '0))
+                         (AND (I$2)
+                              (AND (ZGREATERP (I$2) (N$0))
+                                   (GLOBAL-HYPS)))))
+               (AND (OR (EQUAL (BOOLE$4) '*1*TRUE)
+                        (EQUAL (BOOLE$4) '*1*FALSE))
+                    (IF (BOOLE$4)
+                        (AND (ZNUMBERP (CAND$4))
+                             (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT (CAND$4) (A$0) '1 (N$0))))
+                        (NOT (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT INPUT F T F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F2)
+(ADD-AXIOM LOGICAL-IF-F2 NIL T)
+
+(ADD-AXIOM ASSIGNMENT3
+           (REWRITE)
+           (AND (EQUAL (BOOLE$5) (BOOLE$4))
+                (AND (EQUAL (CAND$5) (CAND$4))
+                     (AND (EQUAL (I$5) (I$4))
+                          (EQUAL (K$5) '0)))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-F3)
+(ADD-AXIOM LOGICAL-IF-F3 NIL T)
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$6) (BOOLE$5))
+                (AND (EQUAL (CAND$6) (CAND$5))
+                     (AND (EQUAL (I$6) '1)
+                          (EQUAL (K$6) (K$5))))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER1
+           (REWRITE)
+           (AND (EQUAL (BOOLE$7) (BOOLE$6))
+                (AND (EQUAL (CAND$7) (CAND$6))
+                     (EQUAL (K$7) (K$6)))))
+
+(ADD-AXIOM ASSIGNMENT5
+           (REWRITE)
+           (AND (EQUAL (BOOLE$8) '*1*FALSE)
+                (AND (EQUAL (CAND$8) (CAND$7))
+                     (AND (EQUAL (I$8) (I$7))
+                          (EQUAL (K$8) (K$7))))))
+
+(PROVE-LEMMA OUTPUT NIL
+     (IMPLIES (AND (I$6)
+                   (AND (ZGREATERP (I$6) (N$0))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS)))))))
+              (AND (OR (EQUAL (BOOLE$8) '*1*TRUE)
+                       (EQUAL (BOOLE$8) '*1*FALSE))
+                   (IF (BOOLE$8)
+                       (AND (ZNUMBERP (CAND$8))
+                            (LESSP (QUOTIENT (N$0) '2)
+                                   (CNT (CAND$8) (A$0) '1 (N$0))))
+                       (NOT (LESSP (QUOTIENT (N$0) '2)
+                                   (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT INPUT F T F F F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F4)
+(ADD-AXIOM LOGICAL-IF-F4 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A NIL
+          (IMPLIES (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS))))))
+                   (AND (LESSP '0 (I$6))
+                        (NOT (LESSP (N$0) (I$6))))))
+
+#| (COMMENT INPUT F T F F F F) |#
+
+(PROVE-LEMMA DEFINEDNESS NIL
+          (IMPLIES (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS))))))
+                   (ZNUMBERP (CAND$6))))
+
+#| (COMMENT INPUT F T F F F F) |#
+
+(PROVE-LEMMA DEFINEDNESS1 NIL
+          (IMPLIES (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS))))))
+                   (ZNUMBERP (ELT1 (A$0) (I$6)))))
+
+#| (COMMENT INPUT F T F F F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(PROVE-LEMMA PHASE2-INVRT NIL
+ (IMPLIES
+  (AND (ZNEQP (CAND$6) (ELT1 (A$0) (I$6)))
+       (AND (NOT (ZGREATERP (I$6) (N$0)))
+            (AND (NOT (ZGREATERP (K$4)
+                                 (ZQUOTIENT (N$0) '2)))
+                 (AND (NOT (ZEQP (K$3) '0))
+                      (AND (I$2)
+                           (AND (ZGREATERP (I$2) (N$0))
+                                (GLOBAL-HYPS)))))))
+  (AND
+   (AND
+    (NUMBERP (I$6))
+    (AND
+     (NOT (EQUAL (I$6) '0))
+     (AND
+      (EQUAL (BOOLE$6) '*1*TRUE)
+      (AND
+       (NOT (LESSP (N$0) (I$6)))
+       (AND
+        (IMPLIES (NOT (NEGATIVEP (CAND$6)))
+                 (NUMBERP (CAND$6)))
+        (AND
+         (IMPLIES (ZNEQP X (CAND$6))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (AND (NOT (LESSP (N$0)
+                          (TIMES '2
+                                 (CNT (CAND$6) (A$0) '1 (I$6)))))
+              (EQUAL (K$6)
+                     (CNT (CAND$6) (A$0) '1 (I$6))))))))))
+   (LEX (CONS (DIFFERENCE (ADD1 (N$0)) (I$6))
+              'NIL)
+        (CONS (ADD1 (ADD1 (PLUS (N$0) (N$0))))
+              'NIL)))))
+
+#| (COMMENT INPUT F T F F F F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F5)
+(ADD-AXIOM LOGICAL-IF-F5 NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+     (IMPLIES (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+                   (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS)))))))
+              (EXPRESSIBLE-ZNUMBERP (ZPLUS (K$6) '1))))
+
+#| (COMMENT INPUT F T F F F F F) |#
+
+(ADD-AXIOM ASSIGNMENT5
+           (REWRITE)
+           (AND (EQUAL (BOOLE$7) (BOOLE$6))
+                (AND (EQUAL (CAND$7) (CAND$6))
+                     (AND (EQUAL (I$7) (I$6))
+                          (EQUAL (K$7) (ZPLUS (K$6) '1))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT1 NIL
+     (IMPLIES (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+                   (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS)))))))
+              (AND (NOT (ZEQP '2 '0))
+                   (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (N$0) '2)))))
+
+#| (COMMENT INPUT F T F F F F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(PROVE-LEMMA OUTPUT NIL
+ (IMPLIES
+         (AND (ZGREATERP (K$7)
+                         (ZQUOTIENT (N$0) '2))
+              (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+                   (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (GLOBAL-HYPS))))))))
+         (AND (OR (EQUAL (BOOLE$7) '*1*TRUE)
+                  (EQUAL (BOOLE$7) '*1*FALSE))
+              (IF (BOOLE$7)
+                  (AND (ZNUMBERP (CAND$7))
+                       (LESSP (QUOTIENT (N$0) '2)
+                              (CNT (CAND$7) (A$0) '1 (N$0))))
+                  (NOT (LESSP (QUOTIENT (N$0) '2)
+                              (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT INPUT F T F F F F F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F6)
+(ADD-AXIOM LOGICAL-IF-F6 NIL T)
+
+(PROVE-LEMMA PHASE2-INVRT NIL
+ (IMPLIES
+  (AND (NOT (ZGREATERP (K$7)
+                       (ZQUOTIENT (N$0) '2)))
+       (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+            (AND (NOT (ZGREATERP (I$6) (N$0)))
+                 (AND (NOT (ZGREATERP (K$4)
+                                      (ZQUOTIENT (N$0) '2)))
+                      (AND (NOT (ZEQP (K$3) '0))
+                           (AND (I$2)
+                                (AND (ZGREATERP (I$2) (N$0))
+                                     (GLOBAL-HYPS))))))))
+  (AND
+   (AND
+    (NUMBERP (I$7))
+    (AND
+     (NOT (EQUAL (I$7) '0))
+     (AND
+      (EQUAL (BOOLE$7) '*1*TRUE)
+      (AND
+       (NOT (LESSP (N$0) (I$7)))
+       (AND
+        (IMPLIES (NOT (NEGATIVEP (CAND$7)))
+                 (NUMBERP (CAND$7)))
+        (AND
+         (IMPLIES (ZNEQP X (CAND$7))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (AND (NOT (LESSP (N$0)
+                          (TIMES '2
+                                 (CNT (CAND$7) (A$0) '1 (I$7)))))
+              (EQUAL (K$7)
+                     (CNT (CAND$7) (A$0) '1 (I$7))))))))))
+   (LEX (CONS (DIFFERENCE (ADD1 (N$0)) (I$7))
+              'NIL)
+        (CONS (ADD1 (ADD1 (PLUS (N$0) (N$0))))
+              'NIL)))))
+
+#| (COMMENT INPUT F T F F F F F F) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A NIL
+             (IMPLIES (AND (ZEQP (K$2) '0)
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (GLOBAL-HYPS)))
+                      (AND (LESSP '0 (I$2))
+                           (NOT (LESSP (N$0) (I$2))))))
+
+#| (COMMENT INPUT F F T) |#
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (AND (ZEQP (K$2) '0)
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (GLOBAL-HYPS)))
+                      (ZNUMBERP (ELT1 (A$0) (I$2)))))
+
+#| (COMMENT INPUT F F T) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (ELT1 (A$0) (I$2)))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3) (K$2))))))
+
+(ADD-AXIOM ASSIGNMENT3
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) (BOOLE$3))
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) '1)))))
+
+(PROVE-LEMMA PHASE1-INVRT NIL
+ (IMPLIES
+  (AND (ZEQP (K$2) '0)
+       (AND (NOT (ZGREATERP (I$2) (N$0)))
+            (GLOBAL-HYPS)))
+  (AND
+   (AND
+    (NUMBERP (I$4))
+    (AND
+     (NOT (EQUAL (I$4) '0))
+     (AND
+      (NUMBERP (K$4))
+      (AND
+       (NOT (LESSP (I$4) (K$4)))
+       (AND
+        (NOT (LESSP (N$0) (I$4)))
+        (AND
+         (IMPLIES (NOT (NEGATIVEP (CAND$4)))
+                  (NUMBERP (CAND$4)))
+         (AND
+          (NOT (LESSP (CNT (CAND$4) (A$0) '1 (I$4))
+                      (K$4)))
+          (AND
+           (IMPLIES
+                  (ZEQP X (CAND$4))
+                  (NOT (LESSP (PLUS (I$4) (K$4))
+                              (TIMES '2 (CNT X (A$0) '1 (I$4))))))
+           (IMPLIES
+            (ZNEQP X (CAND$4))
+            (NOT
+             (LESSP
+                   (I$4)
+                   (PLUS (K$4)
+                         (TIMES '2
+                                (CNT X (A$0) '1 (I$4)))))))))))))))
+   (LEX (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$4))))
+              'NIL)
+        (CONS (ADD1 (ADD1 (PLUS (N$0) (N$0))))
+              'NIL)))))
+
+#| (COMMENT INPUT F F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F2)
+(ADD-AXIOM LOGICAL-IF-F2 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A NIL
+             (IMPLIES (AND (NOT (ZEQP (K$2) '0))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (GLOBAL-HYPS)))
+                      (AND (LESSP '0 (I$2))
+                           (NOT (LESSP (N$0) (I$2))))))
+
+#| (COMMENT INPUT F F F) |#
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (AND (NOT (ZEQP (K$2) '0))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (GLOBAL-HYPS)))
+                      (ZNUMBERP (CAND$2))))
+
+#| (COMMENT INPUT F F F) |#
+
+(PROVE-LEMMA DEFINEDNESS1 NIL
+             (IMPLIES (AND (NOT (ZEQP (K$2) '0))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (GLOBAL-HYPS)))
+                      (ZNUMBERP (ELT1 (A$0) (I$2)))))
+
+#| (COMMENT INPUT F F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (AND (ZEQP (CAND$2) (ELT1 (A$0) (I$2)))
+                           (AND (NOT (ZEQP (K$2) '0))
+                                (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                     (GLOBAL-HYPS))))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (K$2) '1))))
+
+#| (COMMENT INPUT F F F T) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3) (ZPLUS (K$2) '1))))))
+
+(PROVE-LEMMA PHASE1-INVRT NIL
+ (IMPLIES
+  (AND (ZEQP (CAND$2) (ELT1 (A$0) (I$2)))
+       (AND (NOT (ZEQP (K$2) '0))
+            (AND (NOT (ZGREATERP (I$2) (N$0)))
+                 (GLOBAL-HYPS))))
+  (AND
+   (AND
+    (NUMBERP (I$3))
+    (AND
+     (NOT (EQUAL (I$3) '0))
+     (AND
+      (NUMBERP (K$3))
+      (AND
+       (NOT (LESSP (I$3) (K$3)))
+       (AND
+        (NOT (LESSP (N$0) (I$3)))
+        (AND
+         (IMPLIES (NOT (NEGATIVEP (CAND$3)))
+                  (NUMBERP (CAND$3)))
+         (AND
+          (NOT (LESSP (CNT (CAND$3) (A$0) '1 (I$3))
+                      (K$3)))
+          (AND
+           (IMPLIES
+                  (ZEQP X (CAND$3))
+                  (NOT (LESSP (PLUS (I$3) (K$3))
+                              (TIMES '2 (CNT X (A$0) '1 (I$3))))))
+           (IMPLIES
+            (ZNEQP X (CAND$3))
+            (NOT
+             (LESSP
+                   (I$3)
+                   (PLUS (K$3)
+                         (TIMES '2
+                                (CNT X (A$0) '1 (I$3)))))))))))))))
+   (LEX (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$3))))
+              'NIL)
+        (CONS (ADD1 (ADD1 (PLUS (N$0) (N$0))))
+              'NIL)))))
+
+#| (COMMENT INPUT F F F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F3)
+(ADD-AXIOM LOGICAL-IF-F3 NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZDIFFERENCE NIL
+           (IMPLIES (AND (NOT (ZEQP (CAND$2) (ELT1 (A$0) (I$2))))
+                         (AND (NOT (ZEQP (K$2) '0))
+                              (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                   (GLOBAL-HYPS))))
+                    (EXPRESSIBLE-ZNUMBERP (ZDIFFERENCE (K$2) '1))))
+
+#| (COMMENT INPUT F F F F) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3)
+                                 (ZDIFFERENCE (K$2) '1))))))
+
+(PROVE-LEMMA PHASE1-INVRT NIL
+ (IMPLIES
+  (AND (NOT (ZEQP (CAND$2) (ELT1 (A$0) (I$2))))
+       (AND (NOT (ZEQP (K$2) '0))
+            (AND (NOT (ZGREATERP (I$2) (N$0)))
+                 (GLOBAL-HYPS))))
+  (AND
+   (AND
+    (NUMBERP (I$3))
+    (AND
+     (NOT (EQUAL (I$3) '0))
+     (AND
+      (NUMBERP (K$3))
+      (AND
+       (NOT (LESSP (I$3) (K$3)))
+       (AND
+        (NOT (LESSP (N$0) (I$3)))
+        (AND
+         (IMPLIES (NOT (NEGATIVEP (CAND$3)))
+                  (NUMBERP (CAND$3)))
+         (AND
+          (NOT (LESSP (CNT (CAND$3) (A$0) '1 (I$3))
+                      (K$3)))
+          (AND
+           (IMPLIES
+                  (ZEQP X (CAND$3))
+                  (NOT (LESSP (PLUS (I$3) (K$3))
+                              (TIMES '2 (CNT X (A$0) '1 (I$3))))))
+           (IMPLIES
+            (ZNEQP X (CAND$3))
+            (NOT
+             (LESSP
+                   (I$3)
+                   (PLUS (K$3)
+                         (TIMES '2
+                                (CNT X (A$0) '1 (I$3)))))))))))))))
+   (LEX (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$3))))
+              'NIL)
+        (CONS (ADD1 (ADD1 (PLUS (N$0) (N$0))))
+              'NIL)))))
+
+#| (COMMENT INPUT F F F F) |#
+
+(UBT INPUT)
+
+(ADD-AXIOM PATHS-FROM-PHASE1-INVRT
+ (REWRITE)
+ (AND
+    (IMPLIES (ZEQP X (CAND$1))
+             (NOT (LESSP (PLUS (I$1) (K$1))
+                         (TIMES '2 (CNT X (A$0) '1 (I$1))))))
+    (IMPLIES (ZNEQP X (CAND$1))
+             (NOT (LESSP (I$1)
+                         (PLUS (K$1)
+                               (TIMES '2
+                                      (CNT X (A$0) '1 (I$1)))))))))
+
+(DEFN PATH-HYPS NIL
+ (AND
+  (GLOBAL-HYPS)
+  (AND
+   (NUMBERP (I$1))
+   (AND
+      (NOT (EQUAL (I$1) '0))
+      (AND (NUMBERP (K$1))
+           (AND (NOT (LESSP (I$1) (K$1)))
+                (AND (NOT (LESSP (N$0) (I$1)))
+                     (AND (IMPLIES (NOT (NEGATIVEP (CAND$1)))
+                                   (NUMBERP (CAND$1)))
+                          (NOT (LESSP (CNT (CAND$1) (A$0) '1 (I$1))
+                                      (K$1)))))))))))
+
+(PROVE-LEMMA DEFINEDNESS2 NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (I$1))))
+
+#| (COMMENT PHASE1-INVRT) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (PATH-HYPS)
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (I$1) '1))))
+
+#| (COMMENT PHASE1-INVRT) |#
+
+(ADD-AXIOM ASSIGNMENT3
+           (REWRITE)
+           (AND (EQUAL (BOOLE$2) (BOOLE$1))
+                (AND (EQUAL (CAND$2) (CAND$1))
+                     (AND (EQUAL (I$2) (ZPLUS (I$1) '1))
+                          (EQUAL (K$2) (K$1))))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (EQUAL (K$3) (K$2)))))
+
+(PROVE-LEMMA DEFINEDNESS3 NIL
+             (IMPLIES (AND (I$2)
+                           (AND (ZGREATERP (I$2) (N$0))
+                                (PATH-HYPS)))
+                      (ZNUMBERP (K$3))))
+
+#| (COMMENT PHASE1-INVRT T) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) '*1*FALSE)
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) (K$3))))))
+
+(PROVE-LEMMA COMPOUND-INVRT
+             (REWRITE)
+             (IMPLIES (EQUAL (K$1) 0)
+                      (NOT (LESSP (I$1)
+                                  (TIMES 2 (CNT X (A$0) 1 (I$1))))))
+             ((USE (PATHS-FROM-PHASE1-INVRT))))
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (ZEQP (K$3) '0)
+                    (AND (I$2)
+                         (AND (ZGREATERP (I$2) (N$0))
+                              (PATH-HYPS))))
+               (AND (OR (EQUAL (BOOLE$4) '*1*TRUE)
+                        (EQUAL (BOOLE$4) '*1*FALSE))
+                    (IF (BOOLE$4)
+                        (AND (ZNUMBERP (CAND$4))
+                             (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT (CAND$4) (A$0) '1 (N$0))))
+                        (NOT (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT PHASE1-INVRT T T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F4)
+(ADD-AXIOM LOGICAL-IF-F4 NIL T)
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) '*1*TRUE)
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) (K$3))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT NIL
+       (IMPLIES (AND (NOT (ZEQP (K$3) '0))
+                     (AND (I$2)
+                          (AND (ZGREATERP (I$2) (N$0))
+                               (PATH-HYPS))))
+                (AND (NOT (ZEQP '2 '0))
+                     (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (N$0) '2)))))
+
+#| (COMMENT PHASE1-INVRT T F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (ZGREATERP (K$4)
+                               (ZQUOTIENT (N$0) '2))
+                    (AND (NOT (ZEQP (K$3) '0))
+                         (AND (I$2)
+                              (AND (ZGREATERP (I$2) (N$0))
+                                   (PATH-HYPS)))))
+               (AND (OR (EQUAL (BOOLE$4) '*1*TRUE)
+                        (EQUAL (BOOLE$4) '*1*FALSE))
+                    (IF (BOOLE$4)
+                        (AND (ZNUMBERP (CAND$4))
+                             (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT (CAND$4) (A$0) '1 (N$0))))
+                        (NOT (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT PHASE1-INVRT T F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F5)
+(ADD-AXIOM LOGICAL-IF-F5 NIL T)
+
+(ADD-AXIOM ASSIGNMENT5
+           (REWRITE)
+           (AND (EQUAL (BOOLE$5) (BOOLE$4))
+                (AND (EQUAL (CAND$5) (CAND$4))
+                     (AND (EQUAL (I$5) (I$4))
+                          (EQUAL (K$5) '0)))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-F6)
+(ADD-AXIOM LOGICAL-IF-F6 NIL T)
+
+(ADD-AXIOM ASSIGNMENT6
+           (REWRITE)
+           (AND (EQUAL (BOOLE$6) (BOOLE$5))
+                (AND (EQUAL (CAND$6) (CAND$5))
+                     (AND (EQUAL (I$6) '1)
+                          (EQUAL (K$6) (K$5))))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER1
+           (REWRITE)
+           (AND (EQUAL (BOOLE$7) (BOOLE$6))
+                (AND (EQUAL (CAND$7) (CAND$6))
+                     (EQUAL (K$7) (K$6)))))
+
+(ADD-AXIOM ASSIGNMENT7
+           (REWRITE)
+           (AND (EQUAL (BOOLE$8) '*1*FALSE)
+                (AND (EQUAL (CAND$8) (CAND$7))
+                     (AND (EQUAL (I$8) (I$7))
+                          (EQUAL (K$8) (K$7))))))
+
+(PROVE-LEMMA OUTPUT NIL
+     (IMPLIES (AND (I$6)
+                   (AND (ZGREATERP (I$6) (N$0))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS)))))))
+              (AND (OR (EQUAL (BOOLE$8) '*1*TRUE)
+                       (EQUAL (BOOLE$8) '*1*FALSE))
+                   (IF (BOOLE$8)
+                       (AND (ZNUMBERP (CAND$8))
+                            (LESSP (QUOTIENT (N$0) '2)
+                                   (CNT (CAND$8) (A$0) '1 (N$0))))
+                       (NOT (LESSP (QUOTIENT (N$0) '2)
+                                   (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT PHASE1-INVRT T F F F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F7)
+(ADD-AXIOM LOGICAL-IF-F7 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A1 NIL
+          (IMPLIES (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS))))))
+                   (AND (LESSP '0 (I$6))
+                        (NOT (LESSP (N$0) (I$6))))))
+
+#| (COMMENT PHASE1-INVRT T F F F F) |#
+
+(PROVE-LEMMA DEFINEDNESS4 NIL
+          (IMPLIES (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS))))))
+                   (ZNUMBERP (CAND$6))))
+
+#| (COMMENT PHASE1-INVRT T F F F F) |#
+
+(PROVE-LEMMA DEFINEDNESS5 NIL
+          (IMPLIES (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS))))))
+                   (ZNUMBERP (ELT1 (A$0) (I$6)))))
+
+#| (COMMENT PHASE1-INVRT T F F F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(PROVE-LEMMA PHASE2-INVRT NIL
+ (IMPLIES
+  (AND (ZNEQP (CAND$6) (ELT1 (A$0) (I$6)))
+       (AND (NOT (ZGREATERP (I$6) (N$0)))
+            (AND (NOT (ZGREATERP (K$4)
+                                 (ZQUOTIENT (N$0) '2)))
+                 (AND (NOT (ZEQP (K$3) '0))
+                      (AND (I$2)
+                           (AND (ZGREATERP (I$2) (N$0))
+                                (PATH-HYPS)))))))
+  (AND
+   (AND
+    (NUMBERP (I$6))
+    (AND
+     (NOT (EQUAL (I$6) '0))
+     (AND
+      (EQUAL (BOOLE$6) '*1*TRUE)
+      (AND
+       (NOT (LESSP (N$0) (I$6)))
+       (AND
+        (IMPLIES (NOT (NEGATIVEP (CAND$6)))
+                 (NUMBERP (CAND$6)))
+        (AND
+         (IMPLIES (ZNEQP X (CAND$6))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (AND (NOT (LESSP (N$0)
+                          (TIMES '2
+                                 (CNT (CAND$6) (A$0) '1 (I$6)))))
+              (EQUAL (K$6)
+                     (CNT (CAND$6) (A$0) '1 (I$6))))))))))
+   (LEX (CONS (DIFFERENCE (ADD1 (N$0)) (I$6))
+              'NIL)
+        (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$1))))
+              'NIL)))))
+
+#| (COMMENT PHASE1-INVRT T F F F F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F8)
+(ADD-AXIOM LOGICAL-IF-F8 NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS1 NIL
+     (IMPLIES (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+                   (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS)))))))
+              (EXPRESSIBLE-ZNUMBERP (ZPLUS (K$6) '1))))
+
+#| (COMMENT PHASE1-INVRT T F F F F F) |#
+
+(ADD-AXIOM ASSIGNMENT7
+           (REWRITE)
+           (AND (EQUAL (BOOLE$7) (BOOLE$6))
+                (AND (EQUAL (CAND$7) (CAND$6))
+                     (AND (EQUAL (I$7) (I$6))
+                          (EQUAL (K$7) (ZPLUS (K$6) '1))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT1 NIL
+     (IMPLIES (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+                   (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS)))))))
+              (AND (NOT (ZEQP '2 '0))
+                   (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (N$0) '2)))))
+
+#| (COMMENT PHASE1-INVRT T F F F F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T1)
+(ADD-AXIOM LOGICAL-IF-T1 NIL T)
+
+(PROVE-LEMMA OUTPUT NIL
+ (IMPLIES
+         (AND (ZGREATERP (K$7)
+                         (ZQUOTIENT (N$0) '2))
+              (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+                   (AND (NOT (ZGREATERP (I$6) (N$0)))
+                        (AND (NOT (ZGREATERP (K$4)
+                                             (ZQUOTIENT (N$0) '2)))
+                             (AND (NOT (ZEQP (K$3) '0))
+                                  (AND (I$2)
+                                       (AND (ZGREATERP (I$2) (N$0))
+                                            (PATH-HYPS))))))))
+         (AND (OR (EQUAL (BOOLE$7) '*1*TRUE)
+                  (EQUAL (BOOLE$7) '*1*FALSE))
+              (IF (BOOLE$7)
+                  (AND (ZNUMBERP (CAND$7))
+                       (LESSP (QUOTIENT (N$0) '2)
+                              (CNT (CAND$7) (A$0) '1 (N$0))))
+                  (NOT (LESSP (QUOTIENT (N$0) '2)
+                              (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT PHASE1-INVRT T F F F F F T) |#
+
+(UBT LOGICAL-IF-T1)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F9)
+(ADD-AXIOM LOGICAL-IF-F9 NIL T)
+
+(PROVE-LEMMA PHASE2-INVRT NIL
+ (IMPLIES
+  (AND (NOT (ZGREATERP (K$7)
+                       (ZQUOTIENT (N$0) '2)))
+       (AND (NOT (ZNEQP (CAND$6) (ELT1 (A$0) (I$6))))
+            (AND (NOT (ZGREATERP (I$6) (N$0)))
+                 (AND (NOT (ZGREATERP (K$4)
+                                      (ZQUOTIENT (N$0) '2)))
+                      (AND (NOT (ZEQP (K$3) '0))
+                           (AND (I$2)
+                                (AND (ZGREATERP (I$2) (N$0))
+                                     (PATH-HYPS))))))))
+  (AND
+   (AND
+    (NUMBERP (I$7))
+    (AND
+     (NOT (EQUAL (I$7) '0))
+     (AND
+      (EQUAL (BOOLE$7) '*1*TRUE)
+      (AND
+       (NOT (LESSP (N$0) (I$7)))
+       (AND
+        (IMPLIES (NOT (NEGATIVEP (CAND$7)))
+                 (NUMBERP (CAND$7)))
+        (AND
+         (IMPLIES (ZNEQP X (CAND$7))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (AND (NOT (LESSP (N$0)
+                          (TIMES '2
+                                 (CNT (CAND$7) (A$0) '1 (I$7)))))
+              (EQUAL (K$7)
+                     (CNT (CAND$7) (A$0) '1 (I$7))))))))))
+   (LEX (CONS (DIFFERENCE (ADD1 (N$0)) (I$7))
+              'NIL)
+        (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$1))))
+              'NIL)))))
+
+#| (COMMENT PHASE1-INVRT T F F F F F F) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F4)
+(ADD-AXIOM LOGICAL-IF-F4 NIL T)
+
+(PROVE-LEMMA DEFINEDNESS3 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$2) (N$0)))
+                           (PATH-HYPS))
+                      (ZNUMBERP (K$2))))
+
+#| (COMMENT PHASE1-INVRT F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A1 NIL
+             (IMPLIES (AND (ZEQP (K$2) '0)
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (AND (LESSP '0 (I$2))
+                           (NOT (LESSP (N$0) (I$2))))))
+
+#| (COMMENT PHASE1-INVRT F T) |#
+
+(PROVE-LEMMA DEFINEDNESS4 NIL
+             (IMPLIES (AND (ZEQP (K$2) '0)
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (ZNUMBERP (ELT1 (A$0) (I$2)))))
+
+#| (COMMENT PHASE1-INVRT F T) |#
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (ELT1 (A$0) (I$2)))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3) (K$2))))))
+
+(ADD-AXIOM ASSIGNMENT5
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) (BOOLE$3))
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) '1)))))
+
+(PROVE-LEMMA COMPOUND-INVRT
+             (REWRITE)
+             (IMPLIES (EQUAL (K$1) 0)
+                      (NOT (LESSP (I$1)
+                                  (TIMES 2 (CNT X (A$0) 1 (I$1))))))
+             ((USE (PATHS-FROM-PHASE1-INVRT))))
+
+(PROVE-LEMMA PHASE1-INVRT1 NIL
+ (IMPLIES
+  (AND (ZEQP (K$2) '0)
+       (AND (NOT (ZGREATERP (I$2) (N$0)))
+            (PATH-HYPS)))
+  (AND
+   (AND
+    (NUMBERP (I$4))
+    (AND
+     (NOT (EQUAL (I$4) '0))
+     (AND
+      (NUMBERP (K$4))
+      (AND
+       (NOT (LESSP (I$4) (K$4)))
+       (AND
+        (NOT (LESSP (N$0) (I$4)))
+        (AND
+         (IMPLIES (NOT (NEGATIVEP (CAND$4)))
+                  (NUMBERP (CAND$4)))
+         (AND
+          (NOT (LESSP (CNT (CAND$4) (A$0) '1 (I$4))
+                      (K$4)))
+          (AND
+           (IMPLIES
+                  (ZEQP X (CAND$4))
+                  (NOT (LESSP (PLUS (I$4) (K$4))
+                              (TIMES '2 (CNT X (A$0) '1 (I$4))))))
+           (IMPLIES
+            (ZNEQP X (CAND$4))
+            (NOT
+             (LESSP
+                   (I$4)
+                   (PLUS (K$4)
+                         (TIMES '2
+                                (CNT X (A$0) '1 (I$4)))))))))))))))
+   (LEX (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$4))))
+              'NIL)
+        (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$1))))
+              'NIL)))))
+
+#| (COMMENT PHASE1-INVRT F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F5)
+(ADD-AXIOM LOGICAL-IF-F5 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A1 NIL
+             (IMPLIES (AND (NOT (ZEQP (K$2) '0))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (AND (LESSP '0 (I$2))
+                           (NOT (LESSP (N$0) (I$2))))))
+
+#| (COMMENT PHASE1-INVRT F F) |#
+
+(PROVE-LEMMA DEFINEDNESS4 NIL
+             (IMPLIES (AND (NOT (ZEQP (K$2) '0))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (ZNUMBERP (CAND$2))))
+
+#| (COMMENT PHASE1-INVRT F F) |#
+
+(PROVE-LEMMA DEFINEDNESS5 NIL
+             (IMPLIES (AND (NOT (ZEQP (K$2) '0))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (ZNUMBERP (ELT1 (A$0) (I$2)))))
+
+#| (COMMENT PHASE1-INVRT F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS1 NIL
+             (IMPLIES (AND (ZEQP (CAND$2) (ELT1 (A$0) (I$2)))
+                           (AND (NOT (ZEQP (K$2) '0))
+                                (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                     (PATH-HYPS))))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (K$2) '1))))
+
+#| (COMMENT PHASE1-INVRT F F T) |#
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3) (ZPLUS (K$2) '1))))))
+
+(PROVE-LEMMA PHASE1-INVRT1 NIL
+ (IMPLIES
+  (AND (ZEQP (CAND$2) (ELT1 (A$0) (I$2)))
+       (AND (NOT (ZEQP (K$2) '0))
+            (AND (NOT (ZGREATERP (I$2) (N$0)))
+                 (PATH-HYPS))))
+  (AND
+   (AND
+    (NUMBERP (I$3))
+    (AND
+     (NOT (EQUAL (I$3) '0))
+     (AND
+      (NUMBERP (K$3))
+      (AND
+       (NOT (LESSP (I$3) (K$3)))
+       (AND
+        (NOT (LESSP (N$0) (I$3)))
+        (AND
+         (IMPLIES (NOT (NEGATIVEP (CAND$3)))
+                  (NUMBERP (CAND$3)))
+         (AND
+          (NOT (LESSP (CNT (CAND$3) (A$0) '1 (I$3))
+                      (K$3)))
+          (AND
+           (IMPLIES
+                  (ZEQP X (CAND$3))
+                  (NOT (LESSP (PLUS (I$3) (K$3))
+                              (TIMES '2 (CNT X (A$0) '1 (I$3))))))
+           (IMPLIES
+            (ZNEQP X (CAND$3))
+            (NOT
+             (LESSP
+                   (I$3)
+                   (PLUS (K$3)
+                         (TIMES '2
+                                (CNT X (A$0) '1 (I$3)))))))))))))))
+   (LEX (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$3))))
+              'NIL)
+        (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$1))))
+              'NIL)))))
+
+#| (COMMENT PHASE1-INVRT F F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F6)
+(ADD-AXIOM LOGICAL-IF-F6 NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZDIFFERENCE1 NIL
+           (IMPLIES (AND (NOT (ZEQP (CAND$2) (ELT1 (A$0) (I$2))))
+                         (AND (NOT (ZEQP (K$2) '0))
+                              (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                   (PATH-HYPS))))
+                    (EXPRESSIBLE-ZNUMBERP (ZDIFFERENCE (K$2) '1))))
+
+#| (COMMENT PHASE1-INVRT F F F) |#
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3)
+                                 (ZDIFFERENCE (K$2) '1))))))
+
+(PROVE-LEMMA PHASE1-INVRT1 NIL
+ (IMPLIES
+  (AND (NOT (ZEQP (CAND$2) (ELT1 (A$0) (I$2))))
+       (AND (NOT (ZEQP (K$2) '0))
+            (AND (NOT (ZGREATERP (I$2) (N$0)))
+                 (PATH-HYPS))))
+  (AND
+   (AND
+    (NUMBERP (I$3))
+    (AND
+     (NOT (EQUAL (I$3) '0))
+     (AND
+      (NUMBERP (K$3))
+      (AND
+       (NOT (LESSP (I$3) (K$3)))
+       (AND
+        (NOT (LESSP (N$0) (I$3)))
+        (AND
+         (IMPLIES (NOT (NEGATIVEP (CAND$3)))
+                  (NUMBERP (CAND$3)))
+         (AND
+          (NOT (LESSP (CNT (CAND$3) (A$0) '1 (I$3))
+                      (K$3)))
+          (AND
+           (IMPLIES
+                  (ZEQP X (CAND$3))
+                  (NOT (LESSP (PLUS (I$3) (K$3))
+                              (TIMES '2 (CNT X (A$0) '1 (I$3))))))
+           (IMPLIES
+            (ZNEQP X (CAND$3))
+            (NOT
+             (LESSP
+                   (I$3)
+                   (PLUS (K$3)
+                         (TIMES '2
+                                (CNT X (A$0) '1 (I$3)))))))))))))))
+   (LEX (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$3))))
+              'NIL)
+        (CONS (ADD1 (PLUS (N$0)
+                          (DIFFERENCE (ADD1 (N$0)) (I$1))))
+              'NIL)))))
+
+#| (COMMENT PHASE1-INVRT F F F) |#
+
+(UBT PATHS-FROM-PHASE1-INVRT)
+
+(ADD-AXIOM PATHS-FROM-PHASE2-INVRT
+ (REWRITE)
+ (AND
+    (EQUAL (BOOLE$1) '*1*TRUE)
+    (AND (IMPLIES (ZNEQP X (CAND$1))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (EQUAL (K$1)
+                (CNT (CAND$1) (A$0) '1 (I$1))))))
+
+(DEFN PATH-HYPS NIL
+    (AND (GLOBAL-HYPS)
+         (AND (NUMBERP (I$1))
+              (AND (NOT (EQUAL (I$1) '0))
+                   (AND (NOT (LESSP (N$0) (I$1)))
+                        (AND (IMPLIES (NOT (NEGATIVEP (CAND$1)))
+                                      (NUMBERP (CAND$1)))
+                             (NOT (LESSP (N$0)
+                                         (TIMES '2
+                                                (CNT (CAND$1)
+                                                     (A$0)
+                                                     '1
+                                                     (I$1)))))))))))
+
+(PROVE-LEMMA DEFINEDNESS2 NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (I$1))))
+
+#| (COMMENT PHASE2-INVRT) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (PATH-HYPS)
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (I$1) '1))))
+
+#| (COMMENT PHASE2-INVRT) |#
+
+(ADD-AXIOM ASSIGNMENT3
+           (REWRITE)
+           (AND (EQUAL (BOOLE$2) (BOOLE$1))
+                (AND (EQUAL (CAND$2) (CAND$1))
+                     (AND (EQUAL (I$2) (ZPLUS (I$1) '1))
+                          (EQUAL (K$2) (K$1))))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (EQUAL (K$3) (K$2)))))
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$4) '*1*FALSE)
+                (AND (EQUAL (CAND$4) (CAND$3))
+                     (AND (EQUAL (I$4) (I$3))
+                          (EQUAL (K$4) (K$3))))))
+
+(PROVE-LEMMA ZEQP-IS-A-CONGRUENCE-RELATION-WRT-CNT-ARG-1
+             (REWRITE)
+             (IMPLIES (EQUAL (ZNORMALIZE X) (ZNORMALIZE Y))
+                      (NOT (LESSP (CNT X A I J) (CNT Y A I J)))))
+
+(PROVE-LEMMA PHASE-2-HINT
+          (REWRITE)
+          (IMPLIES (NOT (LESSP (N$0)
+                               (PLUS (CNT (CAND$1) (A$0) 1 (N$0))
+                                     (CNT (CAND$1) (A$0) 1 (N$0)))))
+                   (NOT (LESSP (N$0)
+                               (PLUS (CNT X (A$0) 1 (N$0))
+                                     (CNT X (A$0) 1 (N$0))))))
+          ((USE (PATHS-FROM-PHASE2-INVRT))))
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (I$2)
+                    (AND (ZGREATERP (I$2) (N$0))
+                         (PATH-HYPS)))
+               (AND (OR (EQUAL (BOOLE$4) '*1*TRUE)
+                        (EQUAL (BOOLE$4) '*1*FALSE))
+                    (IF (BOOLE$4)
+                        (AND (ZNUMBERP (CAND$4))
+                             (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT (CAND$4) (A$0) '1 (N$0))))
+                        (NOT (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT PHASE2-INVRT T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F4)
+(ADD-AXIOM LOGICAL-IF-F4 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A1 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$2) (N$0)))
+                           (PATH-HYPS))
+                      (AND (LESSP '0 (I$2))
+                           (NOT (LESSP (N$0) (I$2))))))
+
+#| (COMMENT PHASE2-INVRT F) |#
+
+(PROVE-LEMMA DEFINEDNESS3 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$2) (N$0)))
+                           (PATH-HYPS))
+                      (ZNUMBERP (CAND$2))))
+
+#| (COMMENT PHASE2-INVRT F) |#
+
+(PROVE-LEMMA DEFINEDNESS4 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$2) (N$0)))
+                           (PATH-HYPS))
+                      (ZNUMBERP (ELT1 (A$0) (I$2)))))
+
+#| (COMMENT PHASE2-INVRT F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA PHASE2-INVRT1 NIL
+ (IMPLIES
+  (AND (ZNEQP (CAND$2) (ELT1 (A$0) (I$2)))
+       (AND (NOT (ZGREATERP (I$2) (N$0)))
+            (PATH-HYPS)))
+  (AND
+   (AND
+    (NUMBERP (I$2))
+    (AND
+     (NOT (EQUAL (I$2) '0))
+     (AND
+      (EQUAL (BOOLE$2) '*1*TRUE)
+      (AND
+       (NOT (LESSP (N$0) (I$2)))
+       (AND
+        (IMPLIES (NOT (NEGATIVEP (CAND$2)))
+                 (NUMBERP (CAND$2)))
+        (AND
+         (IMPLIES (ZNEQP X (CAND$2))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (AND (NOT (LESSP (N$0)
+                          (TIMES '2
+                                 (CNT (CAND$2) (A$0) '1 (I$2)))))
+              (EQUAL (K$2)
+                     (CNT (CAND$2) (A$0) '1 (I$2))))))))))
+   (LEX (CONS (DIFFERENCE (ADD1 (N$0)) (I$2))
+              'NIL)
+        (CONS (DIFFERENCE (ADD1 (N$0)) (I$1))
+              'NIL)))))
+
+#| (COMMENT PHASE2-INVRT F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F5)
+(ADD-AXIOM LOGICAL-IF-F5 NIL T)
+
+(PROVE-LEMMA DEFINEDNESS5 NIL
+             (IMPLIES (AND (NOT (ZNEQP (CAND$2) (ELT1 (A$0) (I$2))))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (ZNUMBERP (K$2))))
+
+#| (COMMENT PHASE2-INVRT F F) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS1 NIL
+             (IMPLIES (AND (NOT (ZNEQP (CAND$2) (ELT1 (A$0) (I$2))))
+                           (AND (NOT (ZGREATERP (I$2) (N$0)))
+                                (PATH-HYPS)))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (K$2) '1))))
+
+#| (COMMENT PHASE2-INVRT F F) |#
+
+(ADD-AXIOM ASSIGNMENT4
+           (REWRITE)
+           (AND (EQUAL (BOOLE$3) (BOOLE$2))
+                (AND (EQUAL (CAND$3) (CAND$2))
+                     (AND (EQUAL (I$3) (I$2))
+                          (EQUAL (K$3) (ZPLUS (K$2) '1))))))
+
+(PROVE-LEMMA CNT-GROWS
+             (REWRITE)
+             (IMPLIES (AND (LESSP (I$1) N)
+                           (ZEQP X (ELT1 A (ADD1 (I$1)))))
+                      (LESSP (CNT X A 1 (I$1))
+                             (CNT X A 1 N)))
+             ((INDUCT (PLUS N I))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT NIL
+       (IMPLIES (AND (NOT (ZNEQP (CAND$2) (ELT1 (A$0) (I$2))))
+                     (AND (NOT (ZGREATERP (I$2) (N$0)))
+                          (PATH-HYPS)))
+                (AND (NOT (ZEQP '2 '0))
+                     (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (N$0) '2)))))
+
+#| (COMMENT PHASE2-INVRT F F) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (ZGREATERP (K$3)
+                               (ZQUOTIENT (N$0) '2))
+                    (AND (NOT (ZNEQP (CAND$2) (ELT1 (A$0) (I$2))))
+                         (AND (NOT (ZGREATERP (I$2) (N$0)))
+                              (PATH-HYPS))))
+               (AND (OR (EQUAL (BOOLE$3) '*1*TRUE)
+                        (EQUAL (BOOLE$3) '*1*FALSE))
+                    (IF (BOOLE$3)
+                        (AND (ZNUMBERP (CAND$3))
+                             (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT (CAND$3) (A$0) '1 (N$0))))
+                        (NOT (LESSP (QUOTIENT (N$0) '2)
+                                    (CNT X (A$0) '1 (N$0))))))))
+
+#| (COMMENT PHASE2-INVRT F F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F6)
+(ADD-AXIOM LOGICAL-IF-F6 NIL T)
+
+(PROVE-LEMMA PHASE2-INVRT1 NIL
+ (IMPLIES
+  (AND (NOT (ZGREATERP (K$3)
+                       (ZQUOTIENT (N$0) '2)))
+       (AND (NOT (ZNEQP (CAND$2) (ELT1 (A$0) (I$2))))
+            (AND (NOT (ZGREATERP (I$2) (N$0)))
+                 (PATH-HYPS))))
+  (AND
+   (AND
+    (NUMBERP (I$3))
+    (AND
+     (NOT (EQUAL (I$3) '0))
+     (AND
+      (EQUAL (BOOLE$3) '*1*TRUE)
+      (AND
+       (NOT (LESSP (N$0) (I$3)))
+       (AND
+        (IMPLIES (NOT (NEGATIVEP (CAND$3)))
+                 (NUMBERP (CAND$3)))
+        (AND
+         (IMPLIES (ZNEQP X (CAND$3))
+                  (NOT (LESSP (N$0)
+                              (TIMES '2 (CNT X (A$0) '1 (N$0))))))
+         (AND (NOT (LESSP (N$0)
+                          (TIMES '2
+                                 (CNT (CAND$3) (A$0) '1 (I$3)))))
+              (EQUAL (K$3)
+                     (CNT (CAND$3) (A$0) '1 (I$3))))))))))
+   (LEX (CONS (DIFFERENCE (ADD1 (N$0)) (I$3))
+              'NIL)
+        (CONS (DIFFERENCE (ADD1 (N$0)) (I$1))
+              'NIL)))))
+
+#| (COMMENT PHASE2-INVRT F F F) |#
+
+(UBT PATHS-FROM-PHASE2-INVRT)
+
+(UBT FORTRAN)
+
+#|
+
+The correctness of the program depends upon the following events:
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Definition.
+        (CNT X A I N)
+           =
+        (IF (OR (ZEROP N) (LESSP N I))
+            0
+            (IF (ZEQP X (ELT1 A N))
+                (ADD1 (CNT X A I (SUB1 N)))
+                (CNT X A I (SUB1 N))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        (FORTRAN-COMMENT USEFUL-LEMMAS)
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Specification for routine MJRTY
+
+The input assertion:
+        (AND (IMPLIES (AND (LESSP 0 J)
+                           (NOT (LESSP (N STATE) J))
+                           (NOT (NEGATIVEP (ELT1 A J))))
+                      (NUMBERP (ELT1 A J)))
+             (NUMBERP (N STATE))
+             (NOT (EQUAL (N STATE) 0))
+             (LESSP (ADD1 (N STATE))
+                    (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER)))
+
+
+The output assertion:
+        (AND (OR (EQUAL (BOOLE NEWSTATE) (TRUE))
+                 (EQUAL (BOOLE NEWSTATE) (FALSE)))
+             (IF (BOOLE NEWSTATE)
+                 (AND (ZNUMBERP (CAND NEWSTATE))
+                      (LESSP (QUOTIENT (N STATE) 2)
+                             (CNT (CAND NEWSTATE)
+                                  (A STATE)
+                                  1
+                                  (N STATE))))
+                 (NOT (LESSP (QUOTIENT (N STATE) 2)
+                             (CNT X (A STATE) 1 (N STATE))))))
+
+      END
+      SUBROUTINE MJRTY(A, N, BOOLE, CAND)
+      INTEGER N
+      INTEGER A
+      LOGICAL BOOLE
+      INTEGER CAND
+      INTEGER I
+      INTEGER K
+      DIMENSION A(N)
+      K = 0
+C     THE FOLLOWING DO IMPLEMENTS THE PAIRING PHASE. CAND IS THE CURRENT
+C     LY LEADING CANDIDATE AND K IS THE NUMBER OF UNPAIRED VOTES FOR CAN
+C     D. 
+      DO 100 I = 1, N
+C     DOJUNK PHASE1-HINT
+      IF ((K .EQ. 0)) GOTO 50
+      IF ((CAND .EQ. A(I))) GOTO 75
+      K = (K - 1)
+      GOTO 100
+50    CAND = A(I)
+      K = 1
+C     XXX PHASE1-INVRT-F-T
+      GOTO 100
+75    K = (K + 1)
+100   CONTINUE
+      IF ((K .EQ. 0)) GOTO 300
+      BOOLE = .TRUE.
+      IF ((K .GT. (N / 2))) RETURN
+C     WE NOW ENTER THE COUNTING PHASE. BOOLE IS SET TO TRUE IN ANTICIPAT
+C     ION OF FINDING CAND IN THE MAJORITY. K IS USED AS THE RUNNING TALL
+C     Y FOR CAND. WE EXIT AS SOON AS K EXCEEDS N/2. 
+      K = 0
+      DO 200 I = 1, N
+C     DOJUNK PHASE2
+      IF ((CAND .NE. A(I))) GOTO 200
+      K = (K + 1)
+C     XXX OUTPUT-HINT
+      IF ((K .GT. (N / 2))) RETURN
+200   CONTINUE
+300   BOOLE = .FALSE.
+C     XXX HINT-FOR-PHASE1-INVRT-T-T
+C     XXX HINT-FOR-PHASE2-INVRT-T
+      RETURN
+      END
+
+
+The XXX at USEFUL-LEMMAS.
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  PLUS-1 (rewrite):
+        (EQUAL (PLUS 1 X) (ADD1 X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DIFFERENCE-0 (rewrite):
+        (IMPLIES (NOT (LESSP X Y))
+                 (EQUAL (DIFFERENCE Y X) 0))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DIFFERENCE-1 (rewrite):
+        (EQUAL (DIFFERENCE X 1) (SUB1 X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  LESSP-X-1 (rewrite):
+        (EQUAL (LESSP X 1) (ZEROP X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  LESSP-REMAINDER2 (rewrite and generalize):
+        (EQUAL (LESSP (REMAINDER X Y) Y)
+               (NOT (ZEROP Y)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  REMAINDER-QUOTIENT-ELIM (elimination):
+        (IMPLIES (AND (NOT (ZEROP Y)) (NUMBERP X))
+                 (EQUAL (PLUS (REMAINDER X Y)
+                              (TIMES Y (QUOTIENT X Y)))
+                        X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  QUOTIENT-BY-2-BOUND (rewrite):
+        (NOT (LESSP X (QUOTIENT X 2)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  LESSP-QUOTIENT-REWRITE (rewrite):
+        (EQUAL (LESSP (QUOTIENT N 2) M)
+               (LESSP N (PLUS M M)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  ZNORMALIZE-ZERO (rewrite):
+        (IMPLIES (NUMBERP X)
+                 (EQUAL (EQUAL (ZNORMALIZE X) 0)
+                        (EQUAL X 0)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Enable ZNORMALIZE.
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  CNT-BOUND (rewrite):
+        (NOT (LESSP N (CNT X A 1 N)))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Hints for routine MJRTY
+
+                              
+
+The input clock:
+        (LIST (ADD1 (ADD1 (PLUS (N (START)) (N (START))))))
+
+The DO junk named PHASE1-HINT:
+        ((BUMP PHASE1-INVRT))
+
+The invariant and clock named PHASE1-INVRT.
+
+        (AND
+         (NUMBERP (I STATE))
+         (NOT (EQUAL (I STATE) 0))
+         (NUMBERP (K STATE))
+         (NOT (LESSP (I STATE) (K STATE)))
+         (NOT (LESSP (N (START)) (I STATE)))
+         (IMPLIES (NOT (NEGATIVEP (CAND STATE)))
+                  (NUMBERP (CAND STATE)))
+         (NOT (LESSP (CNT (CAND STATE)
+                          (A STATE)
+                          1
+                          (I STATE))
+                     (K STATE)))
+         (IMPLIES
+                (ZEQP X (CAND STATE))
+                (NOT (LESSP (PLUS (I STATE) (K STATE))
+                            (TIMES 2
+                                   (CNT X (A STATE) 1 (I STATE))))))
+         (IMPLIES
+          (ZNEQP X (CAND STATE))
+          (NOT
+             (LESSP (I STATE)
+                    (PLUS (K STATE)
+                          (TIMES 2
+                                 (CNT X (A STATE) 1 (I STATE))))))))
+
+        (LIST (ADD1 (PLUS (N (START))
+                          (DIFFERENCE (ADD1 (N (START)))
+                                      (I STATE)))))
+
+The XXX named PHASE1-INVRT-F-T:
+        Path encryption:
+        ((PHASE1-INVRT F T))
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  COMPOUND-INVRT (rewrite):
+        (IMPLIES (EQUAL (K$1) 0)
+                 (NOT (LESSP (I$1)
+                             (TIMES 2 (CNT X (A$0) 1 (I$1))))))
+        Hints:  Consider:
+                 PATHS-FROM-PHASE1-INVRT
+                Enable  PATHS-FROM-PHASE1-INVRT
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+The DO junk named PHASE2:
+        ((BUMP PHASE2-INVRT))
+
+The invariant and clock named PHASE2-INVRT.
+
+        (AND
+         (NUMBERP (I STATE))
+         (NOT (EQUAL (I STATE) 0))
+         (EQUAL (BOOLE STATE) (TRUE))
+         (NOT (LESSP (N (START)) (I STATE)))
+         (IMPLIES (NOT (NEGATIVEP (CAND STATE)))
+                  (NUMBERP (CAND STATE)))
+         (IMPLIES
+              (ZNEQP X (CAND STATE))
+              (NOT (LESSP (N (START))
+                          (TIMES 2
+                                 (CNT X (A STATE) 1 (N (START)))))))
+         (NOT (LESSP (N (START))
+                     (TIMES 2
+                            (CNT (CAND STATE)
+                                 (A STATE)
+                                 1
+                                 (I STATE)))))
+         (EQUAL (K STATE)
+                (CNT (CAND STATE)
+                     (A STATE)
+                     1
+                     (I STATE))))
+
+        (LIST (DIFFERENCE (ADD1 (N (START)))
+                          (I STATE)))
+
+The XXX named OUTPUT-HINT:
+        Path encryption:
+        ((PHASE2-INVRT F F))
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  CNT-GROWS (rewrite):
+        (IMPLIES (AND (LESSP (I$1) N)
+                      (ZEQP X (ELT1 A (ADD1 (I$1)))))
+                 (LESSP (CNT X A 1 (I$1))
+                        (CNT X A 1 N)))
+        Hint:  Induct as for (PLUS N I).
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+The XXX named HINT-FOR-PHASE1-INVRT-T-T:
+        Path encryption:
+        ((PHASE1-INVRT T T))
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  COMPOUND-INVRT (rewrite):
+        (IMPLIES (EQUAL (K$1) 0)
+                 (NOT (LESSP (I$1)
+                             (TIMES 2 (CNT X (A$0) 1 (I$1))))))
+        Hints:  Consider:
+                 PATHS-FROM-PHASE1-INVRT
+                Enable PATHS-FROM-PHASE1-INVRT
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+The XXX named HINT-FOR-PHASE2-INVRT-T:
+        Path encryption:
+        ((PHASE2-INVRT T))
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  ZEQP-IS-A-CONGRUENCE-RELATION-WRT-CNT-ARG-1 (rewrite):
+        (IMPLIES (EQUAL (ZNORMALIZE X) (ZNORMALIZE Y))
+                 (NOT (LESSP (CNT X A I J) (CNT Y A I J))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  PHASE-2-HINT (rewrite):
+        (IMPLIES (NOT (LESSP (N$0)
+                             (PLUS (CNT (CAND$1) (A$0) 1 (N$0))
+                                   (CNT (CAND$1) (A$0) 1 (N$0)))))
+                 (NOT (LESSP (N$0)
+                             (PLUS (CNT X (A$0) 1 (N$0))
+                                   (CNT X (A$0) 1 (N$0))))))
+        Hints:  Consider:
+                 PATHS-FROM-PHASE2-INVRT
+                Enable PATHS-FROM-PHASE2-INVRT
+@END(VERBATIM)
+@END(GROUP)
+
+|#

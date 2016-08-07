@@ -1,0 +1,1632 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer and J Strother Moore.  All Rights
+ Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer and J Strother Moore PROVIDE ABSOLUTELY NO WARRANTY.  THE
+ EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+ OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer or J Strother Moore BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(BOOT-STRAP NQTHM)
+
+
+;   The following list of events includes every theorem
+;   claimed to have been proved in the paper
+
+;               The Addition of Bounded Quantification
+;                                and
+;                         Partial Functions
+;                                 to
+;                       A Computational Logic
+;                                and
+;                        Its Theorem Prover
+
+;   except for the Binomial Theorem, which is part of the
+;   basic proveall.
+
+; Section 1.  Introduction
+
+(DEFN DOUBLE-LIST (L)
+  (IF (NLISTP L)
+      NIL
+      (CONS (TIMES 2 (CAR L))
+            (DOUBLE-LIST (CDR L)))))
+
+(PROVE-LEMMA DOUBLE-LIST-APPEND NIL
+  (EQUAL (DOUBLE-LIST (APPEND A B))
+         (APPEND (DOUBLE-LIST A)
+                 (DOUBLE-LIST B))))
+
+(PROVE-LEMMA SUM-DISTRIBUTES-OVER-PLUS NIL
+  (EQUAL (FOR I L COND 'SUM (LIST 'PLUS G H) A)
+         (PLUS (FOR I L COND 'SUM G A)
+               (FOR I L COND 'SUM H A))))
+
+(PROVE-LEMMA EVAL$-DISTRIBUTES-OVER-PLUS NIL
+  (EQUAL (EVAL$ T (LIST 'PLUS X Y) A)
+         (PLUS (EVAL$ T X A) (EVAL$ T Y A))))
+
+; Section 3.4.  Window Dressings
+
+(PROVE-LEMMA V&C$-LIST-DEFN NIL
+  (EQUAL (V&C$ 'LIST L VA)
+         (IF (NLISTP L)
+             NIL
+             (CONS (V&C$ T (CAR L) VA)
+                   (V&C$ 'LIST (CDR L) VA)))))
+
+(PROVE-LEMMA V&C$-DEFN NIL
+  (EQUAL (V&C$ T X VA)
+         (IF (LITATOM X)
+             (CONS (CDR (ASSOC X VA)) 0)
+             (IF (NLISTP X)
+                 (CONS X 0)
+                 (IF (EQUAL (CAR X) 'QUOTE)
+                     (CONS (CADR X) 0)
+                     (V&C-APPLY$ (CAR X)
+                                (V&C$ 'LIST (CDR X) VA)))))))
+
+; The following lemma has a hideous but trivial proof.  It generates
+; 1222 cases!  The final stats are: [ 0.2 348.0 162.9 ] = 8.5 minutes.
+
+(PROVE-LEMMA EQ-ARGS-GIVE-EQ-VALUES--APPLY-VERSION NIL
+  (IMPLIES (AND (NOT (EQUAL FN 'QUOTE))
+                (EQUAL (STRIP-CARS ARGS1)
+                       (STRIP-CARS ARGS2))
+                (NOT (MEMBER F ARGS1))
+                (NOT (MEMBER F ARGS2)))
+           (AND (IFF (V&C-APPLY$ FN ARGS1)
+                     (V&C-APPLY$ FN ARGS2))
+                (EQUAL (CAR (V&C-APPLY$ FN ARGS1))
+                       (CAR (V&C-APPLY$ FN ARGS2)))))
+  ((ENABLE V&C-APPLY$)))
+
+(PROVE-LEMMA EQ-ARGS-GIVE-EQ-VALUES NIL
+     (IMPLIES
+       (AND (NOT (EQUAL FN 'QUOTE))
+            (NOT (MEMBER F (V&C$ 'LIST ARGS1 VA1)))
+            (NOT (MEMBER F (V&C$ 'LIST ARGS2 VA2)))
+            (EQUAL (STRIP-CARS (V&C$ 'LIST ARGS1 VA1))
+                   (STRIP-CARS (V&C$ 'LIST ARGS2 VA2))))
+       (AND (IFF
+              (V&C$ T (CONS FN ARGS1) VA1)
+              (V&C$ T (CONS FN ARGS2) VA2))
+            (EQUAL
+              (CAR (V&C$ T (CONS FN ARGS1) VA1))
+              (CAR (V&C$ T (CONS FN ARGS2) VA2)))))
+     ((USE (EQ-ARGS-GIVE-EQ-VALUES--APPLY-VERSION
+            (ARGS1 (V&C$ 'LIST ARGS1 VA1))
+            (ARGS2 (V&C$ 'LIST ARGS2 VA2))))))
+
+
+; Section 4.  Theorems about Partial Functions
+
+; This section contains a series of events demonstrating a technique for proving
+; theorems about interpreted functions.  The text was written 16 October, 1984,
+; however it has been brought into conformance with the notation used in the
+; quantifier paper.
+
+; We would like to prove such theorems as
+;     [(APPEND1 A B)] = (APPEND A B),
+; where APPEND1 is a "partial" function whose body is exactly that of APPEND's with
+; an APPEND1 in place of the APPEND call.
+
+; The first question is which of the various equivalent formulations do we
+; choose?
+
+; It should be clear that the basic theorem we must prove is at the V&C level
+; (V&C$ and V&C-APPLY$), not the EVAL level (EVAL$ and APPLY$).  EVAL recurses
+; only through the s-expression it is given.  When given a concrete s-expression
+; such as the one in the definition of APPEND1, the EVALs disappear and turn into
+; function applications.  Function application at the EVAL level is performed by
+; APPLY$ which defined in terms of V&C-APPLY$, which is in turn defined with V&C$
+; of the BODY.  Thus, we see that the recursion needed to calculate the value of
+; 'APPEND1 is actually carried out at the V&C level.  That is, it is V&C$, not EVAL$,
+; that recurses on the body of 'APPEND1.   So we wish to formulate our basic lemma at
+; the V&C$ level.
+
+; To express the lemma we need we seem to have only two choices.  Either we
+; express it in terms of the V&C$ of some typical 'APPEND1 expression, e.g.,
+; (LIST 'APPEND1 E1 E2) or perhaps the body of 'APPEND1 itself; or we express it in
+; terms of applying 'APPEND1 to some argument pairs with V&C-APPLY$.
+
+; That is, we can use an expression like:
+
+;      (V&C$ T (LIST 'APPEND1 E1 E2) A)
+ 
+; or
+
+;      (V&C$ T '(IF (LISTP X) (CONS & &) Y) *alist*) --
+
+; or we can use an expression like:
+
+;      (V&C-APPLY$ 'APPEND1 (LIST VC1 VC2)).
+
+; I have found the V&C-APPLY$ route the simplest for the theorem prover.  The
+; reason is that the V&C$ routes give rise to expressions which simplify by
+; expanding the definition of V&C$ (or using our built in rewriters).  Let me
+; describe the problem in more detail.
+
+; My natural inclination was to use (V&C$ T '(IF (LISTP X) & &) a).  The idea of
+; my proof was to have an induction hypothesis in which 'X is bound to (CDR X) in
+; a and an induction conclusion in which 'X is bound to X in a.  Then I would
+; expand the V&C$ in the conclusion, drive it through the body to the recursive
+; call of 'APPEND1, open up that call to expose a V&C$ on the body of 'APPEND1 and observe
+; that was my induction hypothesis.  But it was very messy because the natural
+; inclination of the theorem prover to expand V&C$ on quoted s-expressions caused
+; the inductive hypothesis to be rewritten to an IF and the inductive case was
+; then splattered into several formulas.  The V&C$ in the conclusion naturally
+; dove down to the recursive call as planned and was forcibly opened there to
+; reveal the body.  But then the simplifier drove V&C$ through that before it
+; could finally identify the induction hypothesis in it.  In short, by working at
+; the V&C$ level on the body of the function we force the theorem prover to dive
+; through the body 3 times:  once to put the hypothesis in normal form, once to
+; drive the conclusion down to the recursive call we need to expand, and then
+; after expanding the call to put the thing into normal form.
+
+; We could turn off V&C$ to prevent it from expanding on the quoted function body
+; in the inductive hypothesis.  However, we would then have to force manually its
+; expansion on every subexpression of the body in the inductive conclusion.  The
+; rather primitive proof checking commands at our disposal make it extremely
+; awkward to expand V&C$ on a quoted constant in the conclusion without doing so
+; in the hypothesis.  (The observation that the two calls of V&C$ in question
+; have different alists permits one to distinguish them, but it as far as I know
+; the only way to achieve the desired effect is to hint the expansion of V&C$ for
+; every subexpression in the body.)
+
+; The other V&C$ route, (V&C$ T (LIST 'APPEND1 E1 E2) A), suffers less extremely from
+; the same tendency.  It expands into a V&C-APPLY$ both in the hypothesis and
+; conclusion.  Manual intervention is required to open the V&C-APPLY$ in the
+; conclusion to reveal a V&C$ of the body, but that V&C$ of the body is then
+; automatically driven through the body and simplified to the same V&C-APPLY$
+; expression to which the hypothesis simplified.  The only real problem with
+; using (V&C$ T (LIST 'APPEND1 E1 E2) A) is that when we then turn to the question "Is
+; (APPEND1 A B) equal to (APPEND A B)?" the lemma proved with V&C$ is useless as a
+; rewrite rule.  That is because (APPEND1 A B) expands to a call of EVAL$ on the body
+; and that is simplified to calls of APPLY$.  If APPLY$ is enabled, those calls
+; become V&C-APPLY$ calls.  If V&C-APPLY$ were enabled, the V&C-APPLY$ calls
+; would become calls of V&C$ on the body.  Only by driving through the body
+; AGAIN would one arrive at a call of the form (V&C$ T (LIST 'APPEND1 E1 E2) A) to
+; which the lemma would apply.
+
+; I therefore decided to make my basic lemma be about V&C-APPLY$.  I leave V&C$
+; enabled and V&C-APPLY$ disabled.  Because V&C-APPLY$ is disabled, my induction
+; hypthesis stays put.  I have to force V&C-APPLY$ to expand ONCE in the
+; induction conclusion to give rise to a V&C$ call on the body.  But then the
+; enabled V&C$ is automatically driven through all quoted expressions giving rise
+; to V&C-APPLY$ calls.  Those that are on subrs or total functions -- or
+; functions about which we have already proved V&C-APPLY$ lemmas -- disappear,
+; leaving only the V&C-APPLY$ calls of the "new" function being analyzed.  The
+; induction hypothesis then hits those.  Once such a basic V&C-APPLY$ lemma is
+; proved it is in the correct form to be used in subsequent proofs, both about
+; V&C$ and about EVAL$.  In particular, the proof that (APPEND1 A B) is (APPEND A B)
+; goes through immediately if APPLY$ is enabled and so converted to V&C-APPLY$.
+
+; Most of the time V&C-APPLY$ is off but we would like V&C$ to walk through
+; exprs composed of primitives.  So we "enable" V&C-APPLY$ on IF and
+; SUBRs with the following two lemmas.  The variable and QUOTE cases are
+; part of V&C$.
+
+(PROVE-LEMMA V&C-APPLY$-IF (REWRITE)
+             (EQUAL (V&C-APPLY$ 'IF ARGS)
+                    (IF (CAR ARGS)
+                        (IF (CAR (CAR ARGS))
+                            (FIX-COST (CAR (CDR ARGS))
+                                      (ADD1 (CDR (CAR ARGS))))
+                            (FIX-COST (CAR (CDR (CDR ARGS)))
+                                      (ADD1 (CDR (CAR ARGS)))))
+                        '*1*FALSE))
+             ((ENABLE V&C-APPLY$)))
+
+(PROVE-LEMMA V&C-APPLY$-SUBRP (REWRITE)
+             (IMPLIES (AND (SUBRP FN)
+                           (NOT (EQUAL FN 'IF)))
+                      (EQUAL (V&C-APPLY$ FN ARGS)
+                             (IF (MEMBER '*1*FALSE ARGS)
+                                 '*1*FALSE
+                                 (CONS (APPLY-SUBR FN (STRIP-CARS ARGS))
+                                       (ADD1 (SUM-CDRS ARGS))))))
+             ((ENABLE V&C-APPLY$)))
+
+; The basic observation used to prove non-termination is:
+
+(PROVE-LEMMA BASIC-NONTERMINATING-LEMMA (REWRITE)
+ (IMPLIES (LESSP (CDR (V&C-APPLY$ FN ARGS)) C)
+          (NOT (EQUAL (V&C-APPLY$ FN ARGS) (CONS V C)))))
+
+; This lemma is really just the observation that X is not Y if their
+; CDRs are different.  It's specialized to prevent its overuse.
+; In addition, we convert "their CDRs are different" into
+; "(CDR X) < (CDR Y)."
+
+; It never occurs to the theorem prover to try to prove that x is non-F
+; by proving (LISTP x).  We force it to make this consideration for
+; V&C-APPLY$.
+
+(PROVE-LEMMA EMBARRASSING-OBSERVATION (REWRITE)
+ (IMPLIES (LISTP (V&C-APPLY$ FN ARGS)) (V&C-APPLY$ FN ARGS)))
+
+; We are now prepared to prove the cited theorems about partial functions.
+
+; We begin with APP.
+
+(DEFN APP (X Y)
+  (EVAL$ T '(IF (EQUAL X (QUOTE NIL))
+                Y
+                (CONS (CAR X) (APP (CDR X) Y)))
+         (LIST (CONS 'X X)
+               (CONS 'Y Y))))
+
+(PROVE-LEMMA APP-0-LOOPS (REWRITE)
+  (EQUAL (V&C-APPLY$ 'APP
+                     (LIST '(0 . 1)
+                           (CONS Y 0)))
+         F)
+  ((USE (V&C-APPLY$ (FN 'APP)
+                    (ARGS (LIST '(0 . 1)
+                                (CONS Y 0)))))))
+
+; We are interested in the question, "What is (V&C-APPLY$ 'APP (LIST
+; VC1 VC2))?"  (An earlier formulation of the lemma had explicit
+; CONSes for the VCi above.  We discuss why that was inappropriate in
+; the discussion of REVERSE1 below.)  VC1 and VC2 are typically pairs,
+; containing the two lists to be appended in the CARs and the costs of
+; computing them in their CDRs.  We must prove simultaneously that the
+; above application returns a pair iff the first list is PROPERP and
+; that the CAR of that pair is the desired answer.  [It is not
+; strictly true that we must prove termination and correctness
+; simultaneously in all cases.  See the footnote on COP below.]
+
+; We will prove it by induction on the CAR of VC1.  When we expand the
+; application of 'APP in the induction conclusion we will get a V&C$ of
+; the body of 'APP.  The V&C$ will walk through the primitive function parts
+; of the expression and will convert the recursive call of 'APP into
+; another (V&C-APPLY$ 'APP (LIST vc1 vc2)).  We wish to have an inductive
+; hypothesis about that application.  Thus, vc1 should be a pair whose
+; CAR is (CDR (CAR VC1)) -- the CDR of the first arg -- and
+; vc2 should be a pair whose CAR is the second arg.  What about the costs?
+; From inspection of the body of 'APP we see the cost of computing the first
+; arg to the recursion in 'APP is 1 and that of the second is 0.  Hence,
+; we get the following rather odd induction hint:
+
+(DEFN APP-INDUCTION-HINT (VC1 VC2)
+  (IF (LISTP (CAR VC1))
+      (APP-INDUCTION-HINT (CONS (CDR (CAR VC1)) 1)
+                          (CONS (CAR VC2) 0))
+      T)
+  ((LESSP (COUNT (CAR VC1)))))
+
+(DEFN PROPERP (X) (IF (LISTP X) (PROPERP (CDR X)) (EQUAL X NIL)))
+
+(PROVE-LEMMA APP-IS-PARTIALLY-APPEND--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'APP (LIST VC1 VC2))
+            (AND VC1
+                 VC2
+                 (PROPERP (CAR VC1))))
+       (IMPLIES (V&C-APPLY$ 'APP (LIST VC1 VC2))
+                (EQUAL (CAR (V&C-APPLY$ 'APP (LIST VC1 VC2)))
+                       (APPEND (CAR VC1) (CAR VC2)))))
+  ((INDUCT (APP-INDUCTION-HINT VC1 VC2))
+   (EXPAND (V&C-APPLY$ 'APP (LIST VC1 VC2)))))
+
+(PROVE-LEMMA APP-IS-PARTIALLY-APPEND NIL
+  (AND (IFF (V&C$ T '(APP X Y) (LIST (CONS 'X X) (CONS 'Y Y)))
+            (PROPERP X))
+       (IMPLIES (V&C$ T '(APP X Y) (LIST (CONS 'X X) (CONS 'Y Y)))
+                (EQUAL (CAR (V&C$ T '(APP X Y) (LIST (CONS 'X X) (CONS 'Y Y))))
+                       (APPEND X Y)))))
+
+; The paper now turns to proving things about [(APPEND X Y)].  That is easy,
+; because the functions in question are TAMEP:
+
+(PROVE-LEMMA APPEND-X-Y-IS-TAMEP NIL
+  (AND (V&C$ T '(APPEND X Y) (LIST (CONS 'X X) (CONS 'Y Y)))
+       (EQUAL (CAR (V&C$ T '(APPEND X Y) (LIST (CONS 'X X) (CONS 'Y Y))))
+              (APPEND X Y))))
+            
+
+; But the spirit of the remarks in the paper is to avoid the use of new
+; (derived) rules of inference and construct the proofs from first
+; principles.  To that end I define an interpreted version of APPEND,
+; called APPEND1:
+
+(DEFN APPEND1 (X Y) (EVAL$ T '(IF (LISTP X)
+                                  (CONS (CAR X) (APPEND1 (CDR X) Y))
+                                  Y)
+                      (LIST (CONS 'X X) (CONS 'Y Y))))
+
+; and using the same methodology as used in APP, construct the proof
+; that it is TAMEP and is APPEND:
+
+(DEFN APPEND1-INDUCTION-HINT (VC1 VC2)
+ (IF (LISTP (CAR VC1))
+     (APPEND1-INDUCTION-HINT (CONS (CDR (CAR VC1)) 1) (CONS (CAR VC2) 0))
+     T)
+ ((LESSP (COUNT (CAR VC1)))))
+
+(PROVE-LEMMA APPEND1-IS-TAMEP-AND-IS-APPEND--APPLY-VERSION (REWRITE)
+ (AND (IFF (V&C-APPLY$ 'APPEND1 (LIST VC1 VC2))
+           (AND VC1 VC2))
+      (EQUAL (CAR (V&C-APPLY$ 'APPEND1 (LIST VC1 VC2)))
+             (IF (AND VC1 VC2)
+                 (APPEND (CAR VC1) (CAR VC2))
+                 0)))
+ ((EXPAND (V&C-APPLY$ 'APPEND1 (LIST VC1 VC2)))
+  (INDUCT (APPEND1-INDUCTION-HINT VC1 VC2))))
+
+(PROVE-LEMMA APPEND1-X-Y-IS-TAMEP (REWRITE)
+  (AND (V&C$ T '(APPEND X Y) (LIST (CONS 'X X) (CONS 'Y Y)))
+       (EQUAL (CAR (V&C$ T '(APPEND X Y) (LIST (CONS 'X X) (CONS 'Y Y))))
+              (APPEND X Y))))
+
+
+; For the record, though I do not think it is mentioned in the paper,
+; we can also prove:
+
+(PROVE-LEMMA APPEND1-IS-APPEND NIL
+             (EQUAL (APPEND1 X Y) (APPEND X Y))
+             ((ENABLE APPLY$)))
+
+; Following the development in the paper, we now turn to:
+
+(DEFN RUSSELL NIL (EVAL$ T '(NOT (RUSSELL)) NIL))
+
+; The proof that 'RUSSELL does not terminate is now straightforward:
+; just expand the definition of V&C-APPLY$ once to produce a V&C$,
+; which walks through the formula and produces an identical call of
+; V&C-APPLY$.
+
+(PROVE-LEMMA RUSSELL-DOES-NOT-TERMINATE (REWRITE)
+  (EQUAL (V&C-APPLY$ 'RUSSELL NIL) F)
+  ((USE (V&C-APPLY$ (FN 'RUSSELL) (ARGS NIL)))))
+
+; Note that I use USE and not EXPAND.  EXPAND would replace the V&C-APPLY$
+; by its definition.  USE adds the instanitated definition as a hypothesis.
+; But under the assumption that (V&C-APPLY$ 'RUSSELL NIL) is not F, that
+; hypothesis is contradictory.
+
+; Consequently:
+
+(PROVE-LEMMA RUSSELL-IS-F NIL (EQUAL (RUSSELL) F)
+             ((ENABLE APPLY$)))
+
+; The abstract of the paper claims we can prove facts about
+; LEN, even though those facts aren't mentioned in the body
+; of the paper.  This is a good time in the development of
+; our methodology to do LEN:
+
+(DEFN LEN (X) (EVAL$ T '(IF (EQUAL X 'NIL) '0 (ADD1 (LEN (CDR X))))
+                     (LIST (CONS 'X X))))
+
+; The definition of 'LEN terminates only on proper lists.  We
+; can apply much the same program to such functions.
+
+; We wish to prove that 'LEN is LENGTH when it terminates, and we
+; want to characterize its termination.
+
+(DEFN LENGTH (X)
+  (IF (NLISTP X)
+      0
+      (ADD1 (LENGTH (CDR X)))))
+
+; The key observation is that when applied to a 0 the function does
+; not terminate.  In the application in question, namely, when we
+; are proving the general fact about 'LEN and have to worry about
+; recursion into a non-LISTP, the 0 arises by evaluating '(CDR X)
+; and so has a cost of 1.  So, following the program carried out
+; for RUSSELL, we observe that 'LEN doesn't terminate in that case:
+
+(PROVE-LEMMA LEN-LOOPS-ON-0 (REWRITE)
+  (EQUAL (V&C-APPLY$ 'LEN (LIST (CONS 0 1))) F)
+  ((USE (V&C-APPLY$ (FN 'LEN) (ARGS (LIST (CONS 0 1)))))))
+
+; We then follow the program carried out for 'APPEND1 and the others except
+; our induction hint is sound (terminates on NLISTP not a NIL check).
+
+(DEFN LEN-INDUCTION-HINT (VC)
+  (IF (LISTP (CAR VC)) (LEN-INDUCTION-HINT (CONS (CDR (CAR VC)) 1)) T)
+  ((LESSP (COUNT (CAR VC)))))
+
+(PROVE-LEMMA LEN-IS-PARTIALLY-LENGTH--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'LEN (LIST VC))
+            (AND VC
+                 (PROPERP (CAR VC))))
+       (IMPLIES (V&C-APPLY$ 'LEN (LIST VC))
+                (EQUAL (CAR (V&C-APPLY$ 'LEN (LIST VC)))
+                       (LENGTH (CAR VC)))))
+  ((EXPAND (V&C-APPLY$ 'LEN (LIST VC)))
+   (INDUCT (LEN-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA LEN-X-IS-PARTIALLY-LENGTH NIL
+ (AND (IFF (V&C$ T '(LEN X) (LIST (CONS 'X X)))
+           (PROPERP X))
+      (IMPLIES (V&C$ T '(LEN X) (LIST (CONS 'X X)))
+               (EQUAL (CAR (V&C$ T '(LEN X) (LIST (CONS 'X X))))
+                      (LENGTH X))))
+ ((ENABLE APPLY$)))
+
+; Note that all these proofs are exactly the same from the user's
+; point of view:  
+; (0)  If the function is partial distill the reason it loops,
+;      e.g., LEN-LOOPS-ON-0.
+; (1)  Define the induction hint, which is mechanically derivable
+;      from the interpreted definition, e.g., LEN-INDUCTION-HINT.
+; (2)  Prove the termination and value properties about an arbitrary
+;      V&C-APPLY$ of the function, e.g., 
+;      LEN-IS-PARTIALLY-LENGTH--APPLY-VERSION.
+; (3)  Prove the V&C$ version of the termination and value properties,
+;      e.g., LEN-X-IS-PARTIALLY-LENGTH.
+
+; We have done this for APPEND1 and LEN and will do it repeatedly
+; for the other functions mentioned.  Ocassionally we have to prove
+; lemmas to make the proofs go through, but the lemmas are not facts
+; about V&C$ but just ordinary facts about the functions used in
+; the definitions.  For example, when we prove F91 function we'll need
+; some arithmetic, and when we deal with the various reverse functions
+; we'll need some list processing stuff.
+
+; Perhaps the key weakness in the programs developed so far is the
+; concern about the cost of evaluating arguments as encoded in the
+; induction hints.  The good news is that we are only concerned about
+; the cost of evaluating the arguments of recursive calls of the
+; function being considered, not the cost of all arguments.  (Consider
+; that when we proved 'REVERSE1 correct we did not care how long
+; 'REVERSE1 takes to produce the argument for 'AP, we merely cared how
+; long 'CDR takes to produce the argument for 'REVERSE1.  That is, our
+; concern with costs is focussed entirely in inductive hypotheses and
+; not in the statement of our lemmas.)
+
+; The bad news is that if the function being introduced recurses on some
+; nonprimitive we seem to need lemmas telling us what the cost of
+; the relevant computations are, if we are to follow this program.  The
+; worse case seems to be when a function recurses on itself, as does
+; TAK, for then we'd have to be deriving its cost as we go.  However, we
+; do not have to compute the cost of an actual in closed form; we can use
+; instead (CDR (V&C$ actual alist)) or its V&C-APPLY$ equivalent.
+
+; To illustrate this, we attack the simple analogue of TAK, namely FID:
+
+(DEFN FID (X)
+  (EVAL$ T '(IF (ZEROP X) '0 (ADD1 (FID (FID (SUB1 X)))))
+         (LIST (CONS 'X X))))
+
+(DEFN FID-INDUCTION-HINT (VC)
+  (IF (ZEROP (CAR VC))
+      T
+      (AND (FID-INDUCTION-HINT
+             (CONS (SUB1 (CAR VC)) 1))
+           (FID-INDUCTION-HINT
+             (CONS (SUB1 (CAR VC))
+                   (CDR (V&C-APPLY$ 'FID
+                                    (LIST (CONS (SUB1 (CAR VC)) 1))))))))
+  ((LESSP (COUNT (CAR VC)))))
+
+; Note that we provide two induction hypotheses, one for each call of FID.
+; The first is simple:  the actual is one less than it was and the cost is 1.
+; The second is complicated:  the actual is one less than it was and the
+; cost is ... whatever it is!  The cost expression for the second hypothesis
+; -- indeed for all the hypotheses generated -- can be obtained mechanically
+; by just using the CDR of the V&C$ of the actual expression.  However, because
+; FID recurses on itself, the induction hint for it cannot be written until
+; one understands what the value delivered is.  If we tried to do with the
+; value component what we did with the cost component, namely put in the
+; CAR of the V&C$ of the actual expression, FID-INDUCTION-HINT would not be
+; admissible.
+
+; The only trouble with the above hint is that the second induction hypothesis
+; will not be used because the outer application of 'FID is not on an
+; explict CONS but on a (V&C-APPLY$ 'FID ...) that is known to be a list
+; whose CAR is (SUB1 (CAR VC)).  We sort of wish we could do an elim and
+; replace a LISTP by the CONS of its CAR and CDR, even for non-variables.
+; That loops.  So we must be more devious.  The following lemma does an
+; ELIM of a V&C-APPLY$ expression provided it occurs in a CONS.  That
+; is the only case we are interested in since the V&C-APPLY$ in question
+; is in the arglist of another V&C-APPLY$.  
+
+(PROVE-LEMMA FAKE-ELIM (REWRITE)
+  (IMPLIES (V&C-APPLY$ FN ARGS)
+           (EQUAL (CONS (V&C-APPLY$ FN ARGS) TL)
+                  (CONS (CONS (CAR (V&C-APPLY$ FN ARGS))
+                              (CDR (V&C-APPLY$ FN ARGS)))
+                        TL))))
+
+; This lemma is dangerous because (CONS (CAR X) (CDR X)) = X can cause
+; it to loop.  It doesn't if (CAR (V&C-APPLY$ FN ARGS)) is rewritten to
+; something else first though!  If you try to prove termination without
+; simultaneously proving a rewrite rule for the value, this lemma will
+; bite you!
+
+; We now prove the basic lemma for 'FID.
+
+(PROVE-LEMMA FID-IS-TAMEP-AND-ID--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'FID (LIST VC))
+            VC)
+       (EQUAL (CAR (V&C-APPLY$ 'FID (LIST VC)))
+              (IF VC (FIX (CAR VC)) 0)))
+  ((EXPAND (V&C-APPLY$ 'FID (LIST VC)))
+   (INDUCT (FID-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA FID-X-IS-TAMEP NIL
+  (AND (V&C$ T '(FID X) (LIST (CONS 'X X)))
+       (EQUAL (CAR (V&C$ T '(FID X) (LIST (CONS 'X X))))
+              (FIX X)))
+  ((ENABLE APPLY$)))
+
+; Note that the program followed for 'FID is exactly that followed for
+; 'APPEND1, except we have now generalized the costs specified in the induction
+; hints, from closed forms such as 1 or 0, to the very expressions generated
+; by V&C$.
+
+; So now let's do something more complex, like GOPHER:
+
+(DEFN RO (X) (EVAL$ T '(CONS (CAR (CAR X)) (CONS (CDR (CAR X)) (CDR X)))
+                    (LIST (CONS 'X X))))
+
+(DEFN ROT (X) (CONS (CAAR X) (CONS (CDAR X) (CDR X))))
+
+(PROVE-LEMMA RO-IS-TAMEP-AND-ROT--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'RO (LIST VC))
+            VC)
+       (EQUAL (CAR (V&C-APPLY$ 'RO (LIST VC)))
+              (IF VC (ROT (CAR VC)) 0)))
+  ((EXPAND (V&C-APPLY$ 'RO (LIST VC)))))
+
+(PROVE-LEMMA RO-X-IS-TAMEP NIL
+  (AND (V&C$ T '(RO X) (LIST (CONS 'X X)))
+       (EQUAL (CAR (V&C$ T '(RO X) (LIST (CONS 'X X))))
+              (ROT X)))
+  ((ENABLE APPLY$)))
+
+(DEFN GOP (X)
+  (EVAL$ T
+         '(IF (OR (NLISTP X)
+                  (NLISTP (CAR X)))
+              X
+              (GOP (RO X)))
+         (LIST (CONS 'X X))))
+
+(DEFN GOPHER (X)
+  (IF (OR (NLISTP X)
+          (NLISTP (CAR X)))
+      X
+      (GOPHER (ROT X)))
+  ((LESSP (COUNT (CAR X)))))
+
+(DEFN GOP-INDUCTION-HINT (VC)
+ (IF (AND (LISTP (CAR VC))
+          (LISTP (CAAR VC)))
+     (GOP-INDUCTION-HINT
+       (CONS (ROT (CAR VC))
+             (CDR (V&C$ T '(RO X) (LIST (CONS 'X (CAR VC)))))))
+     T)
+ ((LESSP (COUNT (CAR (CAR VC))))))
+
+; Observe that the cost component above is just the CDR of the V&C$ of the
+; actual expression.
+
+(PROVE-LEMMA GOP-IS-TAMEP-AND-GOPHER--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'GOP (LIST VC)) VC)
+       (EQUAL (CAR (V&C-APPLY$ 'GOP (LIST VC)))
+              (IF VC (GOPHER (CAR VC)) 0)))
+  ((EXPAND (V&C-APPLY$ 'GOP (LIST VC)))
+   (INDUCT (GOP-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA GOP-X-IS-TAMEP NIL
+  (AND (V&C$ T '(GOP X) (LIST (CONS 'X X)))
+       (EQUAL (CAR (V&C$ T '(GOP X) (LIST (CONS 'X X))))
+              (GOPHER X)))
+  ((ENABLE APPLY$)))
+
+; It should be obvious that we do not need to think about the costs of
+; interpreting these functions.
+
+; We'll now do the 91 function.
+
+(DEFN F91 (X)
+  (EVAL$ T '(IF (LESSP '100 X)
+                (DIFFERENCE X '10)
+                (F91 (F91 (PLUS X '11))))
+         (LIST (CONS 'X X))))
+
+(DEFN G91 (X)
+      (IF (LESSP 100 X)
+          (DIFFERENCE X 10)
+          91))
+
+(PROVE-LEMMA EQUAL-DIFFERENCE-0 (REWRITE)
+             (IMPLIES (NOT (LESSP X Y)) (EQUAL (DIFFERENCE Y X) 0)))
+
+(DEFN F91-INDUCTION-HINT (VC)
+ (IF (LESSP 100 (CAR VC))
+     T
+     (AND (F91-INDUCTION-HINT
+            (CONS (PLUS (CAR VC) 11)
+                  (CDR (V&C$ T '(PLUS X '11) (LIST (CONS 'X (CAR VC)))))))
+          (F91-INDUCTION-HINT
+            (CONS (G91 (PLUS (CAR VC) 11))
+                  (CDR (V&C$ T '(F91 (PLUS X '11))
+                             (LIST (CONS 'X (CAR VC)))))))))
+ ((LESSP (DIFFERENCE 101 (CAR VC)))))
+
+; As for FID, the induction hint for F91 requires the knowledge of what
+; the function returns.  Note however our cavalier treatment of the cost
+; again.
+
+(PROVE-LEMMA F91-X-IS-TAMEP-AND-G91--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'F91 (LIST VC))
+            VC)
+       (EQUAL (CAR (V&C-APPLY$ 'F91 (LIST VC)))
+              (IF VC (G91 (CAR VC)) 0)))
+  ((EXPAND (V&C-APPLY$ 'F91 (LIST VC)))
+   (INDUCT (F91-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA F91-X-IS-TAMEP NIL
+  (AND (V&C$ T '(F91 X) (LIST (CONS 'X X)))
+       (EQUAL (CAR (V&C$ T '(F91 X) (LIST (CONS 'X X))))
+              (G91 X)))
+  ((ENABLE APPLY$)))
+
+; Footnote:  It is not necessary always to prove termination and
+; correctness simultaneously.  The following trivial exercise demonstrates
+; that they can be done separately sometimes.  However, in the case of
+; a function like FID or just when a partial function is used in the
+; definition of another function (e.g., if some function 'FOO called 'LEN
+; on (FOO (CDR X))) it is necessary to know properties of the value delivered
+; while one is proving termination.
+
+(DEFN COP (X) (EVAL$ T '(IF (LISTP X) (CONS (CAR X) (COP (CDR X))) X)
+                     (LIST (CONS 'X X))))
+
+(DEFN COP-INDUCTION-HINT (VC)
+ (IF (LISTP (CAR VC))
+     (COP-INDUCTION-HINT (CONS (CDR (CAR VC)) 1))
+     T)
+ ((LESSP (COUNT (CAR VC)))))
+
+(PROVE-LEMMA V&C-APPLY$-COP-TERMINATES (REWRITE)
+             (IFF (V&C-APPLY$ 'COP (LIST VC))
+                  VC)
+             ((DISABLE FAKE-ELIM)
+              (EXPAND (V&C-APPLY$ 'COP (LIST VC)))
+              (INDUCT (COP-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA V&C-APPLY$-COP-COPIES (REWRITE)
+             (EQUAL (CAR (V&C-APPLY$ 'COP (LIST VC))) (CAR VC))
+             ((DISABLE FAKE-ELIM)
+              (EXPAND (V&C-APPLY$ 'COP (LIST VC)))
+              (INDUCT (COP-INDUCTION-HINT VC))))
+
+;  We complete the exercises on interpreting inadmissible functions
+;  by showing that Burstall's one argument reverse function is total
+;  and computes REVERSE.
+
+(DEFN RV (L)
+  (EVAL$ T 
+         '(IF (NLISTP L)
+              'NIL
+              (IF (NLISTP (CDR L))
+                  (CONS (CAR L) 'NIL)
+                  (CONS (CAR (RV (CDR L)))
+                        (RV (CONS (CAR L) (RV (CDR (RV (CDR L)))))))))
+         (LIST (CONS 'L L))))
+
+(DEFN REVERSE (X)
+  (IF (LISTP X)
+      (APPEND (REVERSE (CDR X))
+              (LIST (CAR X)))
+      NIL))
+
+(DISABLE FAKE-ELIM)
+
+(PROVE-LEMMA LENGTH-REVERSE (REWRITE) (EQUAL (LENGTH (REVERSE L)) (LENGTH L)))
+
+(PROVE-LEMMA LISTP-REVERSE (REWRITE) (EQUAL (LISTP (REVERSE L)) (LISTP L)))
+
+(PROVE-LEMMA LENGTH-CDR (REWRITE)
+             (IMPLIES (LISTP L) (LESSP (LENGTH (CDR L)) (LENGTH L))))
+
+(DEFN RV-INDUCTION-HINT (VC)
+  (IF (NLISTP (CAR VC))
+      T
+      (IF (NLISTP (CDR (CAR VC)))
+          T
+          (AND (RV-INDUCTION-HINT
+                 (CONS (CDR (CAR VC)) 1))
+               (RV-INDUCTION-HINT
+                 (CONS (CDR (REVERSE (CDR (CAR VC))))
+                       (CDR (V&C$ T '(CDR (RV (CDR L)))
+                                  (LIST (CONS 'L (CAR VC)))))))
+               (RV-INDUCTION-HINT
+                 (CONS (CONS (CAR (CAR VC))
+                             (REVERSE (CDR (REVERSE (CDR (CAR VC))))))
+                       (CDR (V&C$ T '(CONS (CAR L)
+                                           (RV (CDR (RV (CDR L)))))
+                                  (LIST (CONS 'L (CAR VC))))))))))
+  ((LESSP (LENGTH (CAR VC)))))
+
+(PROVE-LEMMA PROPERP-REVERSE (REWRITE) (PROPERP (REVERSE X)))
+
+(PROVE-LEMMA REVERSE-REVERSE (REWRITE)
+             (IMPLIES (PROPERP X)
+                      (EQUAL (REVERSE (REVERSE X)) X)))
+
+(PROVE-LEMMA PROPERP-CDR (REWRITE)
+             (IMPLIES (AND (LISTP X) (PROPERP X))
+                      (PROPERP (CDR X))))
+
+(PROVE-LEMMA FAKE-ELIM2 (REWRITE)
+  (IMPLIES (AND (EQUAL (CAR (V&C-APPLY$ FN ARGS)) V)
+                (LISTP (V&C-APPLY$ FN ARGS)))
+           (EQUAL (CONS (V&C-APPLY$ FN ARGS) TL)
+                  (CONS (CONS V
+                              (CDR (V&C-APPLY$ FN ARGS)))
+                        TL))))
+
+(PROVE-LEMMA PLUS-1
+              (REWRITE)
+              (EQUAL (PLUS 1 X) (ADD1 X)))
+
+(PROVE-LEMMA NUMBERP-CDR-V&C$
+              (REWRITE)
+              (NUMBERP (CDR (V&C$ T X A)))
+              ((EXPAND (V&C$ T X A))
+               (ENABLE V&C-APPLY$)))
+
+(PROVE-LEMMA NUMBERP-CDR-V&C-APPLY$
+              (REWRITE)
+              (NUMBERP (CDR (V&C-APPLY$ FN ARGS)))
+              ((ENABLE V&C-APPLY$)))
+
+ (PROVE-LEMMA PLUS-0
+              (REWRITE)
+              (EQUAL (PLUS X 0) (FIX X)))
+
+;  When trying to prove anything about the body of 'RV the theorem
+;  prover spends an inordinant amount of time.  To speed things up
+;  we prove the following sequence of 4 lemmas, the last of which
+;  permits us to simplify (V&C$ T body alist) to its normal form
+;  in one step.  The preceding 3 lemmas speed the proof of the last.
+;  I think technically these 4 lemmas are unnecessary.  Except for
+;  these "short-cut" lemmas the program followed for RV is exactly
+;  the same as that followed for LEN and APPEND1.
+
+(PROVE-LEMMA SHORT-CUT1
+  (REWRITE)
+  (EQUAL
+   (V&C$ T
+         '(RV (CDR (RV (CDR L))))
+         (LIST (CONS 'L L)))
+   (IF
+    (V&C-APPLY$ 'RV
+                (LIST (CONS (CDR L) 1)))
+    (V&C-APPLY$ 'RV
+               (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                             (LIST (CONS (CDR L) 1))))
+                           (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                  (LIST (CONS (CDR L) 1))))))))
+    F)))
+
+(PROVE-LEMMA SHORT-CUT2
+  (REWRITE)
+  (EQUAL
+   (V&C$ T
+         '(RV (CONS (CAR L) (RV (CDR (RV (CDR L))))))
+         (LIST (CONS 'L L)))
+   (IF
+    (V&C-APPLY$ 'RV
+                (LIST (CONS (CDR L) 1)))
+    (IF
+     (V&C-APPLY$ 'RV
+               (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                             (LIST (CONS (CDR L) 1))))
+                           (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                  (LIST (CONS (CDR L) 1))))))))
+     (V&C-APPLY$ 'RV
+      (LIST
+       (CONS
+        (CONS
+         (CAR L)
+         (CAR
+          (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+        (ADD1
+         (ADD1
+          (CDR
+           (V&C-APPLY$ 'RV
+            (LIST
+               (CONS (CDAR (V&C-APPLY$ 'RV
+                                       (LIST (CONS (CDR L) 1))))
+                     (ADD1 (CDR (V&C-APPLY$ 'RV
+                                            (LIST (CONS (CDR L) 1))))))))))))))
+     F)
+    F)))
+
+(PROVE-LEMMA SHORT-CUT3
+  (REWRITE)
+  (EQUAL
+   (V&C$ T
+         '(CONS (CAR (RV (CDR L)))
+                (RV (CONS (CAR L) (RV (CDR (RV (CDR L)))))))
+         (LIST (CONS 'L L)))
+   (IF (V&C-APPLY$ 'RV
+                  (LIST (CONS (CDR L) 1)))
+    (IF (V&C-APPLY$ 'RV
+               (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                             (LIST (CONS (CDR L) 1))))
+                           (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                  (LIST (CONS (CDR L) 1))))))))
+     (IF      (V&C-APPLY$ 'RV
+      (LIST
+       (CONS
+        (CONS
+         (CAR L)
+         (CAR
+          (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+        (ADD1
+         (ADD1
+          (CDR
+           (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (PLUS (CDR (V&C-APPLY$ 'RV
+                                                      (LIST (CONS (CDR L) 1))))
+                                     0)))))))))))
+    (CONS
+     (CONS
+      (CAAR (V&C-APPLY$ 'RV
+                        (LIST (CONS (CDR L) 1))))
+      (CAR
+       (V&C-APPLY$ 'RV
+        (LIST
+         (CONS
+          (CONS
+           (CAR L)
+           (CAR
+            (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+          (ADD1
+           (ADD1
+            (CDR
+             (V&C-APPLY$ 'RV
+              (LIST
+               (CONS
+                   (CDAR (V&C-APPLY$ 'RV
+                                     (LIST (CONS (CDR L) 1))))
+                   (ADD1 (CDR (V&C-APPLY$ 'RV
+                                          (LIST (CONS (CDR L) 1))))))))))))))))
+     (ADD1
+      (ADD1
+       (PLUS
+        (CDR (V&C-APPLY$ 'RV
+                         (LIST (CONS (CDR L) 1))))
+        (CDR
+         (V&C-APPLY$ 'RV
+          (LIST
+           (CONS
+            (CONS
+             (CAR L)
+             (CAR
+              (V&C-APPLY$ 'RV
+               (LIST
+                   (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+            (ADD1
+             (ADD1
+              (CDR
+               (V&C-APPLY$ 'RV
+                (LIST
+                 (CONS
+                  (CDAR (V&C-APPLY$ 'RV
+                                    (LIST (CONS (CDR L) 1))))
+                  (ADD1
+                      (CDR (V&C-APPLY$ 'RV
+                                       (LIST (CONS (CDR L) 1)))))))))))))))))))
+    F)
+     F)
+    F)))
+
+(PROVE-LEMMA SHORT-CUT4
+  (REWRITE)
+  (EQUAL
+   (V&C$ T
+         '(IF (NLISTP L)
+              'NIL
+              (IF (NLISTP (CDR L))
+                  (CONS (CAR L) 'NIL)
+                  (CONS (CAR (RV (CDR L)))
+                        (RV (CONS (CAR L)
+                                 (RV (CDR (RV (CDR L)))))))))
+         (LIST (CONS 'L L)))
+   (IF
+    (NLISTP L)
+    (CONS NIL 2)
+    (IF
+     (NLISTP (CDR L))
+     (CONS (LIST (CAR L)) 7)
+       (IF (V&C-APPLY$ 'RV
+                  (LIST (CONS (CDR L) 1)))
+    (IF (V&C-APPLY$ 'RV
+               (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                             (LIST (CONS (CDR L) 1))))
+                           (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                  (LIST (CONS (CDR L) 1))))))))
+     (IF      (V&C-APPLY$ 'RV
+      (LIST
+       (CONS
+        (CONS
+         (CAR L)
+         (CAR
+          (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+        (ADD1
+         (ADD1
+          (CDR
+           (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (PLUS (CDR (V&C-APPLY$ 'RV
+                                                      (LIST (CONS (CDR L) 1))))
+                                     0)))))))))))
+    (CONS
+     (CONS
+      (CAAR (V&C-APPLY$ 'RV
+                        (LIST (CONS (CDR L) 1))))
+      (CAR
+       (V&C-APPLY$ 'RV
+        (LIST
+         (CONS
+          (CONS
+           (CAR L)
+           (CAR
+            (V&C-APPLY$ 'RV
+             (LIST (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+          (ADD1
+           (ADD1
+            (CDR
+             (V&C-APPLY$ 'RV
+              (LIST
+               (CONS
+                   (CDAR (V&C-APPLY$ 'RV
+                                     (LIST (CONS (CDR L) 1))))
+                   (ADD1 (CDR (V&C-APPLY$ 'RV
+                                          (LIST (CONS (CDR L) 1))))))))))))))))
+     (ADD1 (ADD1 (ADD1 (ADD1 (ADD1
+     (ADD1
+      (ADD1
+       (PLUS
+        (CDR (V&C-APPLY$ 'RV
+                         (LIST (CONS (CDR L) 1))))
+        (CDR
+         (V&C-APPLY$ 'RV
+          (LIST
+           (CONS
+            (CONS
+             (CAR L)
+             (CAR
+              (V&C-APPLY$ 'RV
+               (LIST
+                   (CONS (CDAR (V&C-APPLY$ 'RV
+                                           (LIST (CONS (CDR L) 1))))
+                         (ADD1 (CDR (V&C-APPLY$ 'RV
+                                                (LIST (CONS (CDR L) 1))))))))))
+            (ADD1
+             (ADD1
+              (CDR
+               (V&C-APPLY$ 'RV
+                (LIST
+                 (CONS
+                  (CDAR (V&C-APPLY$ 'RV
+                                    (LIST (CONS (CDR L) 1))))
+                  (ADD1
+                      (CDR (V&C-APPLY$ 'RV
+                                       (LIST (CONS (CDR L) 1))))))))))))))))))))))))
+    F)
+     F)
+    F)
+     ))))
+
+(PROVE-LEMMA RV-IS-TAMEP-AND-REVERSE--APPLY-VERSION (REWRITE)
+             (AND (IFF (V&C-APPLY$ 'RV (LIST VC))
+                       VC)
+                  (EQUAL (CAR (V&C-APPLY$ 'RV (LIST VC)))
+                         (IF VC (REVERSE (CAR VC)) 0)))
+             ((EXPAND (V&C-APPLY$ 'RV (LIST VC)))
+              (INDUCT (RV-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA RV-X-IS-TAMEP NIL
+ (AND (V&C$ T '(RV X) (LIST (CONS 'X X)))
+      (EQUAL (CAR (V&C$ T '(RV X) (LIST (CONS 'X X))))
+             (REVERSE X)))
+ ((ENABLE APPLY$)))
+
+; Section 5.  Proofs about Partial Functions.
+
+; Many of the theorems noted in this section were proved above.  
+; However, we here prove the "metatheorems" cited.
+
+; The following formula was not a theorem until we added
+; the new axiom of (SUBRP 'QUOTE) = F.  The need for this was
+; not known until we tried to prove the formula for the paper.
+
+(PROVE-LEMMA DEFINEDNESS-CONDITION-FOR-SUBRP NIL
+  (IMPLIES (AND (NOT (EQUAL FN 'IF))
+                (SUBRP FN))
+           (IFF (V&C$ T (CONS FN ARGS) A)
+                (NOT (MEMBER F (V&C$ 'LIST ARGS A))))))
+
+(PROVE-LEMMA VALUE-THEOREM-FOR-SUBRP-LEMMA (REWRITE)
+  (AND (EQUAL (CADDR (STRIP-CARS L))
+              (CAADDR L))
+       (EQUAL (CADR (STRIP-CARS L))
+              (CAADR L))
+       (EQUAL (CAR (STRIP-CARS L))
+              (CAAR L))))
+
+; The following formula wasn't a theorem until we added the
+; axiom (SUBRP 'QUOTE) = F.
+
+(PROVE-LEMMA VALUE-THEOREM-FOR-SUBRP NIL
+  (IMPLIES (AND (SUBRP FN)
+                (V&C$ T (CONS FN ARGS) A))
+           (EQUAL (CAR (V&C$ T (CONS FN ARGS) A))
+                  (APPLY-SUBR FN
+                              (STRIP-CARS (V&C$ 'LIST ARGS A)))))
+  ((ENABLE V&C-APPLY$)))
+
+; !!! BUG.  I HAD TO ADD THE STRIP-CARS TO THE RHS BELOW!
+; !!! BUG.  I HAD TO THE ADD THE FN /= 'QUOTE BELOW!
+
+(PROVE-LEMMA COST-THEOREM-FOR-NON-SUBRP NIL
+  (IMPLIES (AND (NOT (EQUAL FN 'QUOTE))
+                (NOT (SUBRP FN))
+                (V&C$ T (CONS FN ARGS) A))
+           (GREATERP
+            (CDR (V&C$ T (CONS FN ARGS) A))
+            (CDR (V&C$ T (BODY FN)
+                       (PAIRLIST (FORMALS FN)
+                                 (STRIP-CARS (V&C$ 'LIST ARGS A)))))))
+  ((ENABLE V&C-APPLY$)))
+
+(PROVE-LEMMA APPEND1-IS-TAME NIL
+  (IMPLIES (AND (V&C$ T U A)
+                (V&C$ T V A))
+           (AND (V&C$ T (LIST 'APPEND1 U V) A)
+                (EQUAL (CAR (V&C$ T (LIST 'APPEND1 U V) A))
+                       (APPEND (CAR (V&C$ T U A))
+                               (CAR (V&C$ T V A)))))))
+                
+; We now prove that REVERSE is TAMEP from the fact that APPEND is.
+; Once again, we introduce REVERSE1 so as not to use the built-in
+; TAMEP rules.
+
+; It was in this proof that we learned that it is better to consider
+;      (V&C-APPLY 'APPEND1 (LIST VC1 VC2))
+; than
+;      (V&C-APPLY 'APPEND1 (LIST (CONS A C1) (CONS B C2))).
+; Our first use of V&C-APPLY$ in these basic lemmas contained CONSes
+; as shown above.  This made the induction hint easier because we could
+; instantiate A with (CDR A), C1 with 1, etc., instead of using that
+; horrid CONS.  Unfortunately, no term of the form
+;      (V&C-APPLY 'APPEND1 (LIST (CONS A C1) (CONS B C2))).
+; arises when proving facts about 'REVERSE1 because the 'APPEND1 call in 'REVERSE1
+; becomes
+;      (V&C-APPLY 'APPEND1 (LIST (V&C-APPLY$ 'REVERSE1 &) &))
+; where (V&C-APPLY$ 'REVERSE1 ...) is known to be LISTP.  Therefore, we
+; phrase our basic lemmas in the form shown:
+;      (V&C-APPLY 'APPEND1 (LIST VC1 VC2))
+
+
+(DEFN REVERSE1 (X) (EVAL$ T '(IF (LISTP X)
+                            (APPEND1 (REVERSE1 (CDR X)) (CONS (CAR X) (QUOTE NIL)))
+                            (QUOTE NIL))
+                     (LIST (CONS 'X X))))
+
+(DEFN REVERSE1-INDUCTION-HINT (VC)
+  (IF (LISTP (CAR VC))
+      (REVERSE1-INDUCTION-HINT (CONS (CDR (CAR VC)) 1))
+      T)
+  ((LESSP (COUNT (CAR VC)))))
+
+(PROVE-LEMMA REVERSE1-IS-TAMEP-AND-REVERSE--APPLY-VERSION (REWRITE)
+  (AND (IFF (V&C-APPLY$ 'REVERSE1 (LIST VC)) VC)
+       (EQUAL (CAR (V&C-APPLY$ 'REVERSE1 (LIST VC)))
+              (IF VC (REVERSE (CAR VC)) 0)))
+  ((EXPAND (V&C-APPLY$ 'REVERSE1 (LIST VC)))
+   (INDUCT (REVERSE1-INDUCTION-HINT VC))))
+
+(PROVE-LEMMA REVERSE1-X-IS-TAMEP NIL
+  (AND (V&C$ T '(REVERSE1 X) (LIST (CONS 'X X)))
+       (EQUAL (CAR (V&C$ T '(REVERSE1 X) (LIST (CONS 'X X))))
+              (REVERSE X)))
+  ((ENABLE APPLY$)))
+
+; Section 6.  EVAL and APPLY
+
+; The use of FREE-VARS in the paper suggests it is a fn of one argument,
+; but it actually is mutually recursive with FREE-VARS-LIST and we handle
+; it in the expected way.  I don't bother to define the one argument
+; sugar coating and prove theorems more general than those given in the
+; paper.
+
+(DEFN FREE-VARS (FLG X)
+  (IF (EQUAL FLG 'LIST)
+      (IF (NLISTP X)
+          NIL
+          (UNION (FREE-VARS T (CAR X))
+                 (FREE-VARS 'LIST (CDR X))))
+      (IF (LITATOM X)
+          (CONS X NIL)
+          (IF (NLISTP X)
+              NIL
+              (IF (EQUAL (CAR X) 'QUOTE)
+                  NIL
+                  (FREE-VARS 'LIST (CDR X)))))))
+
+(PROVE-LEMMA MEMBER-UNION (REWRITE)
+  (EQUAL (MEMBER A (UNION X Y))
+         (OR (MEMBER A X) (MEMBER A Y))))
+
+(PROVE-LEMMA IRRELEVANT-BINDINGS-CAN-BE-DELETED (REWRITE)
+     (IMPLIES (NOT (MEMBER V (FREE-VARS FLG X)))
+              (EQUAL (EVAL$ FLG X (CONS (CONS V VAL) A))
+                     (EVAL$ FLG X A))))
+
+(DEFN SUBSTITUTE (X Y FLG Z)
+  (IF (EQUAL FLG 'LIST)
+      (IF (NLISTP Z)
+          NIL
+          (CONS (SUBSTITUTE X Y T (CAR Z))
+                (SUBSTITUTE X Y 'LIST (CDR Z))))
+      (IF (EQUAL Y Z)
+          X
+          (IF (LITATOM Z)
+              Z
+              (IF (NLISTP Z)
+                  Z
+                  (IF (EQUAL (CAR Z) 'QUOTE)
+                      Z
+                      (CONS (CAR Z)
+                            (SUBSTITUTE X Y 'LIST (CDR Z)))))))))
+
+; I interchanged the names of X and Y in transcribing this theorem
+; to bring them into accordance with the names used in the defn above.
+
+(PROVE-LEMMA SUBSTITUTION-OF-EQUAL-EVAL$S NIL
+     (IMPLIES (EQUAL (EVAL$ T X A) (EVAL$ T Y A))
+              (EQUAL (EVAL$ FLG (SUBSTITUTE X Y FLG Z) A)
+                     (EVAL$ FLG Z A))))
+
+; Section 8.  Theorems about Quantifiers
+
+; The following lemmas suggest an improvement to TYPE-SET.
+; These lemmas are not mentioned in the paper but some are
+; used in subsequent proofs.
+
+(PROVE-LEMMA FOR-ALWAYS-IS-BOOLEAN (REWRITE)
+  (IMPLIES (FOR X Y COND 'ALWAYS BODY ALIST)
+           (EQUAL (FOR X Y COND 'ALWAYS BODY ALIST) T)))
+
+(PROVE-LEMMA FOR-EXISTS-IS-BOOLEAN (REWRITE)
+  (IMPLIES (FOR X Y COND 'EXISTS BODY ALIST)
+           (EQUAL (FOR X Y COND 'EXISTS BODY ALIST) T)))
+
+(PROVE-LEMMA NUMBERP-FOR-SUM (REWRITE)
+  (NUMBERP (FOR X Y COND 'SUM BODY ALIST)))
+
+(PROVE-LEMMA NUMBERP-FOR-MULTIPLY (REWRITE)
+  (NUMBERP (FOR X Y COND 'MULTIPLY BODY ALIST)))
+
+(PROVE-LEMMA NUMBERP-FOR-COUNT (REWRITE)
+  (NUMBERP (FOR X Y COND 'COUNT BODY ALIST)))
+
+(PROVE-LEMMA NUMBERP-FOR-MAX (REWRITE)
+  (NUMBERP (FOR X Y COND 'MAX BODY ALIST)))
+
+; Now I begin the classical quantifier theorems...
+
+(PROVE-LEMMA ASSOC-OF-APPEND (REWRITE)
+  (EQUAL (APPEND (APPEND A B) C)
+         (APPEND A (APPEND B C))))
+
+(PROVE-LEMMA FOR-APPEND-COLLECT NIL
+  (EQUAL
+     (FOR X (APPEND A B) COND 'COLLECT BODY ALIST)
+     (APPEND (FOR X A COND 'COLLECT BODY ALIST)
+             (FOR X B COND 'COLLECT BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-COUNT NIL
+  (EQUAL
+   (FOR X (APPEND A B) COND 'COUNT BODY ALIST)
+   (PLUS (FOR X A COND 'COUNT BODY ALIST)
+         (FOR X B COND 'COUNT BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-ADD-TO-SET NIL
+  (EQUAL
+     (FOR X (APPEND A B) COND 'ADD-TO-SET BODY ALIST)
+     (UNION (FOR X A COND 'ADD-TO-SET BODY ALIST)
+            (FOR X B COND 'ADD-TO-SET BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-DO-RETURN NIL
+  (EQUAL
+     (FOR X (APPEND A B) COND 'DO-RETURN BODY ALIST)
+     (IF (FOR X A (LIST 'QUOTE T) 'EXISTS COND ALIST)
+         (FOR X A COND 'DO-RETURN BODY ALIST)
+         (FOR X B COND 'DO-RETURN BODY ALIST))))
+
+;  I am going to prove this by proving each case separately and
+;  then combining them...
+
+;(PROVE-LEMMA FOR-APPEND-ALWAYS-MAX-EXISTS-SUM-APPEND-MULTIPLY-UNION NIL
+;  (IMPLIES (MEMBER OP '(ALWAYS MAX EXISTS SUM
+;                               APPEND MULTIPLY UNION))
+;           (EQUAL
+;             (FOR X (APPEND A B) COND OP BODY ALIST)
+;             (QUANTIFIER-OPERATION OP
+;                                   (FOR X A COND OP BODY ALIST)
+;                                   (FOR X B COND OP BODY ALIST)))))
+
+(PROVE-LEMMA FOR-APPEND-ALWAYS (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'ALWAYS BODY ALIST)
+   (QUANTIFIER-OPERATION 'ALWAYS
+                         (FOR X A COND 'ALWAYS BODY ALIST)
+                         (FOR X B COND 'ALWAYS BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-MAX (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'MAX BODY ALIST)
+   (QUANTIFIER-OPERATION 'MAX
+                         (FOR X A COND 'MAX BODY ALIST)
+                         (FOR X B COND 'MAX BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-EXISTS (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'EXISTS BODY ALIST)
+   (QUANTIFIER-OPERATION 'EXISTS
+                         (FOR X A COND 'EXISTS BODY ALIST)
+                         (FOR X B COND 'EXISTS BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-SUM (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'SUM BODY ALIST)
+   (QUANTIFIER-OPERATION 'SUM
+                         (FOR X A COND 'SUM BODY ALIST)
+                         (FOR X B COND 'SUM BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-APPEND (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'APPEND BODY ALIST)
+   (QUANTIFIER-OPERATION 'APPEND
+                         (FOR X A COND 'APPEND BODY ALIST)
+                         (FOR X B COND 'APPEND BODY ALIST))))
+
+(PROVE-LEMMA ASSOC-OF-TIMES (REWRITE)
+  (EQUAL (TIMES (TIMES I J) K)
+         (TIMES I (TIMES J K))))
+
+(PROVE-LEMMA FOR-APPEND-MULTIPLY (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'MULTIPLY BODY ALIST)
+   (QUANTIFIER-OPERATION 'MULTIPLY
+                         (FOR X A COND 'MULTIPLY BODY ALIST)
+                         (FOR X B COND 'MULTIPLY BODY ALIST))))
+
+(PROVE-LEMMA ASSOC-OF-UNION (REWRITE)
+  (EQUAL (UNION (UNION A B) C)
+         (UNION A (UNION B C))))
+
+(PROVE-LEMMA FOR-APPEND-UNION (REWRITE)
+  (EQUAL
+   (FOR X (APPEND A B) COND 'UNION BODY ALIST)
+   (QUANTIFIER-OPERATION 'UNION
+                         (FOR X A COND 'UNION BODY ALIST)
+                         (FOR X B COND 'UNION BODY ALIST))))
+
+(PROVE-LEMMA FOR-APPEND-ALWAYS-MAX-EXISTS-SUM-APPEND-MULTIPLY-UNION NIL
+  (IMPLIES (MEMBER OP '(ALWAYS MAX EXISTS SUM
+                               APPEND MULTIPLY UNION))
+           (EQUAL
+            (FOR X (APPEND A B) COND OP BODY ALIST)
+            (QUANTIFIER-OPERATION OP
+                                  (FOR X A COND OP BODY ALIST)
+                                  (FOR X B COND OP BODY ALIST)))))
+
+(PROVE-LEMMA FOR-SUM-PLUS NIL
+  (EQUAL
+   (FOR X R COND 'SUM (LIST 'PLUS G H) ALIST)
+   (PLUS (FOR X R COND 'SUM G ALIST)
+         (FOR X R COND 'SUM H ALIST))))
+
+
+(PROVE-LEMMA TIMES-0 (REWRITE)
+             (IMPLIES (ZEROP Y)
+                      (EQUAL (TIMES X Y) 0)))
+
+(PROVE-LEMMA TIMES-ADD1 (REWRITE)
+  (EQUAL (TIMES X (ADD1 Y))
+         (PLUS X (TIMES X Y))))
+
+(PROVE-LEMMA COMMUT-OF-TIMES (REWRITE)
+  (EQUAL (TIMES X Y) (TIMES Y X)))
+
+(PROVE-LEMMA COMMUT2-OF-TIMES (REWRITE)
+  (EQUAL (TIMES X (TIMES Y Z)) (TIMES Y (TIMES X Z))))
+
+(PROVE-LEMMA FOR-MULTIPLY-TIMES NIL
+  (EQUAL
+     (FOR X R COND 'MULTIPLY
+                   (LIST 'TIMES G H) ALIST)
+     (TIMES (FOR X R COND 'MULTIPLY G ALIST)
+            (FOR X R COND 'MULTIPLY H ALIST))))
+
+(PROVE-LEMMA FOR-ALWAYS-AND NIL
+  (EQUAL
+     (FOR X R COND 'ALWAYS (LIST 'AND G H) ALIST)
+     (AND (FOR X R COND 'ALWAYS G ALIST)
+          (FOR X R COND 'ALWAYS H ALIST))))
+
+(PROVE-LEMMA FOR-EXISTS-OR NIL
+  (EQUAL
+     (FOR X R COND 'EXISTS (LIST 'OR G H) ALIST)
+     (OR (FOR X R COND 'EXISTS G ALIST)
+         (FOR X R COND 'EXISTS H ALIST))))
+
+(PROVE-LEMMA UNUSED-INDICIAL-CAN-BE-DROPPED-FROM-BODY NIL
+     (IMPLIES
+        (NOT (MEMBER X (FREE-VARS T BODY)))
+        (EQUAL (FOR X R COND OP BODY ALIST)
+               (FOR X R COND OP 
+                 (LIST 'QUOTE (EVAL$ T BODY ALIST))
+                 ALIST))))
+
+(PROVE-LEMMA UNUSED-INDICIAL-CAN-BE-DROPPED-FROM-COND NIL
+     (IMPLIES
+        (NOT (MEMBER X (FREE-VARS T COND)))
+        (EQUAL (FOR X R COND OP BODY ALIST)
+               (FOR X R (LIST 'QUOTE (EVAL$ T COND ALIST))
+                    OP BODY
+                    ALIST))))
+
+(PROVE-LEMMA FOR-SUM-CONSTANT NIL
+  (EQUAL
+     (FOR X R COND 'SUM (LIST 'QUOTE BODY) ALIST)
+     (TIMES BODY
+            (FOR X R (LIST 'QUOTE T)
+                 'COUNT COND ALIST))))
+
+; The following theorems about constant bodies are proved
+; but not mentioned in the paper.
+
+(PROVE-LEMMA FOR-COUNT-CONSTANT (REWRITE)
+  (EQUAL (FOR X R (LIST 'QUOTE T) 'COUNT (LIST 'QUOTE BODY) ALIST)
+         (IF BODY (LENGTH R) 0)))
+
+(DEFN EXP (I J)
+  (IF (ZEROP J)
+      1
+      (TIMES I (EXP I (SUB1 J)))))
+
+(PROVE-LEMMA FOR-MULTIPLY-CONSTANT (REWRITE)
+  (EQUAL (FOR X R COND 'MULTIPLY (LIST 'QUOTE BODY) ALIST)
+         (EXP BODY (FOR X R (LIST (QUOTE QUOTE) T) 'COUNT COND ALIST))))
+
+(PROVE-LEMMA MAX-CONSTANT (REWRITE)
+  (EQUAL (FOR X R COND 'MAX (LIST 'QUOTE BODY) ALIST)
+         (IF (FOR X R (LIST 'QUOTE T) 'EXISTS COND ALIST)
+             (FIX BODY)
+             0)))
+
+; The next two lemmas are interesting hacks.  Consider EXISTS-CONSTANT
+; below.  The first rewrite rule in it applies to
+; quoted bodies and moves the arbitrary cond into the body of a new
+; exists.  This would loop forever by itself if the cond were itself
+; quoted.  However, to stop that loop we prove the second rewrite rule
+; which addresses itself only to the case of a quoted body and a true
+; cond clause.  The second rule could not be proved as a separate
+; event after the first because the first makes it loop forever.
+; If the second is proved before the first, the resulting set of
+; rewrite rules loops forever because the first one -- proved last --
+; has priority.  By proving them simultaneously and putting the second
+; rule into the second conjunct we arrange for it to be the first
+; of the two rules tried and for it to be proved before the other rule
+; is available.  Crock, Crock, Crock.
+
+(PROVE-LEMMA ALWAYS-CONSTANT (REWRITE)
+  (AND (EQUAL (FOR X R COND 'ALWAYS (LIST 'QUOTE BODY) ALIST)
+              (OR BODY
+                  (FOR X R (LIST (QUOTE QUOTE) T)
+                       'ALWAYS (LIST 'NOT COND)
+                       ALIST)))
+       (EQUAL (FOR X R (LIST (QUOTE QUOTE) T) 'ALWAYS (LIST 'QUOTE BODY) ALIST)
+              (OR BODY (NLISTP R)))))
+
+(PROVE-LEMMA EXISTS-CONSTANT (REWRITE)
+  (AND (EQUAL (FOR X R COND 'EXISTS (LIST 'QUOTE BODY) ALIST)
+              (AND BODY
+                   (FOR X R (LIST (QUOTE QUOTE) T)
+                        'EXISTS COND ALIST)))
+       (EQUAL (FOR X R (LIST (QUOTE QUOTE) T) 'EXISTS (LIST 'QUOTE BODY) ALIST)
+              (AND BODY (LISTP R)))))
+
+(PROVE-LEMMA ADD-TO-SET-CONSTANT (REWRITE)
+  (EQUAL (FOR X R COND 'ADD-TO-SET (LIST 'QUOTE BODY) ALIST)
+         (IF (FOR X R (LIST 'QUOTE T) 'EXISTS COND ALIST)
+             (LIST BODY)
+             NIL)))
+
+
+(PROVE-LEMMA DO-RETURN-CONSTANT (REWRITE)
+  (EQUAL (FOR X R COND 'DO-RETURN (LIST 'QUOTE BODY) ALIST)
+         (IF (FOR X R (LIST (QUOTE QUOTE) T) 'EXISTS COND ALIST)
+             BODY
+             NIL)))
+
+; The only quantifiers for which we do not have a theorem about
+; a quoted body are APPEND COLLECT and UNION for which I could not
+; think of a lemma.
+
+
+
+; The next three are not mentioned in the paper but are
+; our versions of classical theorems.
+
+(PROVE-LEMMA ALWAYS-IN-PARTICULAR NIL
+  (IMPLIES (AND (MEMBER Z A)
+                (LITATOM V)
+                (FOR V A ''T 'ALWAYS X AL))
+           (EVAL$ T X (CONS (CONS V Z) AL))))
+
+(PROVE-LEMMA EXISTS-IN-PARTICULAR NIL
+  (IMPLIES (AND (MEMBER Z A)
+                (EVAL$ T X (CONS (CONS V Z) AL))
+                (LITATOM V))
+           (FOR V A ''T 'EXISTS  X AL)))
+
+(PROVE-LEMMA EXISTS-VS-ALWAYS NIL
+  (EQUAL (FOR V A C 'ALWAYS X AL)
+         (NOT (FOR V A C 'EXISTS (LIST 'NOT X) AL))))
+
+; Now I move on to the simple theorems about FOLDR.
+
+(DEFN FOLDR (OP K LST)
+  (IF (NLISTP LST)
+      K
+      (APPLY$ OP (LIST (CAR LST)
+                       (FOLDR OP K (CDR LST))))))
+
+(PROVE-LEMMA FOLDR-APPEND NIL
+  (EQUAL (FOLDR OP K (APPEND A B))
+         (FOLDR OP (FOLDR OP K B) A)))
+
+(PROVE-LEMMA FOLDR-CONS-IS-APPEND NIL
+  (EQUAL (FOLDR 'CONS B A) (APPEND A B)))
+
+(PROVE-LEMMA FOLDR-AND-T-IS-FOR-ALWAYS NIL
+  (EQUAL (FOLDR 'AND T LST)
+         (FOR P IN LST ALWAYS P)))
+
+(PROVE-LEMMA FOLDR-OR-F-IS-FOR-EXISTS NIL
+  (EQUAL (FOLDR 'OR F LST)
+         (FOR P IN LST EXISTS P)))
+
+(PROVE-LEMMA FOLDR-PLUS-0-IS-FOR-SUM NIL
+  (EQUAL (FOLDR 'PLUS 0 LST)
+         (FOR X IN LST SUM X)))
+
+(PROVE-LEMMA FOLDR-TIMES-1-IS-FOR-MULTIPLY NIL
+  (EQUAL (FOLDR 'TIMES 1 LST)
+         (FOR X IN LST MULTIPLY X)))
+
+
+; Section 10.  Proof of the Binomial Theorem
+
+; In the proof we cite a more general quantifier manipulation
+; lemma than we actually used in the binomial proof.  I prove
+; it here.
+
+(DEFN FROM-TO (I J)
+  (IF (LESSP J I) NIL
+      (IF (EQUAL (FIX I) (FIX J))
+          (LIST (FIX J))
+          (APPEND (FROM-TO I (SUB1 J)) (LIST J)))))
+
+(PROVE-LEMMA EVAL$-SUBSTITUTE (REWRITE)
+  (IMPLIES (LITATOM V)
+           (EQUAL (EVAL$ FLG (SUBSTITUTE FORM V FLG BODY) ALIST)
+                  (EVAL$ FLG BODY
+                         (CONS (CONS V (EVAL$ T FORM ALIST)) ALIST)))))
+
+(PROVE-LEMMA REDUNDANT-BINDING-CAN-BE-DELETED (REWRITE)
+  (EQUAL (EVAL$ FLG X (CONS (CONS V VAL1) (CONS (CONS V VAL2) ALIST)))
+         (EVAL$ FLG X (CONS (CONS V VAL1) ALIST))))
+
+(DEFN DOWN-SHIFT (L)
+  (IF (NLISTP L)
+      NIL
+      (CONS (SUB1 (CAR L))
+            (DOWN-SHIFT (CDR L)))))
+
+(PROVE-LEMMA DOWN-SHIFT-FROM-TO NIL
+  (IMPLIES (AND (NOT (ZEROP J))
+                (NOT (ZEROP K)))
+           (EQUAL (DOWN-SHIFT (FROM-TO J K))
+                  (FROM-TO (SUB1 J) (SUB1 K)))))
+
+(DEFN ALL-NON-ZEROP (L)
+  (IF (LISTP L)
+      (AND (NOT (ZEROP (CAR L)))
+           (ALL-NON-ZEROP (CDR L)))
+      T))
+
+(PROVE-LEMMA ALL-NON-ZEROP-APPEND (REWRITE)
+  (EQUAL (ALL-NON-ZEROP (APPEND A B))
+         (AND (ALL-NON-ZEROP A)
+              (ALL-NON-ZEROP B))))
+
+(PROVE-LEMMA ALL-NON-ZEROP-FROM-TO (REWRITE)
+  (IMPLIES (NOT (ZEROP J))
+           (ALL-NON-ZEROP (FROM-TO J K))))
+
+(PROVE-LEMMA DOWN-SHIFT-FOR (REWRITE)
+  (IMPLIES (AND (LITATOM V)
+                (ALL-NON-ZEROP L))
+           (EQUAL (FOR V (DOWN-SHIFT L)
+                       (SUBSTITUTE (LIST 'ADD1 V) V T COND)
+                       OP
+                       (SUBSTITUTE (LIST 'ADD1 V) V T BODY)
+                       ALIST)
+                  (FOR V L COND OP BODY ALIST)))
+  ((DISABLE QUANTIFIER-OPERATION QUANTIFIER-INITIAL-VALUE)))
+
+; !!! BUG IN THE PAPER !!!
+; The range shift theorem was wrong!  I needed to add that K also was
+; not ZEROP.  If J=1 and K=0 then (FROM-TO J K) is NIL but
+; (FROM-TO (SUB1 J) (SUB1 K)) is (FROM-TO 0 0) = '(0).
+
+(PROVE-LEMMA RANGE-SHIFT NIL
+  (IMPLIES (AND (LITATOM V) (NOT (ZEROP J)) (NOT (ZEROP K)))
+           (EQUAL (FOR V (FROM-TO J K) COND OP BODY ALIST)
+                  (FOR V (FROM-TO (SUB1 J) (SUB1 K))
+                       (SUBSTITUTE (LIST 'ADD1 V) V T COND)
+                       OP
+                       (SUBSTITUTE (LIST 'ADD1 V) V T BODY)
+                       ALIST)))
+  ((DISABLE FOR FROM-TO)
+   (USE (DOWN-SHIFT-FROM-TO))))
+

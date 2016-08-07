@@ -1,0 +1,173 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+;; From a session with Shaun Cooper, 12/9/91.  Based on CLI Internal
+;; Note 210 by Bill Young.
+
+(boot-strap nqthm)
+
+(defn length (x)
+  (if (listp x)
+      (add1 (length (cdr x)))
+    0))
+
+(defn plistp (x)
+  (if (listp x)
+      (plistp (cdr x))
+    (equal x nil)))
+
+(defn exp-p (exp)
+  (cond
+   ((numberp exp) t)
+   ((not (plistp exp)) f)
+   ((equal (length exp) 3)
+    (cond
+     ((equal (car exp) 'plus)
+      (and (exp-p (cadr exp)) (exp-p (caddr exp))))
+     ((equal (car exp) 'times)
+      (and (exp-p (cadr exp)) (exp-p (caddr exp))))
+     ((equal (car exp) 'subtract)
+      (and (exp-p (cadr exp)) (exp-p (caddr exp))))
+     (t f)))
+   (t f)))
+
+(prove-lemma exp-p-opener (rewrite)
+  (implies (not (numberp exp))
+           (equal (exp-p exp)
+                  (cond
+                   ((not (plistp exp)) f)
+                   ((equal (length exp) 3)
+                    (cond
+                     ((equal (car exp) 'plus)
+                      (and (exp-p (cadr exp)) (exp-p (caddr exp))))
+                     ((equal (car exp) 'times)
+                      (and (exp-p (cadr exp)) (exp-p (caddr exp))))
+                     ((equal (car exp) 'subtract)
+                      (and (exp-p (cadr exp)) (exp-p (caddr exp))))
+                     (t f)))
+                   (t f)))))
+
+(defn eval-s (exp)
+  (cond
+   ((not (exp-p exp))
+    0)
+   ((numberp exp) exp)
+   ((equal (car exp) 'plus)
+    (plus (eval-s (cadr exp)) (eval-s (caddr exp))))
+   ((equal (car exp) 'times)
+    (times (eval-s (cadr exp)) (eval-s (caddr exp))))
+   ((equal (car exp) 'subtract)
+    (difference (eval-s (cadr exp)) (eval-s (caddr exp))))
+   (t 0)))
+
+(disable exp-p-opener)
+
+(defn target-inst-p (exp)
+  (if (nlistp exp)
+      (member exp '(add mult sub))
+    (and (plistp exp)
+         (equal (length exp) 2)
+         (equal (car exp) 'pushc)
+         (numberp (cadr exp)))))
+
+(defn target-inst-list-p (exp)
+  (if (listp exp)
+      (and (target-inst-p (car exp))
+           (target-inst-list-p (cdr exp)))
+    (equal exp nil)))
+
+(defn single-step (inst s)
+  ;; inst is a target instruction
+  (case inst
+        (add (cons (plus (cadr s) (car s))
+                   (cddr s)))
+        (mult (cons (times (cadr s) (car s))
+                    (cddr s)))
+        (sub (cons (difference (cadr s) (car s))
+                   (cddr s)))
+        (otherwise (cons (cadr inst) s))))
+
+(defn interpreter-target (inst-list s)
+  (if (listp inst-list)
+      (interpreter-target (cdr inst-list) (single-step (car inst-list) s))
+    s))
+
+(enable exp-p-opener)
+
+(defn compile (exp)
+  (cond
+   ;; the first branch is needed in order to get this definition accepted
+   ((not (exp-p exp))
+    nil)
+   ((numberp exp) (list (list 'pushc exp)))
+   ((equal (car exp) 'plus)
+    (append (compile (cadr exp))
+            (append (compile (caddr exp))
+                    (list 'add))))
+   ((equal (car exp) 'times)
+    (append (compile (cadr exp))
+            (append (compile (caddr exp))
+                    (list 'mult))))
+   ((equal (car exp) 'subtract)
+    (append (compile (cadr exp))
+            (append (compile (caddr exp))
+                    (list 'sub))))
+   (t nil)))
+
+(disable exp-p-opener)
+
+(prove-lemma compile-preserves-legality (rewrite)
+  (implies (exp-p exp)
+           (target-inst-list-p (compile exp))))
+
+(prove-lemma interpreter-target-append (rewrite)
+  (equal (interpreter-target (append inst-list1 inst-list2) s)
+         (interpreter-target inst-list2 (interpreter-target inst-list1 s))))
+
+#| first version:  provides too weak of an inductive hypothesis
+(prove-lemma compiler-correctness (rewrite)
+  (implies (exp-p exp)
+           (equal (eval-s exp)
+                  (car (interpreter-target (compile exp) s)))))
+|#
+
+(defn compiler-correctness-induct (exp s)
+  (if (equal (length exp) 3)
+      (and (compiler-correctness-induct (cadr exp) s)
+           (compiler-correctness-induct (caddr exp) 
+                                        (cons (eval-s (cadr exp)) s)))
+    t))
+
+(prove-lemma compiler-correctness-plus (rewrite)
+  (implies (exp-p exp)
+           (equal (interpreter-target (compile exp) s)
+                  (cons (eval-s exp) s)))
+  ((induct (compiler-correctness-induct exp s))))
+
+(prove-lemma compiler-correctness (rewrite)
+  (implies (exp-p exp)
+           (equal (eval-s exp)
+                  (car (interpreter-target (compile exp) s)))))

@@ -1,0 +1,217 @@
+
+The files listed at the end of this file are all from 
+/slocal/src/nqthm-1992/examples/*/*.events
+as per below:
+
+    mks% cd /slocal/src/nqthm-1992/examples/
+    mks% cp */*.events /home1/mksmith/tools/xinfix/test/
+
+    cp: /home1/mksmith/tools/xinfix/test//fortran.events: Permission denied
+    cp: /home1/mksmith/tools/xinfix/test//isqrt.events: Permission denied
+    cp: /home1/mksmith/tools/xinfix/test//mjrty.events: Permission denied
+
+Subdirectories included are:
+
+kaufmann 		basic			kunen
+bevier			numbers			bronstein
+flatau			shankar			cowles
+fm9001-piton		talcott			fortran-vcg		
+yu			driver			hunt
+
+
+We follow the script below to test this entire set in both scribe and latex mode.
+
+
+---------------------------------------------------------------------------------
+mks% pc-nqthm-1992
+AKCL (Austin Kyoto Common Lisp)  Version(1.615) Thu Dec 17 14:43:43 CST 1992
+Contains Enhancements by W. Schelter
+
+Pc-Nqthm-1992.
+Initialized with (BOOT-STRAP NQTHM) on February 1, 1993  17:22:28.
+
+>(load "/usr/home/mksmith/tools/sinfix/sinfix.o")
+Loading /usr/home/mksmith/tools/sinfix/sinfix.o
+start address -T 596000 Finished loading /usr/home/mksmith/tools/sinfix/sinfix.o
+118344
+
+-- Run every .events file in the directory /usr/home/mksmith/tools/xinfix/test/
+-- through infix in scribe mode.
+
+>(test-directory "/usr/home/mksmith/tools/xinfix/test/*.events" "scribe") 
+...
+
+>(bye)
+
+mks% foreach f (/usr/home/mksmith/tools/xinfix/test/*.mss)
+mks%  scribe $f
+mks% end
+
+-- Check that all ran without breaking.
+
+-- Rather than redo in latex mode, we performed the latex test in another
+-- subdirectory, /usr/home/mksmith/tools/xinfix/testtex/
+
+mks% pc-nqthm-1992
+AKCL (Austin Kyoto Common Lisp)  Version(1.615) Thu Dec 17 14:43:43 CST 1992
+Contains Enhancements by W. Schelter
+
+Pc-Nqthm-1992.
+Initialized with (BOOT-STRAP NQTHM) on February 1, 1993  17:22:28.
+
+>(load "/usr/home/mksmith/tools/sinfix/sinfix.o")
+Loading /usr/home/mksmith/tools/sinfix/sinfix.o
+start address -T 596000 Finished loading /usr/home/mksmith/tools/sinfix/sinfix.o
+118344
+
+-- Run every .events file in the directory /usr/home/mksmith/tools/xinfix/testtex/
+-- through infix in latex mode.  
+
+>(test-directory "/usr/home/mksmith/tools/xinfix/testtex/*.events" "latex") 
+...
+
+>(bye)
+
+mks% foreach f (/usr/home/mksmith/tools/xinfix/testtex/*.tex)
+mks%  latex $f
+mks%  makeindex $f
+mks%  latex $f
+mks% end
+
+-- Check that all ran without breaking.
+
+
+Aug 13 93 MKS 
+Aug 16 93 MKS 
+
+Scribe files were tested with :comment-format 'SMITH (scribe mode default)
+LaTeX files were tested with  :comment-format 'BOYER (latex mode default)
+-------------------------------------------------------------------------------------
+							Scribe		LaTeX
+ 							-----------------------------
+ 			events				mss	ps	tex	dvi
+-------------------------------------------------------------------------------------
+      5095 Aug  6 12:14 acc_CSXA00               	x	x       x	x        
+      3520 Aug  6 12:15 ack                      	x	x	x	x          
+     14604 Aug  6 12:13 alternating              	x	x	x	x                    
+     10920 Aug  6 12:16 amax                     	x	x	x	x             
+    539106 Aug  6 12:14 app-c-d-e                	x	x	x	x                  
+    898697 Aug  6 12:14 app-f                    	x	x	x	x              
+      3395 Aug  6 12:16 asm                      	x	x	x	x            
+    150871 Aug  6 12:13 async18                  	x	x	x	x                
+      4888 Aug  6 12:15 bags                     	x	x	x	x             
+      8643 Aug  6 12:14 bcd                      	x	x	x	x            
+     22087 Aug  6 12:14 bcdS                     	x	x	x	x             
+     24971 Aug  6 12:14 bcdSbi                   	x	x	x	x               
+      3223 Aug  6 12:14 bibo_exp                 	x	x	x	x                 
+     31064 Aug  6 12:14 big-add                  	x	x	x	x                
+      4013 Aug  6 12:13 binomial                 	x	x	x	x                 
+     18382 Aug  6 12:16 bsearch                  	x	x	x	x                
+     61965 Aug  6 12:15 church-rosser            	x	x	x	x                      
+      9184 Aug  6 12:13 controller               	x	x	x	x                   
+     10582 Aug  6 12:14 corrSL                   	x	x	x	x               
+      4672 Aug  6 12:14 corr_CIXA00              	x	x	x	x                    
+      9713 Aug  6 12:14 corr_CSXA00              	x	x	x	x                    
+      6746 Aug  6 12:14 counter                  	x	x	x	x                
+      9009 Aug  6 12:14 counterR                 	x	x	x	x                 
+     19428 Aug  6 12:14 countstut                	x	x	x	x                  
+     36085 Aug  6 12:16 cstring                  	x	x	x	x                
+      4365 Aug  6 12:15 expr-compiler            	x	x	x	x                      
+       377 Aug  6 12:15 extras                   	x	x	x	x               
+     15871 Aug  6 12:15 fib2                     	x	x	x	x             
+     13243 Aug  6 12:13 fibsums                  	x	x	x	x                
+     12714 Aug  6 12:16 fixnum-gcd               	x	x	x	x                   
+    301605 Aug  6 12:15 fm8501                   	x	x	x	x               
+   2175131 Aug  6 12:15 fm9001                   	x	x	x	x               
+     18420 Aug  6 12:16 fmax                     	x	x	x	x             
+     10895 Aug  6 12:15 foldr                    	x	x	x	x              
+     10687 Aug  6 12:13 fortran                  	x	x	x	x                
+      9243 Aug  6 12:13 fs-examples              	x	x	x	x                    
+     59136 Aug  6 12:15 fsrch                    	x	x	x	x              
+      5382 Aug  6 12:14 funacc                   	x	x	x	x               
+     55601 Aug  6 12:13 gauss                    	x	x	x	x              
+     13258 Aug  6 12:16 gcd                      	x	x	x	x            
+     12170 Aug  6 12:16 gcd3                     	x	x	x	x             
+    106112 Aug  6 12:15 generalize-all           	x	x	x	x                       
+   1054073 Aug  6 12:16 goedel                   	x	x	x	x               
+     31968 Aug  6 12:16 group                    	x	x	x	x              
+     13632 Aug  6 12:14 handrec                  	x	x	x	x                
+    236757 Aug  6 12:15 integers                 	x	x	x	x                 
+      4902 Aug  6 12:14 intro-eg                 	x	x	x	x                 
+     18278 Aug  6 12:16 isqrt-ada                	x	x	x	x                  
+     12526 Aug  6 12:15 isqrt                    	x	x	x	x              
+   3258803 Aug  6 12:14 kit                      	x	x	x	x            
+     15825 Aug  6 12:15 koenig                   	x	x	x	x               
+      6177 Aug  6 12:15 locking                  	x	x	x	x                
+      9211 Aug  6 12:16 log2                     	x	x	x	x             
+      5339 Aug  6 12:14 macc                     	x	x	x	x             
+     41041 Aug  6 12:16 mc20-0                   	x	x	x	x               
+    165252 Aug  6 12:16 mc20-1                   	x	x	x	x               
+    237166 Aug  6 12:16 mc20-2                   	x	x	x	x               
+     12478 Aug  6 12:16 memchr                   	x	x	x	x               
+     12397 Aug  6 12:16 memcmp                   	x	x	x	x               
+     12961 Aug  6 12:16 memcpy                   	x	x	x	x               
+    111856 Aug  6 12:16 memmove                  	x	x	x	x                
+     10460 Aug  6 12:16 memset                   	x	x	x	x               
+      4833 Aug  6 12:15 mergesort-demo           	x	x	x	x                       
+     62019 Aug  6 12:15 mjrty                    	x	x	x	x              
+     39515 Aug  6 12:14 mlp                      	x	x	x	x            
+     17430 Aug  6 12:14 multadd                  	x	x	x	x                
+    127127 Aug  6 12:16 mutex-atomic             	x	x	x	x                     
+    169217 Aug  6 12:16 mutex-molecular          	x	x	x	x                        
+    100476 Aug  6 12:15 naturals                 	x	x	x	x                 
+     37455 Aug  6 12:13 new-gauss                	x	x	x	x                  
+     40033 Aug  6 12:15 new-prime                	x	x	x	x                  
+    253095 Aug  6 12:15 nim-piton                	x	x	x	x                  
+     51396 Aug  6 12:15 nim                      	x	x	x	x            
+     10071 Aug  6 12:15 note-100                 	x	x	x	x                 
+     74418 Aug  6 12:13 parser                   	x	x	x	x               
+      9925 Aug  6 12:15 partial                  	x	x	x	x                
+      2018 Aug  6 12:15 permutationp-subbagp     	x	x	x	x                             
+      8374 Aug  6 12:13 peter                    	x	x	x	x              
+   1709400 Aug  6 12:15 piton                    	x	x	x	x                  
+     31122 Aug  6 12:14 pplfadd                  	x	x	x	x                    
+      5130 Aug  6 12:14 pplfun3                  	x	x	x	x                    
+      4959 Aug  6 12:14 pplinc3                  	x	x	x	x                    
+     11853 Aug  6 12:14 ppltcpu                  	x	x	x	x                    
+     11242 Aug  6 12:14 ppltcpuM                 	x	x	x	x                     
+      7863 Aug  6 12:13 pr                       	x	x	x	x               
+      5540 Aug  6 12:14 prod0_CSXA00             	x	x	x	x                         
+     86983 Aug  6 12:13 proveall                 	x	x	x	x                     
+     66612 Aug  6 12:16 qsort                    	x	x	x	x                  
+     59573 Aug  6 12:13 quant                    	x	x	x	x                  
+     17010 Aug  6 12:15 ramsey                   	x	x	x	x                   
+      1900 Aug  6 12:15 rotate                   	x	x	x	x                   
+      3028 Aug  6 12:15 rpn                      	x	x	x	x                
+     17479 Aug  6 12:13 rsa                      	x	x	x	x                
+     12858 Aug  6 12:14 sadder                   	x	x	x	x                   
+     10645 Aug  6 12:14 serial                   	x	x	x	x                   
+      9703 Aug  6 12:14 shell                    	x	x	x	x                  
+      9251 Aug  6 12:15 shuffle                  	x	x	x	x                    
+     46623 Aug  6 12:13 small-machine            	x	x	x	x                          
+     57966 Aug  6 12:14 srccpu                   	x	x	x	x                   
+     17596 Aug  6 12:16 strcat                   	x	x	x	x                   
+     10825 Aug  6 12:16 strchr                   	x	x	x	x                   
+     11608 Aug  6 12:16 strcmp                   	x	x	x	x                   
+      8581 Aug  6 12:16 strcoll                  	x	x	x	x                    
+      9902 Aug  6 12:16 strcpy                   	x	x	x	x                   
+     21147 Aug  6 12:16 strcspn                  	x	x	x	x                    
+      9645 Aug  6 12:16 strlen                   	x	x	x	x                   
+     21929 Aug  6 12:16 strncat                  	x	x	x	x                    
+     15133 Aug  6 12:16 strncmp                  	x	x	x	x                    
+     19740 Aug  6 12:16 strncpy                  	x	x	x	x                    
+     22581 Aug  6 12:16 strpbrk                  	x	x	x	x                    
+     12813 Aug  6 12:16 strrchr                  	x	x	x	x                    
+     20224 Aug  6 12:16 strspn                   	x	x	x	x                   
+     39755 Aug  6 12:16 strstr                   	x	x	x	x                   
+     60647 Aug  6 12:16 strtok                   	x	x	x	x                   
+     21787 Aug  6 12:16 strxfrm                  	x	x	x	x                    
+      4367 Aug  6 12:16 switch                   	x	x	x	x                   
+     68346 Aug  6 12:16 tautology                	x	x	x	x                      
+      3269 Aug  6 12:14 theta                    	x	x	x	x                  
+     77473 Aug  6 12:13 tic-tac-toe              	x	x	x	x                        
+     17429 Aug  6 12:13 tmi                      	x	x	x	x                
+     13796 Aug  6 12:13 unsolv                   	x	x	x	x                   
+     17576 Aug  6 12:13 wilson                   	x	x	x	x                   
+     10019 Aug  6 12:16 zero                     	x	x	x	x                 
+      7065 Aug  6 12:13 ztak                     	x	x	x	x                 

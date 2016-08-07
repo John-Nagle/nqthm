@@ -1,0 +1,85 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    LIST-REWRITES.EVENTS
+;;;
+;;;    For some events, the NQTHM elimination heuristics are too slow or
+;;;    limited to do the job, so we need these helper lemmas.
+;;;    
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(prove-lemma list-rewrite-4 (rewrite)
+  (implies
+   (and (properp a)
+        (equal (length a) 4))
+   (equal (list (car a) (cadr a) (caddr a) (cadddr a))
+          a))
+  ;;Hint
+  ((enable equal-length-add1)))
+
+(disable list-rewrite-4)
+
+;;;    Not strictly necessary, but sometimes I get bored waiting for the prover
+;;;    to get around to doing an elim.
+
+(prove-lemma list-elim-4 (rewrite)
+  (equal (equal l (list a b c d))
+         (and (equal (car l) a)
+              (equal (cadr l) b)
+              (equal (caddr l) c)
+              (equal (cadddr l) d)
+              (equal (cddddr l) nil))))
+              
+(disable list-elim-4)
+
+;;;   LIST-AS-COLLECTED-NTH
+;;;
+;;;   What can I say about this bit of proof hackery?  Along with OPEN-NTH,
+;;;   PROPERP-AS-NULL-NTHCDR, and OUR-CAR-CDR-ELIM, a quick and dirty way
+;;;   to rewrite PROPERP lists as (LIST (CAR L) (CADR L) .... (CADD....DR L)).
+;;;   Useful, since with long lists you may run out of ELIM variables and
+;;;   experience the dreaded SET-DIFF-N crash.
+
+(defn list-as-collected-nth (l length n)
+  (if (zerop length)
+      nil
+    (cons (nth n l)
+          (list-as-collected-nth l (sub1 length) (add1 n)))))
+
+(disable list-as-collected-nth)
+
+(prove-lemma open-list-as-collected-nth (rewrite)
+  (and
+   (implies
+    (zerop length)
+    (equal (list-as-collected-nth l length n)
+           nil))
+   (implies
+    (not (zerop length))
+    (equal (list-as-collected-nth l length n)
+           (cons (nth n l)
+                 (list-as-collected-nth l (sub1 length) (add1 n))))))
+  ;;Hint
+  ((enable list-as-collected-nth)))
+
+(prove-lemma equal-length-4-as-collected-nth ()
+  (implies
+   (and (equal (length l) 4)
+        (properp l))
+   (equal l (list-as-collected-nth l 4 0)))
+  ;;Hint
+  ((enable open-nth properp-as-null-nthcdr our-car-cdr-elim)
+   (disable car-cdr-elim)))
+
+
+(prove-lemma equal-length-32-as-collected-nth ()
+  (implies
+   (and (equal (length l) 32)
+        (properp l))
+   (equal l (list-as-collected-nth l 32 0)))
+  ;;Hint
+  ((enable open-nth properp-as-null-nthcdr our-car-cdr-elim)
+   (disable car-cdr-elim)))

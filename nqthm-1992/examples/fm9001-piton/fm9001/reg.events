@@ -1,0 +1,374 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    REG.EVENTS 
+;;;
+;;;  Definitions and proofs of n-bit scan registers.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    REG* n 
+;;;
+;;;  An n-bit scan register. Scans from low-order to high-order.  The
+;;;  high order bit Q_(n-1) is the scan-out.
+;;;
+;;;  MODULE REG_n;
+;;;  INPUTS CLK, TE, TI, D_0 ... D_(n-1);
+;;;  OUTPUTS Q_0 ... Q_(n-1);
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn reg-body (m n ti te)
+  (if (zerop n)
+      nil
+    (cons
+     (list #i(G m)                      ;Occurrence name - G_m
+           (list #i(Q m) #i(QB m))      ;Outputs (Q_m , QB_m)
+           'FD1S                        ;Type FD1S
+           (list #i(D m) 'CLK ti te))   ;Inputs
+     (reg-body (add1 m) (sub1 n) #i(Q m) te))))
+     
+(disable reg-body)
+
+(defn reg* (n)
+  (list #i(REG n)                                       ;Name
+        (list* 'CLK 'TE 'TI (indices 'D 0 n))           ;Inputs
+        (indices 'Q 0 n)                                ;Outputs
+        (list*
+         (list 'TE-BUFFER '(TE-BUF)                     ;Body
+               (if (lessp n 8) 'B-BUF 'B-BUF-PWR)
+               '(TE))
+         '(TI-DEL (TI-BUF) DEL4 (TI))
+         (reg-body 0 n 'TI-BUF 'TE-BUF))
+        (indices 'G 0 n)))              ;Statelist
+
+(destructuring-lemma reg*)
+
+(defn reg& (netlist n)
+  (and (equal (lookup-module (index 'REG n) netlist)
+              (reg* n))
+       (let ((netlist (delete-module (index 'REG n) netlist)))
+         (and (if (lessp n 8)
+                  (b-buf& netlist)
+                  (b-buf-pwr& netlist))
+              (del4& netlist)
+              (fd1s& netlist)))))
+
+(disable reg&)
+
+(defn reg$netlist (n)
+  (cons (reg* n)
+        (union (if (lessp n 8)
+                   (b-buf$netlist)
+                   (b-buf-pwr$netlist))
+               (union (del4$netlist)
+                      (fd1s$netlist)))))
+
+;;;    REG value
+
+(prove-lemma reg-body$unbound-in-body (rewrite)
+  (and (unbound-in-body 'CLK (reg-body m n ti te))
+       (unbound-in-body 'TI (reg-body m n ti te))
+       (unbound-in-body 'TI-DEL (reg-body m n ti te))
+       (unbound-in-body 'TE (reg-body m n ti te))
+       (unbound-in-body 'TE-BUF (reg-body m n ti te))
+       (unbound-in-body #i(D l) (reg-body m n ti te))
+       (implies
+        (lessp l m)
+        (unbound-in-body (index 'Q l) (reg-body m n ti te))))
+  ;;Hint
+  ((enable unbound-in-body reg-body)))
+
+(disable reg-body$unbound-in-body)
+
+(prove-lemma reg-body$all-unbound-in-body (rewrite)
+  (all-unbound-in-body (indices 'D x y) (reg-body m n ti te))
+  ;;Hint
+  ((enable all-unbound-in-body reg-body indices-as-append)))
+
+(disable reg-body$all-unbound-in-body)
+
+(defn reg-body-induction (m n ti te bindings state-bindings netlist)
+  (if (zerop n)
+      t
+    (reg-body-induction
+     (add1 m)
+     (sub1 n)
+     #i(Q m)
+     te
+     (dual-eval-body-bindings 1 (reg-body m n ti te)
+                              bindings state-bindings netlist)
+     state-bindings
+     netlist)))
+
+(prove-lemma reg-body$value ()
+  (implies
+   (fd1s& netlist)
+   (equal (collect-value
+           (indices 'Q m n)
+           (dual-eval 1 (reg-body m n ti te) bindings state-bindings netlist))
+          (v-threefix (collect-value (indices 'G m n) state-bindings))))
+  ;;Hint
+  ((induct (reg-body-induction m n ti te bindings
+                               state-bindings netlist))
+   (enable reg-body fd1s$value reg-body$unbound-in-body)
+   (disable f-not threefix)))
+
+(prove-lemma reg$value (rewrite)
+  (implies
+   (and (reg& netlist n)
+        (equal (length state) n)
+        (properp state))
+   (equal (dual-eval 0 (index 'REG n) inputs state netlist)
+          (v-threefix state)))
+  ;;Hint
+  ((use (reg-body$value
+         (m 0)
+         (ti 'TI-BUF)
+         (te 'TE-BUF)
+         (netlist (delete-module (index 'REG n) netlist))
+         (bindings (cons
+                    (cons 'TI-BUF (f-buf (caddr inputs)))
+                    (cons
+                     (cons 'TE-BUF (f-buf (cadr inputs)))
+                     (pairlist (list* 'CLK 'TE 'TI (indices 'D 0 n))
+                               inputs))))
+         (state-bindings (pairstates (indices 'G 0 n) state))))
+   (enable reg& reg*$destructure b-buf-pwr$value b-buf$value
+           del4$value)
+   (disable open-v-threefix open-indices)))
+
+(disable reg$value)
+
+;;;   REG state
+
+(prove-lemma reg-body$state ()
+  (implies
+   (and (fd1s& netlist)
+        (not (value te bindings)))
+   (equal (collect-value
+           (indices 'G m n)
+           (dual-eval 3 (reg-body m n ti te) bindings
+                      state-bindings netlist))
+          (v-threefix (collect-value (indices 'D m n) bindings))))
+  ;;Hint
+  ((enable reg-body fd1s$state)
+   (disable threefix)))
+
+(prove-lemma reg$state (rewrite)
+  (implies
+   (and (reg& netlist n)
+        (equal (length d) n)
+        (properp d)
+        (not te))
+   (equal (dual-eval 2 (index 'REG n)
+                     (list* clk te ti d)
+                     state netlist)
+          (v-threefix d)))
+  ;;Hint
+  ((use (reg-body$state
+         (m 0)
+         (ti 'TI-BUF)
+         (te 'TE-BUF)
+         (netlist (delete-module (index 'reg n) netlist))
+         (bindings
+          (dual-eval 1
+                     (reg-body 0 n 'TI-BUF 'TE-BUF)
+                     (pairlist (list* 'TI-BUF 'TE-BUF 'CLK 'TE 'TI
+                                      (indices 'D 0 n))
+                               (list* (f-buf ti)
+                                      (f-buf te) clk te ti d))
+                     (pairstates (indices 'G 0 n) state)
+                     (delete-module (index 'REG n) netlist)))
+         (state-bindings (pairstates (indices 'G 0 n) state))))
+   (enable reg& reg-body$unbound-in-body
+           reg-body$all-unbound-in-body
+           reg*$destructure b-buf-pwr$value b-buf$value
+           del4$value)
+   (disable open-indices open-v-threefix v-threefix)))
+
+(disable reg$state)
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    WE-REG* n 
+;;;
+;;;  An n-bit write-enabled scan register.  Scans from low-order to
+;;;  high-order.  The high order bit Q_(n-1) is the scan-out.
+;;;
+;;;  MODULE WE-REG_n;
+;;;  INPUTS CLK, WE, TE, TI, D_0 ... D_(n-1);
+;;;  OUTPUTS Q_0 ... Q_(n-1);
+;;;
+;;;
+;;;  The test input TI is buffered by a 4ns delay to avoid problems with clock
+;;;  skew. 
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn we-reg-body (m n ti)
+  (if (zerop n)
+      nil
+    (cons
+     (list #i(G m)                              ;Occurrence name - G_m
+           (list #i(Q m) #i(QB m))              ;Outputs (Q_m , QB_m)
+           'FD1SLP                              ;Type FD1SLP
+           (list #i(D m) 'CLK 'WE-BUF ti 'TE-BUF))      ;Inputs
+     (we-reg-body (add1 m) (sub1 n) #i(Q m)))))
+     
+(disable we-reg-body)
+
+(defn we-reg* (n)
+  (list #i(WE-REG n)                                    ;Name
+        (list* 'CLK 'WE 'TE 'TI (indices 'D 0 n))       ;Inputs
+        (indices 'Q 0 n)                                ;Outputs
+        (list*
+         (list 'WE-BUFFER '(WE-BUF)                     ;Body
+               (if (lessp n 8) 'B-BUF 'B-BUF-PWR)
+               '(WE))
+         (list 'TE-BUFFER '(TE-BUF)
+               (if (lessp n 8) 'B-BUF 'B-BUF-PWR)
+               '(TE))
+         '(TI-DEL (TI-BUF) DEL4 (TI))
+         (we-reg-body 0 n 'TI-BUF))
+        (indices 'G 0 n)))              ;Statelist
+
+(destructuring-lemma we-reg*)
+
+(defn we-reg& (netlist n)
+  (and (equal (lookup-module (index 'WE-REG n) netlist) (we-reg* n))
+       (let ((netlist (delete-module (index 'WE-REG n) netlist)))
+         (and (if (lessp n 8)
+                  (b-buf& netlist)
+                  (b-buf-pwr& netlist))
+              (del4& netlist)
+              (fd1slp& netlist)))))
+
+(disable we-reg&)
+
+(defn we-reg$netlist (n)
+  (cons (we-reg* n)
+        (union (if (lessp n 8)
+                   (b-buf$netlist)
+                   (b-buf-pwr$netlist))
+               (union (del4$netlist)
+                      (fd1slp$netlist)))))
+
+;;;    WE-REG value
+
+(prove-lemma we-reg-body$unbound-in-body (rewrite)
+  (and (unbound-in-body 'CLK (we-reg-body m n ti))
+       (unbound-in-body 'WE (we-reg-body m n ti))
+       (unbound-in-body 'WE-BUF (we-reg-body m n ti))
+       (unbound-in-body 'TI (we-reg-body m n ti))
+       (unbound-in-body 'TI-BUF (we-reg-body m n ti))
+       (unbound-in-body 'TE (we-reg-body m n ti))
+       (unbound-in-body 'TE-BUF (we-reg-body m n ti))
+       (unbound-in-body #i(D l) (we-reg-body m n ti))
+       (implies
+        (lessp l m)
+        (unbound-in-body (index 'Q l) (we-reg-body m n ti))))
+  ;;Hint
+  ((enable unbound-in-body we-reg-body)))
+
+(disable we-reg-body$unbound-in-body)
+
+(prove-lemma we-reg-body$all-unbound-in-body (rewrite)
+  (all-unbound-in-body (indices 'D x y) (we-reg-body m n ti))
+  ;;Hint
+  ((enable all-unbound-in-body we-reg-body indices-as-append)))
+
+(disable we-reg-body$all-unbound-in-body)
+
+(defn we-reg-body-induction (m n ti bindings state-bindings netlist)
+  (if (zerop n)
+      t
+    (we-reg-body-induction
+     (add1 m)
+     (sub1 n)
+     #i(Q m)
+     (dual-eval-body-bindings 1 (we-reg-body m n ti)
+                              bindings state-bindings netlist)
+     state-bindings
+     netlist)))
+
+(prove-lemma we-reg-body$value (rewrite)
+  (implies
+   (fd1slp& netlist)
+   (equal (collect-value
+           (indices 'Q m n)
+           (dual-eval 1 (we-reg-body m n ti)
+                      bindings state-bindings netlist))
+          (v-threefix (collect-value (indices 'G m n)
+                                     state-bindings))))
+  ;;Hint
+  ((induct (we-reg-body-induction m n ti bindings
+                                  state-bindings netlist))
+   (enable we-reg-body fd1slp$value we-reg-body$unbound-in-body)
+   (disable f-not threefix)))
+
+(disable we-reg-body$value)
+
+(prove-lemma we-reg$value (rewrite)
+  (implies
+   (and (we-reg& netlist n)
+        (equal (length state) n)
+        (properp state))
+   (equal (dual-eval 0 (index 'WE-REG n) inputs state netlist)
+          (v-threefix state)))
+  ;;Hint
+  ((enable we-reg& b-buf$value b-buf-pwr$value del4$value
+           we-reg-body$value we-reg*$destructure)
+   (disable open-indices)))
+
+(disable we-reg$value)
+
+;;;   WE-REG state
+
+(prove-lemma we-reg-body$state (rewrite)
+  (implies
+   (and (fd1slp& netlist)
+        (not (value 'TE-BUF bindings)))
+   (equal (collect-value
+           (indices 'G m n)
+           (dual-eval 3 (we-reg-body m n ti)
+                      bindings state-bindings netlist))
+          (fv-if (value 'WE-BUF bindings)
+                 (collect-value (indices 'D m n) bindings)
+                 (collect-value (indices 'G m n) state-bindings))))
+  ;;Hint
+  ((enable we-reg-body fd1slp$state boolp fv-if)
+   (disable threefix)))
+
+(disable we-reg-body$state)
+
+(prove-lemma we-reg$state (rewrite)
+  (implies
+   (and (we-reg& netlist n)
+        (equal (length d) n)
+        (properp d)
+        (equal (length state) n)
+        (properp state)
+        (not te))
+   (equal (dual-eval 2 (index 'WE-REG n)
+                     (list* clk we te ti d)
+                     state netlist)
+          (fv-if we d state)))
+  ;;Hint
+  ((enable we-reg& we-reg-body$state boolp
+           b-buf-pwr$value b-buf$value del4$value
+           we-reg-body$value we-reg$value
+           we-reg-body$unbound-in-body
+           we-reg-body$all-unbound-in-body
+           we-reg*$destructure
+           fv-if-rewrite)
+   (disable-theory f-gates)
+   (disable open-indices open-v-threefix)))
+
+(disable we-reg$state)

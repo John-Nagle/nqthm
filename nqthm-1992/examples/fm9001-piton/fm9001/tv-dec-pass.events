@@ -1,0 +1,567 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    TV-DEC-PASS.EVENTS
+;;;
+;;;   The output of the decrement/pass unit is either the input, or the input
+;;;   decremented by 1.  This unit computes A - C, where A is the input vector,
+;;;   and C is a 1-bit control signal representing 1 or 0.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  TV-DEC-PASS is a Boolean specification for a decrement/pass unit with a
+;;;  carry-lookahead structure specified by the TREE input.  Carry-lookahead is
+;;;  based on a single generate bit.  The CAR of the output vector is the
+;;;  generate bit,  and the CDR of the output vector is A if C is high, else 
+;;;  A - 1.  Note that the parity of C is opposite from that specified above.
+
+(defn tv-dec-pass (c a tree)
+  (if (nlistp tree)
+      (list (b-buf (car a)) (b-equv (car a) c))
+    (let ((lhs (tv-dec-pass c (tfirstn a tree) (car tree))))
+      (let ((rhs (tv-dec-pass (b-or c (car lhs)) (trestn a tree) (cdr tree))))
+        (cons (b-or (car lhs) (car rhs))
+              (append (cdr lhs) (cdr rhs)))))))
+
+(disable tv-dec-pass)
+
+(prove-lemma cdr-tv-dec-pass-length (rewrite)
+  (equal (length (cdr (tv-dec-pass c a tree)))
+         (tree-size tree))
+  ;;Hint
+  ((enable tv-dec-pass length tree-size)))
+
+(prove-lemma tv-dec-pass-length (rewrite)
+  (equal (length (tv-dec-pass c a tree))
+         (add1 (tree-size tree)))
+  ;;Hint
+  ((enable length tv-dec-pass tree-size)))
+
+(prove-lemma bvp-cdr-tv-dec-pass (rewrite)
+  (bvp (cdr (tv-dec-pass c a tree)))
+  ;;Hint
+  ((enable bvp tv-dec-pass)))
+
+(prove-lemma bvp-tv-dec-pass (rewrite)
+  (bvp (tv-dec-pass c a tree))
+  ;;Hint
+  ((enable bvp tv-dec-pass)))
+
+(prove-lemma bvp-length-tv-dec-pass (rewrite)
+  (equal (bvp-length (tv-dec-pass c a tree) n)
+         (leq n (add1 (tree-size tree))))
+  ;;Hint
+  ((enable bvp-length)))
+
+(prove-lemma tv-dec-pass-crock-1 ()
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (bvp a))
+   (equal (tv-adder c (v-not (nat-to-v 0 (length a))) a tree)
+          (cons t (tv-dec-pass c a tree))))
+  ;;Hint
+  ((induct (tv-dec-pass c a tree))
+   (disable v-not-firstn v-not-restn)
+   (enable firstn-v-not restn-v-not t-carry)
+   (expand (tv-dec-pass c a tree)
+           (tv-adder c (v-not (nat-to-v 0 (length a))) a tree)
+           (tv-dec-pass f a tree)
+           (tv-adder f (v-not (nat-to-v 0 (length a))) a tree))))
+
+(prove-lemma tv-dec-pass-crock-2 ()
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (bvp a))
+   (equal (cdr (tv-dec-pass c a tree))
+          (cdr (cdr (tv-adder c (v-not (nat-to-v 0 (length a))) a tree)))))
+  ;;Hint
+  ((use (tv-dec-pass-crock-1))))
+
+(prove-lemma tv-dec-pass-works (rewrite)
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (bvp a))
+   (equal (cdr (tv-dec-pass c a tree))
+          (if c
+              (v-buf a)
+            (v-dec a))))
+  ;;Hint
+  ((use (tv-dec-pass-crock-2))
+   (enable tv-adder-as-p-g-sum v-sum v-dec)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    TV-DEC-PASS-NG
+;;;
+;;;
+;;;  The generate bit is of no consequence at the top level.  We want to
+;;;  capture the specification of a dec/pass unit that only produces a
+;;;  generate bit when necessary.  TV-DEC-PASS-NG only produces a generate bit 
+;;;  when MAKE-G is T.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn tv-dec-pass-ng (c a tree make-g)
+  (if (nlistp tree)
+      (if make-g
+          (list (b-buf (car a)) (b-equv (car a) c))
+        (list (b-equv (car a) c)))
+    (let ((lhs (tv-dec-pass-ng c
+                               (tfirstn a tree)
+                               (car tree)
+                               t)))
+      (let ((rhs (tv-dec-pass-ng (b-or c (car lhs))
+                                 (trestn a tree)
+                                 (cdr tree)
+                                 make-g)))
+        (if make-g
+            (cons (b-or (car lhs) (car rhs))
+                  (append (cdr lhs) (cdr rhs)))
+          (append (cdr lhs) rhs))))))
+
+(disable tv-dec-pass-ng)
+
+(prove-lemma tv-dec-pass-ng-length (rewrite)
+  (equal (length (tv-dec-pass-ng c a tree make-g))
+         (if make-g
+             (add1 (tree-size tree))
+           (tree-size tree)))
+  ;;Hint
+  ((enable tv-dec-pass-ng length tree-size)))
+
+(prove-lemma tv-dec-pass-ng-length-1 (rewrite)
+  (implies make-g
+           (equal (length (cdr (tv-dec-pass-ng c a tree make-g)))
+                  (tree-size tree)))
+  ;;Hint
+  ((enable tv-dec-pass-ng length tree-size)))
+
+(prove-lemma bvp-tv-dec-pass-ng (rewrite)
+  (bvp (tv-dec-pass-ng c a tree make-g))
+  ;;Hint
+  ((enable bvp tv-dec-pass-ng)))
+
+(prove-lemma bvp-cdr-tv-dec-pass-ng (rewrite)
+  (implies make-g
+           (bvp (cdr (tv-dec-pass-ng c a tree make-g))))
+  ;;Hint
+  ((enable bvp tv-dec-pass-ng)))
+
+(prove-lemma bvp-length-tv-dec-pass-ng (rewrite)
+  (equal (bvp-length (tv-dec-pass-ng c a tree make-g) n)
+         (if make-g
+             (leq n (add1 (tree-size tree)))
+           (lessp n (add1 (tree-size tree)))))
+  ;;Hint
+  ((enable bvp-length)))
+
+(prove-lemma tv-dec-pass-ng-is-cdr-tv-dec-pass (rewrite)
+  (equal (tv-dec-pass-ng c a tree make-g)
+         (if make-g
+             (tv-dec-pass c a tree)
+           (cdr (tv-dec-pass c a tree))))
+  ((enable tv-dec-pass tv-dec-pass-ng)
+   (disable b-or tfirstn trestn)))
+
+(prove-lemma boolp-car-tv-dec-pass-ng (rewrite)
+  (boolp (car (tv-dec-pass-ng c a tree make-g)))
+  ;;Hint
+  ((enable tv-dec-pass-ng)))
+
+(prove-lemma tv-dec-pass-ng-works-1 (rewrite)
+  (implies
+   (and (bvp a)
+        (equal (length a)
+               (tree-size tree))
+        make-g)
+   (equal (cdr (tv-dec-pass-ng c a tree make-g))
+          (if c
+              (v-buf a)
+            (v-dec a)))))
+
+(prove-lemma tv-dec-pass-ng-works-2 (rewrite)
+  (implies
+   (and (bvp a)
+        (equal (length a)
+               (tree-size tree))
+        (not make-g))
+   (equal (tv-dec-pass-ng c a tree make-g)
+          (if c
+              (v-buf a)
+            (v-dec a)))))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    F$TV-DEC-PASS-NG
+;;;
+;;;    F$TV-DEC-PASS-NG is the 4-valued equivalent of TV-DEC-PASS-NG.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$tv-dec-pass-ng (c a tree make-g)
+  (if (nlistp tree)
+      (if make-g
+          (list (car a) (f-equv (car a) c))
+        (list (f-equv (car a) c)))
+    (let ((lhs (f$tv-dec-pass-ng c
+                               (tfirstn a tree)
+                               (car tree)
+                               t)))
+      (let ((rhs (f$tv-dec-pass-ng (f-or c (car lhs))
+                                 (trestn a tree)
+                                 (cdr tree)
+                                 make-g)))
+        (if make-g
+            (cons (f-or (car lhs) (car rhs))
+                  (append (cdr lhs) (cdr rhs)))
+          (append (cdr lhs) rhs))))))
+
+(disable f$tv-dec-pass-ng)
+
+(prove-lemma f$tv-dec-pass-ng-length (rewrite)
+  (equal (length (f$tv-dec-pass-ng c a tree make-g))
+         (if make-g
+             (add1 (tree-size tree))
+           (tree-size tree)))
+  ;;Hint
+  ((enable f$tv-dec-pass-ng length tree-size)
+   (disable-theory f-gates)))
+
+(prove-lemma f$tv-dec-pass-ng-length-1 (rewrite)
+  (implies make-g
+           (equal (length (cdr (f$tv-dec-pass-ng c a tree make-g)))
+                  (tree-size tree)))
+  ;;Hint
+  ((enable f$tv-dec-pass-ng length tree-size)
+   (disable-theory f-gates)))
+
+(prove-lemma properp-f$tv-dec-pass-ng (rewrite)
+  (properp (f$tv-dec-pass-ng c a tree make-g))
+  ;;Hint
+  ((enable properp f$tv-dec-pass-ng)
+   (disable-theory f-gates)))
+
+(prove-lemma properp-cdr-f$tv-dec-pass-ng (rewrite)
+  (implies make-g
+           (properp (cdr (f$tv-dec-pass-ng c a tree make-g))))
+  ;;Hint
+  ((enable properp f$tv-dec-pass-ng)
+   (disable-theory f-gates)))
+
+(prove-lemma f$tv-dec-pass-ng=tv-dec-pass-ng$super-crock (rewrite)
+  (implies
+   (equal (f$tv-dec-pass-ng c a tree make-g)
+          (tv-dec-pass-ng c a tree make-g))
+   (boolp (car (f$tv-dec-pass-ng c a tree make-g)))))
+
+(disable f$tv-dec-pass-ng=tv-dec-pass-ng$super-crock)
+
+(prove-lemma f$tv-dec-pass-ng=tv-dec-pass-ng (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a)
+        (equal (length a) (tree-size tree)))
+   (equal (f$tv-dec-pass-ng c a tree make-g)
+          (tv-dec-pass-ng c a tree make-g)))
+  ;;Hint
+  ((induct (tv-dec-pass-ng c a tree make-g))
+   (enable bvp boolp-b-gates b-buf-x=x
+            f$tv-dec-pass-ng=tv-dec-pass-ng$super-crock)
+   (expand (f$tv-dec-pass-ng c a tree make-g)
+           (tv-dec-pass-ng c a tree make-g)
+           (f$tv-dec-pass-ng c a tree f)
+           (tv-dec-pass-ng c a tree f))
+   (disable-theory f-gates b-gates)
+   (disable tv-dec-pass-ng-is-cdr-tv-dec-pass
+            tv-dec-pass-ng-works-1 tv-dec-pass-ng-works-2)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    TV-DEC-PASS-NG*
+;;;
+;;;    A module generator that implements TV-DEC-PASS-NG.
+;;;    
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn dec-pass-cell* ()
+  '(dec-pass-cell (c a) (g z)
+                  ((g0 (g) id (a))
+                   (g1 (z) b-equv (a c)))
+                  nil))
+
+(module-predicate dec-pass-cell*)
+
+(module-netlist dec-pass-cell*)
+
+(prove-lemma dec-pass-cell$value (rewrite)
+  (implies
+   (dec-pass-cell& netlist)
+   (equal (dual-eval 0 'dec-pass-cell (list c a) state netlist)
+          (list a (f-equv a c))))
+  ;;Hint
+  ((enable dec-pass-cell& id$value b-equv$value)
+   (disable-theory f-gates)))
+
+(defn tv-dec-pass-name (tree make-g)
+  (if make-g
+      #i(tv-dec-pass-g (tree-number tree))
+      #i(tv-dec-pass-ng (tree-number tree))))
+
+;;; Notice that while TV-DEC-PASS-NG has different specifications based on a
+;;; flag, here we generate different circuits based on the flag, and
+;;; therefore must give different names to modules that produce a generate
+;;; and that do not produce a generate.
+
+(defn tv-dec-pass-ng-body (tree make-g)
+  (let ((a-names (indices 'a 0 (tree-size tree)))
+        (z-names (indices 'z 0 (tree-size tree))))
+    (let ((left-a-names (tfirstn a-names tree))
+          (right-a-names (trestn a-names tree))
+          (left-z-names (tfirstn z-names tree))
+          (right-z-names (trestn z-names tree)))
+      (if (nlistp tree)
+          (list
+           (list 'leaf (list 'g #i(z 0))
+                 'dec-pass-cell (list 'c #i(a 0))))
+        (if make-g
+            (list
+             (list 'left (cons 'gl left-z-names)
+                   #i(tv-dec-pass-g (tree-number (car tree)))
+                   (cons 'c left-a-names))
+             (list 'carry '(cx) 'b-or '(c gl))
+             (list 'right (cons 'gr right-z-names)
+                   #i(tv-dec-pass-g (tree-number (cdr tree)))
+                   (cons 'cx right-a-names))
+             (list 'generate '(g) 'b-or '(gl gr)))
+          (list
+             (list 'left (cons 'gl left-z-names)
+                   #i(tv-dec-pass-g (tree-number (car tree)))
+                   (cons 'c left-a-names))
+             (list 'carry '(cx) 'b-or '(c gl))
+             (list 'right right-z-names
+                   #i(tv-dec-pass-ng (tree-number (cdr tree)))
+                   (cons 'cx right-a-names))))))))
+
+(disable tv-dec-pass-ng-body)          
+
+(module-generator (tv-dec-pass-ng* tree make-g)
+                  (tv-dec-pass-name tree make-g)
+                  (cons 'c (indices 'a 0 (tree-size tree)))
+                  (if make-g
+                      (cons 'g (indices 'z 0 (tree-size tree)))
+                    (indices 'z 0 (tree-size tree)))
+                  (tv-dec-pass-ng-body tree make-g)
+                  nil)
+
+(defn tv-dec-pass-ng& (netlist tree make-g)
+  (let ((current-tv-dec-pass (tv-dec-pass-name tree make-g)))
+    (let ((xnetlist (delete-module current-tv-dec-pass netlist)))
+
+      (if (nlistp tree)
+          (and (equal (lookup-module current-tv-dec-pass netlist)
+                      (tv-dec-pass-ng* tree make-g))
+               (dec-pass-cell& xnetlist))
+
+        (and (equal (lookup-module current-tv-dec-pass netlist)
+                    (tv-dec-pass-ng* tree make-g))
+             (tv-dec-pass-ng& xnetlist (car tree) t)
+             (tv-dec-pass-ng& xnetlist (cdr tree) make-g)
+             (b-or& xnetlist))))))
+
+(disable tv-dec-pass-ng&)
+
+(defn tv-dec-pass-ng-induction (tree c a make-g name state netlist)
+  (let ((left-a (tfirstn a tree))
+        (right-a (trestn a tree))
+        (module-to-delete (tv-dec-pass-name tree make-g)))
+
+    (if (nlistp tree)
+        t
+
+      (and
+       (tv-dec-pass-ng-induction
+        (car tree)
+        c
+        left-a
+        t
+        #i(tv-dec-pass-g (tree-number (car tree)))
+        0
+        (delete-module module-to-delete netlist))
+
+
+       (tv-dec-pass-ng-induction
+        (cdr tree)
+        (f-or c (car (f$tv-dec-pass-ng c left-a (car tree) t)))
+        right-a
+        t
+        #i(tv-dec-pass-g (tree-number (cdr tree)))
+        0
+        (delete-module module-to-delete netlist))
+
+       (tv-dec-pass-ng-induction
+        (cdr tree)
+        (f-or c (car (f$tv-dec-pass-ng c left-a (car tree) t)))
+        right-a
+        f
+        #i(tv-dec-pass-ng (tree-number (cdr tree)))
+        0
+        (delete-module module-to-delete netlist))))))
+
+
+(prove-lemma tv-dec-pass-ng-lemma-crock (rewrite)
+  (and
+   (implies
+    (tv-dec-pass-ng& (delete-module
+                      #i(tv-dec-pass-g (tree-number tree))
+                      netlist)
+                     (car tree)
+                     make-g)
+    (equal (collect-value (indices 'z 0 n) bindings)
+           (append (collect-value (firstn (tree-size (car tree))
+                                          (indices 'z 0 n))
+                                  bindings)
+                   (collect-value (restn (tree-size (car tree))
+                                         (indices 'z 0 n))
+                                  bindings))))
+   (implies
+    (tv-dec-pass-ng& (delete-module
+                      #i(tv-dec-pass-ng (tree-number tree))
+                      netlist)
+                     (car tree)
+                     make-g)
+    (equal (collect-value (indices 'z 0 n) bindings)
+           (append (collect-value (firstn (tree-size (car tree))
+                                          (indices 'z 0 n))
+                                  bindings)
+                   (collect-value (restn (tree-size (car tree))
+                                         (indices 'z 0 n))
+                                  bindings)))))
+        ;;Hint
+        ((use (collect-value-splitting-crock
+               (l (indices 'z 0 n))
+               (n (tree-size (car tree)))
+               (alist bindings)))))
+
+(disable tv-dec-pass-ng-lemma-crock)
+
+(prove-lemma tv-dec-pass-ng$value (rewrite)
+  (implies
+   (and (tv-dec-pass-ng& netlist tree make-g)
+        (equal (length a) (tree-size tree))
+        (properp a)
+        (boolp make-g)
+        (equal name (tv-dec-pass-name tree make-g)))
+   (equal (dual-eval 0
+                     name
+                     (cons c a) state netlist)
+          (f$tv-dec-pass-ng c a tree make-g)))
+  ;;Hint
+  ((induct (tv-dec-pass-ng-induction tree c a make-g name state netlist))
+   (disable open-indices indices)
+   (enable tv-dec-pass-ng*$destructure
+           tv-dec-pass-ng-lemma-crock
+           dec-pass-cell$value b-or$value
+           tv-dec-pass-ng-body boolp
+           f$tv-dec-pass-ng tv-dec-pass-ng&)
+   (disable-theory f-gates)
+   (expand (tv-dec-pass-ng& netlist tree f)
+           (tv-dec-pass-ng& netlist tree make-g))))
+
+(disable tv-dec-pass-ng$value)
+
+(defn tv-dec-pass-ng$netlist (tree make-g)
+  (if (nlistp tree)
+      (list (tv-dec-pass-ng* tree make-g)
+            (dec-pass-cell*))
+    (cons (tv-dec-pass-ng* tree make-g)
+          (union (tv-dec-pass-ng$netlist (car tree) t)
+                 (tv-dec-pass-ng$netlist (cdr tree) make-g)))))
+
+(prove-lemma check-tv-dec-pass-ng$netlist ()
+  (implies (boolp make-g)
+           (tv-dec-pass-ng&
+            (tv-dec-pass-ng$netlist '(0 . (0 . 0)) make-g)
+            '(0 . (0 . 0))
+            make-g))
+  ((enable boolp)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    DEC-PASS* 
+;;;
+;;;  If the control line C is high does a decrement, else passes A.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(module-generator (dec-pass* n)
+                  #i(dec-pass n)
+                  (cons 'c #i(a 0 n))
+                  #i(z 0 n)
+                  (list
+                   (list 'm0 '(cn) 'b-not '(c))
+                   (list 'm1
+                         #i(z 0 n)
+                         #i(tv-dec-pass-ng (tree-number
+                                            (make-tree n)))
+                         (cons 'cn #i(a 0 n))))
+                  nil)
+
+(defn dec-pass& (netlist n)
+  (let ((xnetlist (delete-module #i(dec-pass n) netlist)))
+    (and (equal (lookup-module #i(dec-pass n) netlist)
+                (dec-pass* n))
+         (b-not& xnetlist)
+         (tv-dec-pass-ng& xnetlist (make-tree n) f))))
+
+(disable dec-pass&)
+
+(defn f$dec-pass (c a)
+  (f$tv-dec-pass-ng (f-not c) a (make-tree (length a)) f))
+
+(disable f$dec-pass)  
+
+(prove-lemma properp-length-f$dec-pass (rewrite)
+  (and (properp (f$dec-pass c v))
+       (implies
+        (not (equal (length v) 0))
+        (equal (length (f$dec-pass c v))
+               (length v))))
+  ;;Hint
+  ((enable f$dec-pass)))
+
+(prove-lemma f$dec-pass=dec-or-pass (rewrite) 
+  (implies
+   (and (bvp v)
+        (boolp dec)
+        (not (equal (length v) 0)))
+   (equal (f$dec-pass dec v)
+          (if* dec (v-dec v) v))) 
+  ;;Hint
+  ((enable f$dec-pass)))
+
+(prove-lemma dec-pass$value (rewrite)
+  (implies
+   (and (dec-pass& netlist n)
+        (not (zerop n))
+        (equal (length a) n)
+        (properp a))
+   (equal (dual-eval 0 #i(dec-pass n) (cons c a) state netlist)
+          (f$dec-pass c a)))
+  ;;Hint
+  ((enable dec-pass& dec-pass*$destructure b-not$value tv-dec-pass-ng$value
+           f$dec-pass)
+   (disable open-indices length)
+   (disable-theory f-gates)))
+ 
+(disable dec-pass$value)
+
+(defn dec-pass$netlist (n)
+  (cons (dec-pass* n)
+        (union (b-not$netlist)
+               (tv-dec-pass-ng$netlist (make-tree n) f))))
+
+(prove-lemma check-dec-pass$netlist ()
+  (dec-pass& (dec-pass$netlist 7) 7))

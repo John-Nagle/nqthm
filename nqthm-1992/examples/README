@@ -1,0 +1,101 @@
+This is the `README' file for the `examples' subdirectory of Nqthm-1992, a
+collection of subdirectories of over one hundred event files, which together
+contain thousands of theorems.  This file also reflects the result of
+installing the additional Nqthm examples that were distributed in 1995.
+
+No file on this directory `examples', nor on any of its subdirectories, is
+necessary for the compilation, installation, or execution of Nqthm-1992.
+
+In the subdirectories such as basic, bevier, bronstein, cowles, flatau,
+fm9001-piton, fortran-vcg, hunt, kaufmann, kunen numbers, shankar, talcott,
+subramanian, young, and yu are the *.events files, the actual example files.
+
+There are a variety of ways to replay these examples.  Please note that to
+replay all these examples is a data processing activity requiring nontrivial
+time and space resources -- perhaps as much as three hundred megabytes of disk
+space, one hundred megabytes of virtual memory, and, on a fast workstation of
+1997, 9 hours of cpu time.  See further warnings about resources in the file
+`driver.lisp'.
+
+Alternative 1.  From within a Common Lisp into which the compiled files for
+Nqthm-1992 have been loaded, simply invoke, say, (prove-file-out "ex"), to
+check an example file named, say, `ex.events'.  Before invoking prove-file-out,
+one must indicate the directory of the file `ex.events', either (1) by using
+some operating-system-specific or Common-Lisp-implementation-specific command
+such as `cd' or (2) by setting *DEFAULT-NQTHM-PATH* to some suitable pathname
+string, e.g. "/local/src/nqthm-1992/examples/basic/".  Obviously, the choice of
+the directory name depends upon where the Nqthm-1992 examples are located at
+your site.  If the checking is successful, a file `ex.proved' will be created.
+If unsuccessful, `ex.proved' will not be created, but a file `ex.proofs' may
+contain an error message and, in all likelihood, files named `ex.STARTED' or
+`ex.fail' will be created.  Because some example files start with instructions
+to call `note-lib' to load information dumped after checking other example
+files, the order in which examples are done is important.  An example file that
+starts with a `boot-strap' does not depend on another file.  The drawback to
+running the examples in this way, via explicit calls to prove-file-out, is that
+it is tedious to do each by hand, since there are over a hundred.  The
+remaining alternatives listed below automate the invocation of prove-file on
+each of the examples.  However, these other alternatives necessarily involve
+operating-system-specific and Common-Lisp-implementation-specific code that
+will not work for some systems.
+
+Alternative 2.  Load the file `driver.lisp' into a Common Lisp containing a
+compiled Nqthm-1992.  See that file for further directions; in particular it is
+necessary to set up certain directory variables; the file `dir.lisp' contains
+typical example settings of variables that point to directories for use when
+running `driver.lisp'.  There are two drawbacks to this `driver.lisp'
+alternative.  First, because `driver.lisp' contains instructions for switching
+between the various example directories, and because we know of no method to do
+this in general in all Common Lisps, this method will fail for any operating
+system in which subdirectory components of file names are not separated by a
+single character, e.g., the character "/" in Unix.  If a single character is
+not so used in your operating system, you will find it necessary to edit
+suitably the definition of DRIVER-PROVE-FILE-OUT in the file `driver.lisp'.
+Second, some of the examples are so large that they will not execute for want
+of sufficient heap in the default configurations of some Common Lisps.
+
+Alternative 3. Invoke either the command `make giant-test' or else the command
+`make giant-test-alt' at the Unix csh level while connected to the directory
+above this, i.e., nqthm-1992.  Do this after successfully running the command
+`make LISP=xxx', where xxx is the the command to run your LISP.  This works for
+AKCL, Allegro, CMU, and Lucid Common Lisps.  The difference between giant-test
+and giant-test-alt is that the former does all of the tests in a single Lisp
+process whereas the latter does each test in a different process.
+
+DEFN-SK.  In the spirit of `driver.lisp', the file `driver-sk.lisp' can be
+loaded into Nqthm-1992 to check the three example files that use defn-sk, Matt
+Kaufmann's Skolemizer, which we distribute with Nqthm-1992.
+
+Historical note.  The Nqthm-1987 events that used to be in the single file
+`basic.events', as documented in `A Computational Logic Handbook,' first
+edition, may now be found in the subdirectories `basic' and `shankar'.  The
+events file `fm8501.events' may be found in the subdirectory `hunt'.  The
+events file `goedel.events' may be found in the subdirectory `shankar'.
+
+
+                   List of Files on this Directory
+
+README                   Introduction
+README-for-1995-examples Introduction to additional examples
+basic                    A Miscellany of Examples
+bevier                   The KIT work of Bill Bevier
+bronstein                Events from Alex Bronstein
+cowles                   Some examples by John Cowles
+dir.lisp                 Definition of some directory variables
+driver                   A Unix csh driver for running the examples
+driver-header.lisp       A file used to help make the file driver.lisp
+driver-sk.lisp           For running the defn-sk examples
+driver.lisp              For running the examples under any CL 
+flatau                   Events from Art Flatau
+fm9001-piton             Events for part of the Clinc Stack
+fortran-vcg              Examples of FORTRAN verification, vcg style
+hunt                     Hunt's FM8501
+kaufmann                 Some examples by Matt Kaufmann
+kunen                    Some examples by Ken Kunen
+numbers                  Many arithmetic examples
+shankar                  Church-Rosser, Goedel's Incompleteness, etc.
+subramanian              Events from Sakthi Subramanian
+talcott                  Some examples by C. Talcott and M. Nagayama
+young                    Events from Bill Young
+yu                       Events from Yuan Yu
+

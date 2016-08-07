@@ -1,0 +1,939 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    F-FUNCTIONS.EVENTS
+;;;
+;;;  Definitions of basic 3- and 4-valued specifications for DUAL-EVAL.
+;;;  This file also includes some 3- and 4-valued vector specifications.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   We begin by introducing primitive functions for 4-state logic.
+
+(defn f-buf (a) (threefix a))
+
+(defn f-and (a b)
+  (if (or (equal a f) (equal b f))
+      f
+    (if (and (equal a t) (equal b t))
+        t
+      (x))))
+
+(defn f-and3 (a b c) (f-and a (f-and b c)))
+(defn f-and4 (a b c d) (f-and a (f-and b (f-and c d))))
+
+(defn f-not (a)
+  (if (boolp a)
+      (not a)
+    (x)))
+
+(defn f-nand (a b) (f-not (f-and a b)))
+(defn f-nand3 (a b c) (f-not (f-and a (f-and b c))))
+(defn f-nand4 (a b c d) (f-not (f-and a (f-and b (f-and c d)))))
+(defn f-nand5 (a b c d e) (f-not (f-and a (f-and b (f-and c (f-and d e))))))
+(defn f-nand6 (a b c d e g)
+  (f-not (f-and a (f-and b (f-and c (f-and d (f-and e g)))))))  
+(defn f-nand8 (a b c d e g h i)
+  (f-not
+   (f-and a (f-and b (f-and c (f-and d (f-and e (f-and g (f-and h i)))))))))
+
+(defn f-or (a b)
+  (if (or (equal a t) (equal b t))
+      t
+    (if (and (equal a f) (equal b f))
+        f
+      (x))))
+
+(defn f-or3 (a b c) (f-or a (f-or b c)))
+(defn f-or4 (a b c d) (f-or a (f-or b (f-or c d))))
+
+(defn f-nor (a b) (f-not (f-or a b)))
+(defn f-nor3 (a b c) (f-not (f-or a (f-or b c))))
+(defn f-nor4 (a b c d) (f-not (f-or a (f-or b (f-or c d)))))
+(defn f-nor5 (a b c d e) (f-not (f-or a (f-or b (f-or c (f-or d e))))))
+(defn f-nor6 (a b c d e g)
+  (f-not (f-or a (f-or b (f-or c (f-or d (f-or e g)))))))  
+(defn f-nor8 (a b c d e g h i)
+  (f-not
+   (f-or a (f-or b (f-or c (f-or d (f-or e (f-or g (f-or h i)))))))))
+
+(defn f-xor (a b)
+  (if (equal a t)
+      (f-not b)
+    (if (equal a f)
+        (threefix b)
+      (x))))
+
+(defn f-xor3 (a b c) (f-xor a (f-xor b c)))
+
+(defn f-equv (a b)
+  (if (equal a t)
+      (threefix b)
+    (if (equal a f)
+        (f-not b)
+      (x))))
+
+(defn f-equv3 (a b c) (f-equv a (f-xor b c)))
+
+(defn f-if (c a b)
+  (if (equal c t)
+      (threefix a)
+    (if (equal c f)
+        (threefix b)
+      (x))))
+
+(defn ft-buf (c a)
+  (if (equal c t)
+      (threefix a)
+    (if (equal c f)
+        (z)
+      (x))))
+
+(defn ft-wire (a b)
+  (if (equal a b)
+     (fourfix a)
+    (if (equal a (z))
+        (fourfix b)
+      (if (equal b (z))
+          (fourfix a)
+        (x)))))
+
+(defn f-pullup (a)
+  (if (equal a (z))
+      t
+    (threefix a)))
+
+;;;  We need this because we later use DEFN-TO-MODULE to generate modules
+;;;  containing references to AO2.
+
+(defn f$ao2 (a b c d) (f-nor (f-and a b) (f-and c d)))
+
+
+(prove-lemma expand-f-functions (rewrite)
+  (and
+   (equal (f-buf a) (threefix a))
+   (equal (f-and a b)
+          (if (or (equal a f) (equal b f))
+              f
+            (if (and (equal a t) (equal b t))
+                t
+              (x))))
+   (equal (f-and3 a b c) (f-and a (f-and b c)))
+   (equal (f-and4 a b c d) (f-and a (f-and b (f-and c d))))
+   (equal (f-not a)
+          (if (boolp a)
+              (not a)
+            (x)))
+   (equal (f-nand a b) (f-not (f-and a b)))
+   (equal (f-nand3 a b c) (f-not (f-and a (f-and b c))))
+   (equal (f-nand4 a b c d) (f-not (f-and a (f-and b (f-and c d)))))
+   (equal (f-or a b)
+          (if (or (equal a t) (equal b t))
+              t
+            (if (and (equal a f) (equal b f))
+                f
+              (x))))
+   (equal (f-nand5 a b c d e)
+          (f-not (f-and a (f-and b (f-and c (f-and d e))))))
+   (equal (f-nand6 a b c d e g)
+          (f-not (f-and a (f-and b (f-and c (f-and d (f-and e g)))))))
+   (equal (f-nand8 a b c d e g h i)
+          (f-not
+           (f-and
+            a (f-and b (f-and c (f-and d (f-and e (f-and g (f-and h i)))))))))
+   (equal (f-or3 a b c) (f-or a (f-or b c)))
+   (equal (f-or4 a b c d) (f-or a (f-or b (f-or c d))))
+   (equal (f-nor a b) (f-not (f-or a b)))
+   (equal (f-nor3 a b c) (f-not (f-or a (f-or b c))))
+   (equal (f-nor4 a b c d) (f-not (f-or a (f-or b (f-or c d)))))
+   (equal (f-nor5 a b c d e)
+          (f-not (f-or a (f-or b (f-or c (f-or d e))))))
+   (equal (f-nor6 a b c d e g)
+          (f-not (f-or a (f-or b (f-or c (f-or d (f-or e g)))))))
+   (equal (f-nor8 a b c d e g h i)
+          (f-not
+           (f-or
+            a (f-or b (f-or c (f-or d (f-or e (f-or g (f-or h i)))))))))
+   (equal (f-xor a b)
+          (if (equal a t)
+              (f-not b)
+            (if (equal a f)
+                (threefix b)
+              (x))))
+   (equal (f-xor3 a b c) (f-xor a (f-xor b c)))
+   (equal (f-equv a b)
+          (if (equal a t)
+              (threefix b)
+            (if (equal a f)
+                (f-not b)
+              (x))))
+   (equal (f-equv3 a b c) (f-equv a (f-xor b c)))
+   (equal (f-if c a b)
+          (if (equal c t)
+              (threefix a)
+            (if (equal c f)
+                (threefix b)
+              (x))))
+   (equal (ft-buf c a)
+          (if (equal c t)
+              (threefix a)
+            (if (equal c f)
+                (z)
+              (x))))
+   (equal (ft-wire a b)
+          (if (equal a b)
+              (fourfix a)
+            (if (equal a (z))
+                (fourfix b)
+              (if (equal b (z))
+                  (fourfix a)
+                (x)))))
+   (equal (f-pullup a)
+          (if (equal a (z))
+              t
+            (threefix a)))))
+
+(disable expand-f-functions)
+
+;;;  This lemma allows us to use F-BUF as a no-op.
+
+(prove-lemma f-buf-lemma (rewrite)
+  (implies
+   (boolp x)
+   (equal (f-buf x)
+          x)))
+
+;;;   Some facts for those times when various "F-functions" are disabled.
+
+(prove-lemma f-and-rewrite (rewrite)
+  (and
+   (not (f-and f x))
+   (not (f-and x f))
+   (equal (f-and x t)
+          (f-buf x))
+   (equal (f-and t x)
+          (f-buf x))
+   (implies
+    (and x y (boolp x) (boolp y))
+    (equal (f-and x y)
+           t))))
+
+(prove-lemma f-or-rewrite (rewrite)
+  (and
+   (equal (f-or f f)
+          f)
+   (implies
+    (and x (boolp x))
+    (equal (f-or x y) t))
+   (implies
+    (and x (boolp x))
+    (equal (f-or y x) t))))
+
+(prove-lemma f-not-rewrite (rewrite)
+  (and
+   (equal (f-not t) f)
+   (equal (f-not f) t)))
+
+(prove-lemma ft-buf-rewrite (rewrite)
+  (and
+   (equal (ft-buf t x)
+          (threefix x))
+   (equal (ft-buf f x)
+          (z))
+   (equal (ft-buf c (threefix x))
+          (ft-buf c x))
+   (equal (ft-buf (x) x)
+          (x))))
+
+(prove-lemma f-if-rewrite (rewrite)
+  (and
+   (equal (f-if t a b)
+          (f-buf a))
+   (equal (f-if f a b)
+          (f-buf b))))
+
+(prove-lemma ft-wire-rewrite (rewrite)
+  (and
+   (equal (ft-wire (x) x)
+          (x))
+   (equal (ft-wire x (x))
+          (x))
+   (equal (ft-wire x (z))
+          (fourfix x))
+   (equal (ft-wire (z) x)
+          (fourfix x))))
+
+(prove-lemma f-pullup-rewrite (rewrite)
+  (and
+   (equal (f-pullup t) t)
+   (equal (f-pullup f) f)
+   (equal (f-pullup (x)) (x))
+   (equal (f-pullup (z)) t)))
+
+;;; Leading up to a rewrite rule to get rid of extra F-BUF's.
+
+(prove-lemma threefix-help-lemma (rewrite)
+  (and
+   (equal (threefix f) f)
+   (equal (threefix t) t)
+   (equal (threefix (x)) (x))
+   (equal (threefix (f-buf x))    (threefix x))
+   (equal (threefix (f-not x))    (f-not x))
+   (equal (threefix (f-and x y))  (f-and x y))
+   (equal (threefix (f-or x y))   (f-or x y))
+   (equal (threefix (f-xor x y))  (f-xor x y))
+   (equal (threefix (f-equv x y)) (f-equv x y))))   
+   
+(disable threefix-help-lemma)
+
+(prove-lemma f-not-f-not=f-buf (rewrite)
+  (equal (f-not (f-not x))
+         (f-buf x)))
+
+(disable f-not-f-not=f-buf)
+
+(prove-lemma f-buf-delete-lemmas (rewrite)
+  (and
+   (equal (f-buf (f-buf a))
+          (f-buf a))
+   (equal (f-buf (f-not a))
+          (f-not a))
+   (equal (f-buf (f-nand a b))
+          (f-nand a b))
+   (equal (f-buf (f-nand3 a b c))
+          (f-nand3 a b c))
+   (equal (f-buf (f-nand4 a b c d))
+          (f-nand4 a b c d))
+   (equal (f-buf (f-nand5 a b c d e))
+          (f-nand5 a b c d e))
+   (equal (f-buf (f-nand6 a b c d e g))
+          (f-nand6 a b c d e g))
+   (equal (f-buf (f-nand8 a b c d e g h i))
+          (f-nand8 a b c d e g h i))
+   (equal (f-buf (f-or a b))
+          (f-or a b))
+   (equal (f-buf (f-or3 a b c))
+          (f-or3 a b c))
+   (equal (f-buf (f-or4 a b c d))
+          (f-or4 a b c d))
+   (equal (f-buf (f-xor a b))
+          (f-xor a b))
+   (equal (f-buf (f-xor3 a b c))
+          (f-xor3 a b c))
+   (equal (f-buf (f-equv a b))
+          (f-equv a b))
+   (equal (f-buf (f-equv3 a b c))
+          (f-equv3 a b c))
+   (equal (f-buf (f-and a b))
+          (f-and a b))
+   (equal (f-buf (f-and3 a b c))
+          (f-and3 a b c))
+   (equal (f-buf (f-and4 a b c d))
+          (f-and4 a b c d))
+   (equal (f-buf (f-nor a b))
+          (f-nor a b))
+   (equal (f-buf (f-nor3 a b c))
+          (f-nor3 a b c))
+   (equal (f-buf (f-nor4 a b c d))
+          (f-nor4 a b c d))
+   (equal (f-buf (f-nor5 a b c d e))
+          (f-nor5 a b c d e))
+   (equal (f-buf (f-nor6 a b c d e g))
+          (f-nor6 a b c d e g))
+   (equal (f-buf (f-nor8 a b c d e g h i))
+          (f-nor8 a b c d e g h i))
+   (equal (f-buf (f-if c a b))
+          (f-if c a b)))
+  ((enable threefix-help-lemma)))
+
+(disable f-buf-delete-lemmas)
+
+(prove-lemma f-gate-threefix-congruence-lemmas$help (rewrite)
+  (and
+   (equal (f-buf (threefix a))
+          (f-buf a))
+   (equal (f-not (threefix a))
+          (f-not a))
+   (equal (f-or (threefix a) b)
+          (f-or a b))
+   (equal (f-or a (threefix b))
+          (f-or a b))
+   (equal (f-xor (threefix a) b)
+          (f-xor a b))
+   (equal (f-xor a (threefix b))
+          (f-xor a b))
+   (equal (f-equv (threefix a) b)
+          (f-equv a b))
+   (equal (f-equv a (threefix b))
+          (f-equv a b))
+   (equal (f-and (threefix a) b)
+          (f-and a b))
+   (equal (f-and a (threefix b))
+          (f-and a b))
+   (equal (f-if (threefix c) a b)
+          (f-if c a b))
+   (equal (f-if c (threefix a) b)
+          (f-if c a b))
+   (equal (f-if c a (threefix b))
+          (f-if c a b))))
+
+(disable f-gate-threefix-congruence-lemmas$help)
+
+(prove-lemma f-gate-threefix-congruence-lemmas (rewrite)
+  (and
+   (equal (f-buf (threefix a))
+          (f-buf a))
+   
+   (equal (f-not (threefix a))
+          (f-not a))
+   
+   (equal (f-nand (threefix a) b)
+          (f-nand a b))
+   (equal (f-nand a (threefix b))
+          (f-nand a b))
+   
+   (equal (f-nand3 (threefix a) b c)
+          (f-nand3 a b c))
+   (equal (f-nand3 a (threefix b) c)
+          (f-nand3 a b c))
+   (equal (f-nand3 a (threefix b) c)
+          (f-nand3 a b c))
+
+   (equal (f-nand4 (threefix a) b c d)
+          (f-nand4 a b c d))
+   (equal (f-nand4 a (threefix b) c d)
+          (f-nand4 a b c d))
+   (equal (f-nand4 a b (threefix c) d)
+          (f-nand4 a b c d))
+   (equal (f-nand4 a b c (threefix d))
+          (f-nand4 a b c d))
+
+   (equal (f-nand5 (threefix a) b c d e)
+          (f-nand5 a b c d e))
+   (equal (f-nand5 a (threefix b) c d e)
+          (f-nand5 a b c d e))
+   (equal (f-nand5 a b (threefix c) d e)
+          (f-nand5 a b c d e))
+   (equal (f-nand5 a b c (threefix d) e)
+          (f-nand5 a b c d e))
+   (equal (f-nand5 a b c d (threefix e))
+          (f-nand5 a b c d e))
+
+   (equal (f-nand6 (threefix a) b c d e g)
+          (f-nand6 a b c d e g))
+   (equal (f-nand6 a (threefix b) c d e g)
+          (f-nand6 a b c d e g))
+   (equal (f-nand6 a b (threefix c) d e g)
+          (f-nand6 a b c d e g))
+   (equal (f-nand6 a b c (threefix d) e g)
+          (f-nand6 a b c d e g))
+   (equal (f-nand6 a b c d (threefix e) g)
+          (f-nand6 a b c d e g))
+   (equal (f-nand6 a b c d e (threefix g))
+          (f-nand6 a b c d e g))
+
+   (equal (f-nand8 (threefix a) b c d e g h i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a (threefix b) c d e g h i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a b (threefix c) d e g h i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a b c (threefix d) e g h i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a b c d (threefix e) g h i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a b c d e (threefix g) h i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a b c d e g (threefix h) i)
+          (f-nand8 a b c d e g h i))
+   (equal (f-nand8 a b c d e g h (threefix i))
+          (f-nand8 a b c d e g h i))
+
+   (equal (f-or (threefix a) b)
+          (f-or a b))
+   (equal (f-or a (threefix b))
+          (f-or a b))
+   
+   (equal (f-or3 (threefix a) b c)
+          (f-or3 a b c))
+   (equal (f-or3 a (threefix b) c)
+          (f-or3 a b c))
+   (equal (f-or3 a (threefix b) c)
+          (f-or3 a b c))
+
+   (equal (f-or4 (threefix a) b c d)
+          (f-or4 a b c d))
+   (equal (f-or4 a (threefix b) c d)
+          (f-or4 a b c d))
+   (equal (f-or4 a b (threefix c) d)
+          (f-or4 a b c d))
+   (equal (f-or4 a b c (threefix d))
+          (f-or4 a b c d))
+
+   (equal (f-xor (threefix a) b)
+          (f-xor a b))
+   (equal (f-xor a (threefix b))
+          (f-xor a b))
+   
+   (equal (f-xor3 (threefix a) b c)
+          (f-xor3 a b c))
+   (equal (f-xor3 a (threefix b) c)
+          (f-xor3 a b c))
+   (equal (f-xor3 a (threefix b) c)
+          (f-xor3 a b c))
+
+   (equal (f-equv (threefix a) b)
+          (f-equv a b))
+   (equal (f-equv a (threefix b))
+          (f-equv a b))
+   
+   (equal (f-equv3 (threefix a) b c)
+          (f-equv3 a b c))
+   (equal (f-equv3 a (threefix b) c)
+          (f-equv3 a b c))
+   (equal (f-equv3 a (threefix b) c)
+          (f-equv3 a b c))
+
+   (equal (f-and (threefix a) b)
+          (f-and a b))
+   (equal (f-and a (threefix b))
+          (f-and a b))
+   
+   (equal (f-and3 (threefix a) b c)
+          (f-and3 a b c))
+   (equal (f-and3 a (threefix b) c)
+          (f-and3 a b c))
+   (equal (f-and3 a (threefix b) c)
+          (f-and3 a b c))
+
+   (equal (f-and4 (threefix a) b c d)
+          (f-and4 a b c d))
+   (equal (f-and4 a (threefix b) c d)
+          (f-and4 a b c d))
+   (equal (f-and4 a b (threefix c) d)
+          (f-and4 a b c d))
+   (equal (f-and4 a b c (threefix d))
+          (f-and4 a b c d))
+
+   (equal (f-nor (threefix a) b)
+          (f-nor a b))
+   (equal (f-nor a (threefix b))
+          (f-nor a b))
+   
+   (equal (f-nor3 (threefix a) b c)
+          (f-nor3 a b c))
+   (equal (f-nor3 a (threefix b) c)
+          (f-nor3 a b c))
+   (equal (f-nor3 a (threefix b) c)
+          (f-nor3 a b c))
+
+   (equal (f-nor4 (threefix a) b c d)
+          (f-nor4 a b c d))
+   (equal (f-nor4 a (threefix b) c d)
+          (f-nor4 a b c d))
+   (equal (f-nor4 a b (threefix c) d)
+          (f-nor4 a b c d))
+   (equal (f-nor4 a b c (threefix d))
+          (f-nor4 a b c d))
+
+   (equal (f-nor5 (threefix a) b c d e)
+          (f-nor5 a b c d e))
+   (equal (f-nor5 a (threefix b) c d e)
+          (f-nor5 a b c d e))
+   (equal (f-nor5 a b (threefix c) d e)
+          (f-nor5 a b c d e))
+   (equal (f-nor5 a b c (threefix d) e)
+          (f-nor5 a b c d e))
+   (equal (f-nor5 a b c d (threefix e))
+          (f-nor5 a b c d e))
+
+   (equal (f-nor6 (threefix a) b c d e g)
+          (f-nor6 a b c d e g))
+   (equal (f-nor6 a (threefix b) c d e g)
+          (f-nor6 a b c d e g))
+   (equal (f-nor6 a b (threefix c) d e g)
+          (f-nor6 a b c d e g))
+   (equal (f-nor6 a b c (threefix d) e g)
+          (f-nor6 a b c d e g))
+   (equal (f-nor6 a b c d (threefix e) g)
+          (f-nor6 a b c d e g))
+   (equal (f-nor6 a b c d e (threefix g))
+          (f-nor6 a b c d e g))
+
+   (equal (f-nor8 (threefix a) b c d e g h i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a (threefix b) c d e g h i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a b (threefix c) d e g h i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a b c (threefix d) e g h i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a b c d (threefix e) g h i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a b c d e (threefix g) h i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a b c d e g (threefix h) i)
+          (f-nor8 a b c d e g h i))
+   (equal (f-nor8 a b c d e g h (threefix i))
+          (f-nor8 a b c d e g h i))
+
+   (equal (f-if (threefix c) a b)
+          (f-if c a b))
+   (equal (f-if c (threefix a) b)
+          (f-if c a b))
+   (equal (f-if c a (threefix b))
+          (f-if c a b)))
+  ;;Hint
+  ((enable f-gate-threefix-congruence-lemmas$help)
+   (disable f-buf f-not f-or f-and f-xor f-equv f-if threefix)))
+
+(disable f-gate-threefix-congruence-lemmas)
+
+;;;  A 4-valued gate theory.
+
+(deftheory f-gates
+  (
+   f-buf f-not
+   f-nand f-nand3 f-nand4 f-nand5 f-nand6 f-nand8
+   f-or f-or3 f-or4
+   f-xor f-xor3 
+   f-equv f-equv3
+   f-and f-and3 f-and4
+   f-nor f-nor3 f-nor4 f-nor5 f-nor6 f-nor8
+   f-if ft-buf ft-wire f-pullup))
+
+;;;   When the F-GATE theory is disabled, the following lemma lets us
+;;;   substitute a B-GATE for each F-GATE under assumptions that the inputs are
+;;;   Boolean. 
+
+(prove-lemma f-gates=b-gates (rewrite)
+  (and
+   (implies (boolp a) (equal (f-buf a) (b-buf a)))
+   (implies (boolp a) (equal (f-not a) (b-not a)))
+   (implies (and (boolp a) (boolp b)) (equal (f-nand a b) (b-nand a b)))
+   (implies (and (boolp a) (boolp b) (boolp c))
+            (equal (f-nand3 a b c) (b-nand3 a b c)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d))
+            (equal (f-nand4 a b c d) (b-nand4 a b c d)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d) (boolp e))
+            (equal (f-nand5 a b c d e) (b-nand5 a b c d e)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d) (boolp e)
+                 (boolp g))
+            (equal (f-nand6 a b c d e g) (b-nand6 a b c d e g)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d) (boolp e)
+                 (boolp g) (boolp h) (boolp i))
+            (equal (f-nand8 a b c d e g h i) (b-nand8 a b c d e g h i)))
+   (implies (and (boolp a) (boolp b)) (equal (f-or a b) (b-or a b)))
+   (implies (and (boolp a) (boolp b) (boolp c))
+            (equal (f-or3 a b c) (b-or3 a b c)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d))
+            (equal (f-or4 a b c d) (b-or4 a b c d)))
+   (implies (and (boolp a) (boolp b)) (equal (f-xor a b) (b-xor a b)))
+   (implies (and (boolp a) (boolp b) (boolp c))
+            (equal (f-xor3 a b c) (b-xor3 a b c)))
+   (implies (and (boolp a) (boolp b)) (equal (f-equv a b) (b-equv a b)))
+   (implies (and (boolp a) (boolp b) (boolp c))
+            (equal (f-equv3 a b c) (b-equv3 a b c)))
+   (implies (and (boolp a) (boolp b)) (equal (f-and a b) (b-and a b)))
+   (implies (and (boolp a) (boolp b) (boolp c))
+            (equal (f-and3 a b c) (b-and3 a b c)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d))
+            (equal (f-and4 a b c d) (b-and4 a b c d)))
+   (implies (and (boolp a) (boolp b)) (equal (f-nor a b) (b-nor a b)))
+   (implies (and (boolp a) (boolp b) (boolp c))
+            (equal (f-nor3 a b c) (b-nor3 a b c)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d))
+            (equal (f-nor4 a b c d) (b-nor4 a b c d)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d) (boolp e))
+            (equal (f-nor5 a b c d e) (b-nor5 a b c d e)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d) (boolp e)
+                 (boolp g))
+            (equal (f-nor6 a b c d e g) (b-nor6 a b c d e g)))
+   (implies (and (boolp a) (boolp b) (boolp c) (boolp d) (boolp e)
+                 (boolp g) (boolp h) (boolp i))
+            (equal (f-nor8 a b c d e g h i) (b-nor8 a b c d e g h i)))
+   (implies (and (boolp c) (boolp a) (boolp b))
+            (equal (f-if c a b) (b-if c a b))))
+  ;;Hint
+  ((enable boolp)))
+
+
+;;;  FV-OR
+
+(defn fv-or (a b)
+  (if (nlistp a)
+      nil
+    (cons (f-or (car a) (car b))
+          (fv-or (cdr a) (cdr b)))))
+
+(disable fv-or)
+
+(prove-lemma properp-length-fv-or (rewrite)
+  (and (properp (fv-or a b))
+       (equal (length (fv-or a b))
+              (length a)))
+  ;;Hint
+  ((enable properp fv-or length)))
+
+(prove-lemma fv-or=v-or (rewrite)
+  (implies
+   (and (bvp a)
+        (bvp b)
+        (equal (length a) (length b)))
+   (equal (fv-or a b)
+          (v-or a b)))
+  ;;Hint
+  ((enable bvp fv-or v-or)))
+
+
+;;;  FV-XOR
+
+(defn fv-xor (a b)
+  (if (nlistp a)
+      nil
+    (cons (f-xor (car a) (car b))
+          (fv-xor (cdr a) (cdr b)))))
+
+(disable fv-xor)
+
+(prove-lemma properp-length-fv-xor (rewrite)
+  (and (properp (fv-xor a b))
+       (equal (length (fv-xor a b))
+              (length a)))
+  ;;Hint
+  ((enable properp fv-xor length)))
+
+(prove-lemma fv-xor=v-xor (rewrite)
+  (implies
+   (and (bvp a)
+        (bvp b)
+        (equal (length a) (length b)))
+   (equal (fv-xor a b)
+          (v-xor a b)))
+  ;;Hint
+  ((enable bvp fv-xor v-xor)))
+
+
+;;;  FV-IF
+
+(defn fv-if (c a b)
+  (if (nlistp a)
+      nil
+    (cons (f-if c (car a) (car b))
+          (fv-if c (cdr a) (cdr b)))))
+
+(disable fv-if)
+
+(prove-lemma length-fv-if (rewrite)
+  (equal (length (fv-if c a b))
+         (length a))
+  ;;Hint
+  ((enable length fv-if)))
+
+(prove-lemma properp-fv-if (rewrite)
+  (properp (fv-if c a b))
+  ;;Hint
+  ((enable properp fv-if)))
+
+(prove-lemma v-threefix-fv-if (rewrite)
+  (equal (v-threefix (fv-if c a b))
+         (fv-if c a b))
+  ;;Hint
+  ((enable v-threefix fv-if)))
+
+(prove-lemma fv-if-when-boolp-c (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (and
+    (equal (fv-if t a b)
+           (v-threefix a))
+    (equal (fv-if f a b)
+           (v-threefix b))))
+  ;;Hint
+  ((enable make-list v-threefix length fv-if)))
+
+(prove-lemma fv-if-when-bvp (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a)
+        (bvp b)
+        (equal (length a) (length b)))
+   (equal (fv-if c a b)
+          (if* c a b)))
+  ;;Hint
+  ((enable if* boolp)))  
+                 
+;;;  Usually disabled to reduce splitting.
+(prove-lemma fv-if-rewrite (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (equal (fv-if c a b)
+          (if (boolp c)
+              (if c (v-threefix a) (v-threefix b))
+            (make-list (length a) (x)))))
+  ;;Hint
+  ((enable length fv-if boolp v-threefix make-list)))
+
+(disable fv-if-rewrite)
+
+(prove-lemma fv-if-v-threefix (rewrite)
+  (and
+   (equal (fv-if c (v-threefix a) b)
+          (fv-if c a b))
+   (equal (fv-if c a (v-threefix b))
+          (fv-if c a b)))
+  ;;Hint
+  ((enable fv-if v-threefix)))
+
+
+;;;   V-WIRE
+
+(defn v-wire (a b)
+  (if (nlistp a)
+      nil
+    (cons (ft-wire (car a) (car b))
+          (v-wire (cdr a) (cdr b)))))
+
+(disable v-wire)
+
+(prove-lemma v-wire-x-x=x (rewrite)
+  (equal (v-wire x x)
+         (v-fourfix x))
+  ;;Hint
+  ((enable v-wire v-fourfix)))
+
+(prove-lemma v-wire-make-list-z (rewrite)
+  (implies
+   (equal (length v) n)
+   (and (equal (v-wire (make-list n (z)) v)
+               (v-fourfix v))
+        (equal (v-wire v (make-list n (z)))
+               (v-fourfix v))))
+  ;;Hint
+  ((induct (nth n v))
+   (enable length v-wire make-list v-fourfix fourfix)))
+
+(prove-lemma properp-length-v-wire (rewrite)
+  (and (properp (v-wire a b))
+       (equal (length (v-wire a b))
+              (length a)))
+  ;;Hint
+  ((enable properp length v-wire)))
+
+
+(prove-lemma v-wire-make-list-x (rewrite)
+  (implies
+   (equal n (length x))
+   (equal (v-wire x (make-list n (x)))
+          (make-list n (x))))
+  ;;Hint
+  ((enable length v-wire make-list)))
+
+
+;;;    V-PULLUP
+
+(defn v-pullup (v)
+  (if (nlistp v)
+      nil
+    (cons (f-pullup (car v))
+          (v-pullup (cdr v)))))
+
+(disable v-pullup)
+
+(prove-lemma properp-length-v-pullup (rewrite)
+  (and (properp (v-pullup v))
+       (equal (length (v-pullup v))
+              (length v)))
+  ;;Hint
+  ((enable properp length v-pullup)))
+
+(prove-lemma v-pullup-bvp (rewrite)
+  (implies
+   (bvp v)
+   (equal (v-pullup v)
+          v))
+  ;;Hint
+  ((enable v-pullup bvp)))
+
+(prove-lemma v-pullup-make-list-z (rewrite)
+   (equal (v-pullup (make-list n (z)))
+          (make-list n t))
+  ;;Hint
+  ((enable v-pullup make-list)))
+
+
+;;;  FV-SHIFT-RIGHT
+
+(defn fv-shift-right (a si) 
+  (if (nlistp a) 
+      nil 
+    (append (v-threefix (cdr a)) 
+            (list (threefix si)))))
+
+(disable fv-shift-right)
+
+(prove-lemma fv-shift-right=v-shift-right (rewrite)
+  (implies
+   (and (boolp si)
+        (bvp a))
+   (equal (fv-shift-right a si)
+          (v-shift-right a si)))
+  ;;Hint
+  ((expand (fv-shift-right a si)
+           (v-shift-right a si))))
+
+(prove-lemma properp-length-fv-shift-right (rewrite)
+  (and (properp (fv-shift-right a si))
+       (equal (length (fv-shift-right a si))
+              (length a)))
+  ;;Hint
+  ((enable fv-shift-right)))
+
+(prove-lemma v-threefix-fv-shift-right (rewrite)
+  (equal (v-threefix (fv-shift-right a si))
+         (fv-shift-right a si))
+  ;;Hint
+  ((enable fv-shift-right v-threefix-append)
+   (disable append-v-threefix)))
+
+
+;;;  VFT-BUF - Vector tristate buffer.
+
+(defn vft-buf (c a)
+  (if (nlistp a)
+      nil
+    (cons (ft-buf c (car a))
+          (vft-buf c (cdr a)))))
+
+(disable vft-buf)
+
+(prove-lemma properp-length-vft-buf (rewrite)
+  (and (properp (vft-buf c a))
+       (equal (length (vft-buf c a))
+              (length a)))
+  ;;Hint
+  ((enable properp vft-buf length)))
+
+(prove-lemma vft-buf-lemmas (rewrite)
+  (and
+   (equal (vft-buf t a)
+          (v-threefix a))
+   (equal (vft-buf f a)
+          (make-list (length a) (z))))
+  ;;Hint
+  ((enable vft-buf v-threefix make-list length)))
+
+(prove-lemma vft-buf-rewrite (rewrite)
+  (equal (vft-buf c a)
+         (if (equal c t)
+             (v-threefix a)
+           (if (equal c f)
+               (make-list (length a) (z))
+             (make-list (length a) (x)))))
+  ;;Hint
+  ((enable vft-buf v-threefix make-list length)))
+
+(disable vft-buf-rewrite)

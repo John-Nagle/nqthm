@@ -1,0 +1,837 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    ASM-FM9001.EVENTS
+;;;
+;;;  A quick and dirty assembler for the FM9001.   Examples of
+;;;  assember input are at the bottom of this file.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#|
+   FM9001 -- a processor for a new decade.
+
+   Instruction format:
+                                                          { N/A  mode-a rn-a
+                                                          {  3     2      4
+unused op-code store-cc set-flags mode-b rn-b a-immediate |
+  4       4       4        4        2      4        1     {    a-immediate
+                                                          {         9
+
+
+The A operand is a 10 bit field.  If the high order bit is set, the low order
+9 bits are treated as a signed immediate.  Otherwise, the low order six bits of
+the A operand are a mode/register pair identical to the B operand.
+
+(Note:  We use "a" for "rn-a" and "b" for "rn-b" below.)
+
+Interpretation of the OP-CODE.
+
+ 0000  b <- a             Move
+ 0001  b <- a + 1         Increment
+ 0010  b <- a + b + c     Add with carry
+ 0011  b <- b + a         Add
+ 0100  b <- 0 - a         Negation
+ 0101  b <- a - 1         Decrement
+ 0110  b <- b - a - c     Subtract with borrow
+ 0111  b <- b - a         Subtract
+ 1000  b <- a >> 1        Rotate right, shifted through carry
+ 1001  b <- a >> 1        Arithmetic shift right, top bit copied 
+ 1010  b <- a >> 1        Logical shift right, top bit zero
+ 1011  b <- b XOR a       Exclusive or
+ 1100  b <- b | a         Or
+ 1101  b <- b & a         And
+ 1110  b <- ~a            Not
+ 1111  b <- a             Move
+
+
+Interpretation of the STORE-CC field.
+
+ 0000  (~c)                          Carry clear
+ 0001  (c)                           Carry set
+ 0010  (~v)                          Overflow clear
+ 0011  (v)                           Overflow set
+ 0100  (~n)                          Plus
+ 0101  (n)                           Negative
+ 0110  (~z)                          Not equal
+ 0111  (z)                           Equal
+ 1000  (~c & ~z)                     High
+ 1001  (c | z)                       Low or same
+ 1010  (n & v | ~n & ~v)             Greater or equal
+ 1011  (n & ~v | ~n & v)             Less than
+ 1100  (n & v & ~z | ~n & ~v & ~z)   Greater than
+ 1101  (z | n & ~v | ~n & v)         Less or equal
+ 1110  (t)                           True
+ 1111  (nil)                         False
+
+
+Flags are set conditionally based on the SET-FLAGS field.
+
+ 0000  ----
+ 0001  ---Z
+ 0010  --N-
+ 0011  --NZ
+ 0100  -V--
+ 0101  -V-Z
+ 0110  -VN-
+ 0111  -VNZ
+ 1000  C---
+ 1001  C--Z
+ 1010  C-N-
+ 1011  C-NZ
+ 1100  CV--
+ 1101  CV-Z
+ 1110  CVN-
+ 1111  CVNZ
+
+Addressing Modes for "a" and "b".
+
+ 00  Register Direct
+ 01  Register Indirect
+ 10  Register Indirect with Pre-decrement
+ 11  Register Indirect with Post-increment
+
+
+Register Numbers for "a" and "b".
+
+ 0000  Register 0
+ 0001  Register 1
+ 0010  Register 2
+ 0011  Register 3
+ 0100  Register 4
+ 0101  Register 5
+ 0110  Register 6
+ 0111  Register 7
+ 1000  Register 8
+ 1001  Register 9
+ 1010  Register 10
+ 1011  Register 11
+ 1100  Register 12
+ 1101  Register 13
+ 1110  Register 14
+ 1111  Register 15
+
+|#
+
+
+;;;  Note:  Different names are used for INTEGERP, INT-TO-V, and 
+;;;  V-TO-INT (INTP, INT-TO-BV, and BV-TO-INT) so there are no
+;;;  name clashes with the conversion functions in the file
+;;;  "alu-interpretation.events".  The function ADD produces
+;;;  the sum of two integers and SUB subtracts two integers.
+;;;  EXP2 multiplies 2 by Y times.
+
+(defn intp (x)
+  (or (numberp x) (negativep x)))
+
+(defn int-to-bv (x size)        ; Integer to two's complement bit vector
+  (if (negativep x)
+      (v-subtracter-output f
+                           (nat-to-v (negative-guts x) size)
+                           (nat-to-v 0 size))
+      (nat-to-v x size)))
+
+(defn bv-to-int (x)
+  (if (nth (sub1 (length x)) x)
+      (minus (v-to-nat (v-inc (v-not x))))
+      (v-to-nat x)))
+
+(defn c10-tf (x)
+  (if (nlistp x)
+      nil
+    (cons (if (equal (car x) 0) f t)
+          (c10-tf (cdr x)))))
+
+(defn c10-int (x)
+  (bv-to-int (c10-tf x)))
+
+(defn add (x y)
+  (if (negativep x)
+      (if (negativep y)
+          (minus (plus (negative-guts x) (negative-guts y)))
+          (if (lessp y (negative-guts x))
+              (minus (difference (negative-guts x) y))
+              (difference y (negative-guts x))))
+      (if (negativep y)
+          (if (lessp x (negative-guts y))
+              (minus (difference (negative-guts y) x))
+              (difference x (negative-guts y)))
+          (plus x y))))
+
+
+(defn integer-minus (x)
+  (if (negativep x)
+      (negative-guts x)
+      (if (zerop x) 0 (minus x))))
+
+(defn sub (x y)
+  (add x (integer-minus y)))
+
+(defn exp2 (y)
+  (if (zerop y)
+      1
+      (times 2 (exp2 (sub1 y)))))
+
+(prove-lemma quotient-stuff (rewrite)
+  (implies (and (not (equal n 0))
+                (numberp n))
+           (lessp (quotient n 2) n)))
+
+(defn log2 (n)
+  (if (or (zerop n)
+          (equal n 1))
+      0
+      (add1 (log2 (quotient n 2)))))
+
+
+;;;  We assume R15 is PC.  We have defined R13 to be a link register
+;;;  and R14 to be a stack pointer much like the MC680x0 family.
+;;;  The first group below is the way to write register direct.
+
+(defn asm-register (x)
+  (case x
+    (r0    #v000000)
+    (r1    #v000001)
+    (r2    #v000010)
+    (r3    #v000011)
+    (r4    #v000100)
+    (r5    #v000101)
+    (r6    #v000110)
+    (r7    #v000111)
+    (r8    #v001000)
+    (r9    #v001001)
+    (r10   #v001010)
+    (r11   #v001011)
+    (r12   #v001100)
+
+    (r13   #v001101)
+    (lnk   #v001101)
+    (r14   #v001110)
+    (tos   #v001110)
+    (r15   #v001111)
+    (pc    #v001111)
+
+    
+;;;  The register indirect group is below.
+
+    ((r0)  #v010000)
+    ((r1)  #v010001)
+    ((r2)  #v010010)
+    ((r3)  #v010011)
+    ((r4)  #v010100)
+    ((r5)  #v010101)
+    ((r6)  #v010110)
+    ((r7)  #v010111)
+    ((r8)  #v011000)
+    ((r9)  #v011001)
+    ((r10) #v011010)
+    ((r11) #v011011)
+    ((r12) #v011100)
+
+    ((r13) #v011101)
+    ((lnk) #v011101)
+    ((r14) #v011110)
+    ((tos) #v011110)
+    ((r15) #v011111)
+    ((pc)  #v011111)
+
+
+;;;  The register indirect with pre-decrement group is below.
+
+    ((r0-)  #v100000)
+    ((r1-)  #v100001)
+    ((r2-)  #v100010)
+    ((r3-)  #v100011)
+    ((r4-)  #v100100)
+    ((r5-)  #v100101)
+    ((r6-)  #v100110)
+    ((r7-)  #v100111)
+    ((r8-)  #v101000)
+    ((r9-)  #v101001)
+    ((r10-) #v101010)
+    ((r11-) #v101011)
+    ((r12-) #v101100)
+
+    ((r13-) #v101101)
+    ((lnk-) #v101101)
+    ((r14-) #v101110)
+    ((tos-) #v101110)
+    ((r15-) #v101111)
+    ((pc-)  #v101111)
+
+
+;;;  The register indirect with post-increment group is below.
+
+    ((r0+)  #v110000)
+    ((r1+)  #v110001)
+    ((r2+)  #v110010)
+    ((r3+)  #v110011)
+    ((r4+)  #v110100)
+    ((r5+)  #v110101)
+    ((r6+)  #v110110)
+    ((r7+)  #v110111)
+    ((r8+)  #v111000)
+    ((r9+)  #v111001)
+    ((r10+) #v111010)
+    ((r11+) #v111011)
+    ((r12+) #v111100)
+
+    ((r13+) #v111101)
+    ((lnk+) #v111101)
+    ((r14+) #v111110)
+    ((tos+) #v111110)
+    ((r15+) #v111111)
+    ((pc+)  #v111111)
+
+    (otherwise #v000000)))
+
+
+;;;  A register is either one of the above or a nine-bit immediate
+;;;  value.
+
+(defn asm-register-a (x)
+  (if (intp x)
+      (append (int-to-bv x 9) (list t))
+      (append (asm-register x)
+              #v0000)))
+
+
+;;;  There are 16 operation codes.
+
+(defn asm-op-code (x)
+  (case x
+    (move #v0000)
+    (inc  #v0001)
+    (addc #v0010)
+    (add  #v0011)
+    (neg  #v0100)
+    (dec  #v0101)
+    (subb #v0110)
+    (sub  #v0111)
+    (ror  #v1000)
+    (asr  #v1001)
+    (lsr  #v1010)
+    (xor  #v1011)
+    (or   #v1100)
+    (and  #v1101)
+    (not  #v1110)
+    (m15  #v1111)
+    (otherwise #v0000)))
+
+;;;  The result of each instruction is based on the settings of the
+;;;  flags and the conditional storage field.
+
+(defn asm-store-cc (x)
+  (case x
+    (cc #v0000)
+    (cs #v0001)
+    (vc #v0010)
+    (vs #v0011)
+    (pl #v0100) (nc #v0100)
+    (mi #v0101) (ns #v0101)
+    (ne #v0110) (zc #v0110)
+    (eq #v0111) (zs #v0111)
+    (hi #v1000)
+    (ls #v1001)
+    (ge #v1010)
+    (lt #v1011)
+    (gt #v1100)
+    (le #v1101)
+    (t  #v1110)
+    (f  #v1111)
+    (otherwise #v0000)))
+
+;;;  The contents of the flag registers may be individually updated
+;;;  each instruction.
+
+(defn asm-flags (x)
+  (let ((flags (unpack x))
+        (c     (car (unpack 'c)))
+        (v     (car (unpack 'v)))
+        (n     (car (unpack 'n)))
+        (z     (car (unpack 'z))))
+    (if (equal x 't)
+        #v1111
+      (list (member z flags)
+            (member n flags)
+            (member v flags)
+            (member c flags)))))
+               
+
+;;;  This assember is works in two passes.  The first pass determines
+;;;  the values for the labels and the second actually assembles the
+;;;  code.  The function ASM is the assembler.   ASM-LINE assembles
+;;;  a single line of assembler code.
+
+(defn resolve-names (list cnt alist)
+  (if (nlistp list)
+      alist
+      (if (litatom (car list))
+          (resolve-names (cdr list) cnt (cons (cons (car list) cnt) alist))
+          (resolve-names (cdr list) (add1 cnt) alist))))
+
+;;;  The function update-list, when used with a large program, requires 
+;;;  that the Nqthm variable REDUCE-TERM-CLOCK be set to some "large 
+;;;  enough" value.
+
+(defn update-list (list alist)
+  (if (nlistp list)
+      nil
+      (cons (if (and (listp (car list))
+                     (equal (caar list) 'value))
+                (eval$ t (cadar list) alist)
+                (car list))
+            (update-list (cdr list) alist))))
+
+(defn asm-line (line)
+  (let ((op-code  (car line))
+        (store-cc (cadr line))
+        (flags    (caddr line))
+        (regb     (cadddr line))
+        (rega     (caddddr line)))
+    (if (intp line)
+        (int-to-bv line 32)
+        (append (asm-register-a rega)
+                (append (asm-register regb)
+                        (append (asm-flags flags)
+                                (append (asm-store-cc store-cc)
+                                        (append (asm-op-code op-code)
+                                                #v0000))))))))
+
+(defn asm-list (list)
+  (if (nlistp list)
+      nil
+      (if (litatom (car list))
+          (asm-list (cdr list))
+          (cons (asm-line (car list))
+                (asm-list (cdr list))))))
+
+(defn asm (list)
+  (asm-list (update-list list (resolve-names list 0 nil))))
+      
+
+;;;  Below are some utility functions for FM9001 memory and register
+;;;  state input and printing.
+
+(defn t-and-f-to-1-and-0 (list)
+  (if (nlistp list)
+      nil
+    (cons (if (falsep (car list)) 0 1)
+          (t-and-f-to-1-and-0 (cdr list)))))
+
+(defn asm-to-1-and-0 (list)
+  (if (nlistp list)
+      nil
+    (cons (t-and-f-to-1-and-0  (car list))
+          (asm-to-1-and-0 (cdr list)))))
+
+(defn v-to-nat-all (x)
+  (if (nlistp x)
+      nil
+      (cons (v-to-nat (car x))
+            (v-to-nat-all (cdr x)))))
+
+(defn v-to-0s-through-Fs (x collect)
+  (if (nlistp x)
+      collect
+      (v-to-0s-through-Fs (cddddr x)
+                          (cons (case  (v-to-nat (firstn 4 x))
+                                  (0  (cadr (unpack 'X0)))
+                                  (1  (cadr (unpack 'X1)))
+                                  (2  (cadr (unpack 'X2)))
+                                  (3  (cadr (unpack 'X3)))
+                                  (4  (cadr (unpack 'X4)))
+                                  (5  (cadr (unpack 'X5)))
+                                  (6  (cadr (unpack 'X6)))
+                                  (7  (cadr (unpack 'X7)))
+                                  (8  (cadr (unpack 'X8)))
+                                  (9  (cadr (unpack 'X9)))
+                                  (10 (cadr (unpack 'XA)))
+                                  (11 (cadr (unpack 'XB)))
+                                  (12 (cadr (unpack 'XC)))
+                                  (13 (cadr (unpack 'XD)))
+                                  (14 (cadr (unpack 'XE)))
+                                  (otherwise (cadr (unpack 'XF))))
+                                collect))))
+
+(defn v-to-hex (x)
+  (pack (cons
+         (car (unpack 'x))
+         (v-to-0s-through-Fs x 0))))
+                
+(defn v-to-hex-all (x)
+  (if (nlistp x)
+      nil
+      (cons (v-to-hex (car x))
+            (v-to-hex-all (cdr x)))))
+
+(defn make-pairs (list)
+  (if (or (nlistp list)
+          (nlistp (cdr list)))
+      nil
+      (cons (cons (car list)
+                  (cadr list))
+            (make-pairs (cddr list)))))
+
+(defn add-ram-marker (list-mem)
+  (if (nlistp list-mem)
+      nil
+    (cons (ram (car list-mem))
+          (add-ram-marker (cdr list-mem)))))
+  
+(defn list-to-mem3 (mem depth)
+  (if (zerop depth)
+      mem
+      (list-to-mem3 (make-pairs mem) (sub1 depth))))
+
+(defn list-to-mem2 (mem depth)
+  (car (list-to-mem3 mem depth)))
+
+(defn list-to-mem1 (mem default)
+  (let ((log-size (add1 (log2 (length mem)))))
+    (list-to-mem2
+     (add-ram-marker
+      (append mem
+              (make-list (difference (exp2 log-size)
+                                     (length mem))
+                         default)))
+     log-size)))
+
+(defn stub-right (mem levels default)
+  (if (zerop levels)
+      mem
+      (cons (stub-right mem (sub1 levels) default)
+            (stub default))))
+
+;;;  The assembler produces its results as a list.  The acutal
+;;;  FM9001 behavioral specification requires a tree-based memory
+;;;  implementation.  The function LIST-TO-MEM converts a memory
+;;;  list to a memory tree.
+
+(defn list-to-mem (mem size default)
+  (if (lessp size (add1 (log2 (length mem))))
+      (list 'list-to-mem= 'insufficient-size)
+      (stub-right (list-to-mem1 mem default)
+                  (difference size (add1 (log2 (length mem))))
+                  default)))
+
+(defn list-to-tree-mem (mem)
+  (list-to-mem mem 32 (make-list 32 f)))
+
+(defn mem-to-list (mem)
+  (cond ((listp mem) (append (mem-to-list (car mem))
+                             (mem-to-list (cdr mem))))
+        ((stubp mem) nil)
+        ((ramp mem) (list (ram-guts mem)))
+        ((romp mem) (list (rom-guts mem)))
+        (t mem)))
+
+
+;;;  UN-FM9001 -- Print the state of the FM9001
+
+(defn un-fm9001 (state)
+  (let ((p-state (car state))
+        (mem     (cadr state)))
+    (let ((regs   (regs p-state))
+          (flags  (flags p-state)))
+      (let ((z-flag (z-flag flags))
+            (n-flag (n-flag flags))
+            (v-flag (v-flag flags))
+            (c-flag (c-flag flags)))
+        (list
+         (list (v-to-nat-all (mem-to-list regs))
+               z-flag
+               n-flag
+               v-flag
+               c-flag)
+         (v-to-hex-all (mem-to-list mem)))))))
+
+
+;;;  EXECUTE-FM9001 -- Run a program, loaded at 0, for n steps, with
+;;;  an initial set of cleared registers, and cleared flags.
+
+(defn execute-fm9001 (n tree-pgm)
+  (un-fm9001
+   (fm9001
+    (list (list (list-to-mem (make-list 15 (nat-to-v 0 32))
+                             4 (make-list 32 f))
+                ;;    Z N V C
+                (list t f f f))
+          tree-pgm)
+    n)))
+  
+(defn asm-and-fm9001 (n program)
+  (execute-fm9001 n (list-to-mem (asm program)
+                             32 (make-list 32 f))))
+
+
+#|
+
+;;;  Some sample FM9001 assembler code programs.  Each instruction is
+;;;  written as a list with five elements: the op-code, the
+;;;  conditional store op-code, the flag registers to update, register
+;;;  B, and register A.
+
+;;;  Add 1 + 1
+
+;;;                    st update
+;;;             opcode cc cvnz regB   regA
+
+;;;                    s
+;;;               o    t
+;;;               p    o  u
+;;;               -    r  p f  r      r
+;;;               c    e  d l  e      e
+;;;               o    -  a a  g      g
+;;;               d    c  t g  -      -
+;;;               e    c  e s  b      a
+(setq program
+               '((move t  t    r0     (pc+))
+                 1
+                 (move t  t    r1     (pc+))
+                 1
+                 (add  t  t    r1     r0)))
+
+
+;;  Load -1 and increment twice
+
+(setq program
+               '((move t  t    r0     (pc+))
+                 -1
+                 (inc  t  t    r0     r0)
+                 (inc  t  t    r0     r0)))
+
+
+;;  Add to memory.
+
+(setq program
+      '((move t t r0 (pc+))             ;0
+        4                               ;1
+        (add t t (r0) (pc+))            ;2
+        3                               ;3
+        4))                             ;4 -- Should have 7 at end.
+
+;;;  For the programs just above...
+
+;;;  RESOLVE-NAMES is used to make an association list of labels and
+;;;  their values.  UPDATE replaces the labels in an assembler code
+;;;  program with their values.
+
+(setq alist (resolve-names program 0 nil))
+(setq update (update-list program alist))
+
+;;;  ASM assembles a program and produces a linear memory.  A
+;;;  tree-based memory suitable for the FM9001 can be make with
+;;;  the function TREE-MEM.
+
+(setq memory (asm program))
+(setq tree-mem (list-to-mem memory 32 (make-list 32 f)))
+
+;;;  EXECUTE-FM9001 executes a specified number of instructions.
+
+(execute-fm9001 3 (list-to-mem memory 32 (make-list 32 f)))
+(execute-fm9001 3 tree-mem)
+
+
+;;;  We now give an example of some code similar to that generated by a
+;;;  680x0 assembler.
+
+;;;  Register usage is as follows.  (This usage is
+;;;  similar to the allocation of registers on the
+;;;  68000 for compiled C code.)
+
+;;;  R15  (PC)   --  program counter
+;;;  R14  (TOS)  --  stack pointer
+;;;  R13  (LNK)  --  subroutine link register
+
+;;;  R12         --  temporary register, must be restored if used
+;;;  ...
+;;;  R4          --  temporary register, must be restored if used
+
+;;;  R3          --  subroutine argument 3, restore not necessary
+;;;  R2          --  subroutine argument 2, restore not necessary
+;;;  R1          --  subroutine argument 1, restore not necessary
+;;;  R0          --  subroutine argument 0, return result
+
+;;;  Test Programs for the FM9001
+
+;;;  Multiply two natural numbers: R0 and R1
+
+;;;                    st update
+;;;             opcode cc cvnz regB   regA
+
+;;;                    s
+;;;               o    t
+;;;               p    o  u
+;;;               -    r  p f  r      r
+;;;               c    e  d l  e      e
+;;;               o    -  a a  g      g
+;;;               d    c  t g  -      -
+;;;               e    c  e s  b      a
+
+(setq test
+      '(test     (move t  f    tos    (pc+))    ; Initialize SP
+                 (value stack)
+                 (move t  f    lnk    tos)      ; Initialize Link Ptr
+
+                 (move t  f    r0     11)
+                 (move t  f    r1     99)
+                 
+                 (move t  f    (tos-) (pc+))    ; Call MULTIPLY
+                 (value test-back)
+                 (move t  f    pc     (pc))
+                 (value multiply)
+                 
+       test-back
+       end       (move t  f    pc     (pc))
+                 (value end)))
+
+
+(setq multiply
+      '(multiply (xor  t  f    r2     r2)       ; Clear R2
+                 (move t  f    r3     (pc+))    ; Loop count
+                 8
+
+        mul-loop (lsr  t  c    r1     r1)       ; Right shift R1
+                 (add  cs f    r2     r0)       ; Add if CS
+                 (add  t  f    r0     r0)       ; Left shift R0
+
+                 (lsr  t  c    r1     r1)       ; Right shift R1
+                 (add  cs f    r2     r0)       ; Add if CS
+                 (add  t  f    r0     r0)       ; Left shift R0
+
+                 (lsr  t  c    r1     r1)       ; Right shift R1
+                 (add  cs f    r2     r0)       ; Add if CS
+                 (add  t  f    r0     r0)       ; Left shift R0
+
+                 (lsr  t  cz   r1     r1)       ; Right shift R1
+                 (add  cs f    r2     r0)       ; Add if CS
+                 (add  t  f    r0     r0)       ; Left shift R0
+
+                 (move zs f    pc     (pc+))
+                 (value mul-end)
+
+                 (dec  t  z    r3     r3)       ; Decrement loop count
+                 (move zc f    pc     (pc+))
+                 (value mul-loop)
+
+        mul-end  (move t  f    r0     r2)
+                 (move t  f    pc     (tos+))
+                 ))
+
+(setq stack
+      '(top-stack 0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0 0 0 0 0 0 0
+                  0 0 0 0
+        stack))
+                  
+(setq program (append test (append multiply stack)))
+
+(setq alist (resolve-names program 0 nil))
+(setq update (update-list program alist))
+
+(setq memory (asm program))
+(setq tree-mem (list-to-mem memory 32 (make-list 32 f)))
+(execute-fm9001 4 tree-mem)
+
+
+;;;  Factorial
+
+;;;                    st update
+;;;             opcode cc cvnz regB   regA
+
+;;;                    s
+;;;               o    t
+;;;               p    o  u
+;;;               -    r  p f  r      r
+;;;               c    e  d l  e      e
+;;;               o    -  a a  g      g
+;;;               d    c  t g  -      -
+;;;               e    c  e s  b      a
+
+(setq test
+      '(test     (move t  f    tos    (pc+))    ; Initialize SP
+                 (value stack)
+                 (move t  f    lnk    tos)      ; Initialize Link Ptr
+
+                 (move t  f    (tos-) 12)
+
+                 (move t  f    (tos-) (pc+))    ; Call FACT
+                 (value test-back)
+                 (move t  f    pc     (pc))
+                 (value fact)
+                 
+       test-back
+       end       (move t  f    pc     (pc))
+                 (value end)))
+
+(setq fact
+      '(fact     (move t  f    (tos-) lnk)      ; Link r14,0
+                 (move t  f    lnk    tos)
+                 (add  t  f    tos    0)
+
+                 (move t  f    r2     2)        ; X-1  -> R0
+                 (add  t  f    r2     lnk)
+                 (dec  t  cvzn r0     (r2))
+                 
+                 (move le f    pc     (pc+))    ; X-1 <= 0, jump
+                 (value fact-1)
+
+                 (move t  f    (tos-) r0)       ; Push X-1
+
+                 (move t  f    (tos-) (pc+))    ; Push return address
+                 (value fact-back)
+                 (move t  f    pc     (pc))     ; Call fact
+                 (value fact)
+
+       fact-back (move t  f    r2     2)        ; X  -> R1
+                 (add  t  f    r2     lnk)
+                 (move t  f    r1     (r2))
+                 
+                 (move t  f    (tos-) (pc+))
+                 (value fact-end)
+                 (move t  f    pc     (pc))
+                 (value multiply)
+
+        fact-1   (move t  f    r0     1)
+
+        fact-end (move t  f    tos    lnk)
+                 (move t  f    lnk    (tos+))
+                 (move t  f    pc     (tos+))))
+
+
+(setq program (append test
+                      (append fact
+                              (append multiply stack))))
+
+(setq alist (resolve-names program 0 nil))
+(setq update (update-list program alist))
+
+(setq memory (asm program))
+(setq tree-mem (list-to-mem memory 32 (make-list 32 f)))
+(execute-fm9001 4 tree-mem)
+
+
+;;;  Less than top-of-stack.
+
+(setq less-than
+      '(less-than (sub t  cvnz (tos+)  (tos))
+                  (xor t  f    (tos)   (tos))
+                  (inc le f    (tos)   (tos))))  
+
+
+
+(r-loop)
+
+
+|#

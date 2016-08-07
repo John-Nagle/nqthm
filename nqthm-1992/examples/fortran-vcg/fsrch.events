@@ -1,0 +1,1842 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer and J Strother Moore.  All Rights
+ Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer and J Strother Moore PROVIDE ABSOLUTELY NO WARRANTY.  THE
+ EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+ OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer or J Strother Moore BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+; This is the list of verification conditions for a FORTRAN
+; version of our fast string searching algorithm.  For the details
+; of the algorithm, see the comment at the end of the file.  Boyer and Moore.
+
+; This list of events has been further edited, for processing by
+; DO-FILE, by (1) inserting the following NOTE-LIB, (2) commenting out
+; each FORTRAN-COMMENT and following the comment with the
+; corresponding macroexpansion, and (3) by commenting out each
+; (COMMENT ...).
+
+(NOTE-LIB "fortran" T)
+
+; (FORTRAN-COMMENT FORTRAN)
+(ADD-AXIOM FORTRAN NIL T)
+
+(DCL A$0 NIL)
+
+(DCL BLK-DELTA1$0 NIL)
+
+(DCL BLK-DELTA1$1 NIL)
+
+(DCL BLK-DELTA1$2 NIL)
+
+(DCL BLK-DELTA1$3 NIL)
+
+(DCL BLK-DELTA1$4 NIL)
+
+(DCL C$0 NIL)
+
+(DCL C$1 NIL)
+
+(DCL C$2 NIL)
+
+(DCL C$3 NIL)
+
+(DCL C$4 NIL)
+
+(DCL I$1 NIL)
+
+(DCL I$2 NIL)
+
+(DCL I$3 NIL)
+
+(DCL I$4 NIL)
+
+(DCL MAXI$0 NIL)
+
+(DCL ASIZE& NIL)
+
+(ADD-AXIOM ASIZE&-NUMBERP
+           (REWRITE)
+           (NUMBERP (ASIZE&)))
+
+(DEFN DELTA1
+      (A C MAXI)
+      (IF (ZEROP MAXI)
+          0
+          (IF (EQUAL C (ELT1 A MAXI))
+              0
+              (ADD1 (DELTA1 A C (SUB1 MAXI))))))
+
+(DEFN STRINGP
+      (A I SIZE)
+      (IF (ZEROP I)
+          T
+          (AND (NUMBERP (ELT1 A I))
+               (NOT (EQUAL (ELT1 A I) 0))
+               (NOT (LESSP SIZE (ELT1 A I)))
+               (STRINGP A (SUB1 I) SIZE))))
+
+(ADD-AXIOM INPUT-CONDITIONS
+           (REWRITE)
+           '*1*TRUE)
+
+(DEFN GLOBAL-HYPS NIL
+      (AND (NOT (EQUAL (ASIZE&) '0))
+           (AND (STRINGP (A$0) (MAXI$0) (ASIZE&))
+                (AND (NOT (EQUAL (MAXI$0) '0))
+                     (AND (LESSP (ADD1 (ASIZE&))
+                                 (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+                          (AND (LESSP (ADD1 (MAXI$0))
+                                      (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+                               (NUMBERP (MAXI$0))))))))
+
+(PROVE-LEMMA STRINGP-IS-A-UNIV-QUANTIFIER
+             (REWRITE)
+             (IMPLIES (AND (STRINGP A I (ASIZE&))
+                           (NOT (EQUAL J 0))
+                           (NUMBERP J)
+                           (NOT (LESSP I J)))
+                      (AND (NUMBERP (ELT1 A J))
+                           (NOT (LESSP (ASIZE&) (ELT1 A J)))
+                           (NOT (EQUAL (ELT1 A J) 0)))))
+
+(PROVE-LEMMA INPUT-DEFINEDNESS NIL
+             (IMPLIES (GLOBAL-HYPS) '*1*TRUE))
+
+#| (COMMENT) |#
+
+; (FORTRAN-COMMENT INPUT)
+(ADD-AXIOM INPUT NIL T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F)
+(ADD-AXIOM LOGICAL-IF-F NIL T)
+
+(ADD-AXIOM ASSIGNMENT
+           (REWRITE)
+           (AND (EQUAL (I$1) '1)
+                (AND (EQUAL (C$1) (C$0))
+                     (EQUAL (BLK-DELTA1$1)
+                            (BLK-DELTA1$0)))))
+
+(PROVE-LEMMA PASS1-INVRT NIL
+       (IMPLIES (GLOBAL-HYPS)
+                (AND (AND (NUMBERP (I$1))
+                          (AND (NOT (EQUAL (I$1) '0))
+                               (AND (NOT (LESSP (ADD1 (ASIZE&)) (I$1)))
+                                    (IMPLIES (AND (NUMBERP J)
+                                                  (AND (NOT (EQUAL J '0))
+                                                       (LESSP J (I$1))))
+                                             (EQUAL (ELT1 (BLK-DELTA1$1) J)
+                                                    (MAXI$0))))))
+                     (LEX (CONS (DIFFERENCE (PLUS '2 (PLUS (ASIZE&) (MAXI$0)))
+                                            (I$1))
+                                'NIL)
+                          (CONS (PLUS '2 (PLUS (ASIZE&) (MAXI$0)))
+                                'NIL)))))
+
+#| (COMMENT INPUT F) |#
+
+(UBT INPUT)
+
+(ADD-AXIOM PATHS-FROM-PASS1-INVRT
+           (REWRITE)
+           (IMPLIES (AND (NUMBERP J)
+                         (AND (NOT (EQUAL J '0))
+                              (LESSP J (I$1))))
+                    (EQUAL (ELT1 (BLK-DELTA1$1) J)
+                           (MAXI$0))))
+
+(DEFN PATH-HYPS NIL
+      (AND (GLOBAL-HYPS)
+           (AND (NUMBERP (I$1))
+                (AND (NOT (EQUAL (I$1) '0))
+                     (NOT (LESSP (ADD1 (ASIZE&)) (I$1)))))))
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (I$1))))
+
+#| (COMMENT PASS1-INVRT) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER
+           (REWRITE)
+           (AND (EQUAL (C$2) (C$1))
+                (EQUAL (BLK-DELTA1$2)
+                       (BLK-DELTA1$1))))
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (I$3) '1)
+                (AND (EQUAL (C$3) (C$2))
+                     (EQUAL (BLK-DELTA1$3)
+                            (BLK-DELTA1$2)))))
+
+(PROVE-LEMMA PASS2-INVRT NIL
+ (IMPLIES
+      (AND (I$1)
+           (AND (ZGREATERP (I$1) (ASIZE&))
+                (PATH-HYPS)))
+      (AND (AND (NUMBERP (I$3))
+                (AND (NOT (EQUAL (I$3) '0))
+                     (AND (NOT (LESSP (ADD1 (MAXI$0)) (I$3)))
+                          (IMPLIES (AND (NOT (ZEROP J))
+                                        (NOT (LESSP (ASIZE&) J)))
+                                   (EQUAL (ELT1 (BLK-DELTA1$3) J)
+                                          (PLUS (DELTA1 (A$0) J (SUB1 (I$3)))
+                                                (DIFFERENCE (MAXI$0)
+                                                            (SUB1 (I$3)))))))))
+           (LEX (CONS (DIFFERENCE (ADD1 (MAXI$0)) (I$3))
+                      'NIL)
+                (CONS (DIFFERENCE (PLUS '2 (PLUS (ASIZE&) (MAXI$0)))
+                                  (I$1))
+                      'NIL)))))
+
+#| (COMMENT PASS1-INVRT T F) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-DELTA1 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$1) (ASIZE&)))
+                           (PATH-HYPS))
+                      (AND (LESSP '0 (I$1))
+                           (NOT (LESSP (ASIZE&) (I$1))))))
+
+#| (COMMENT PASS1-INVRT F) |#
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (I$2) (I$1))
+                (AND (EQUAL (C$2) (C$1))
+                     (EQUAL (ELT1 (BLK-DELTA1$2) I)
+                            (IF (EQUAL I (I$1))
+                                (MAXI$0)
+                                (ELT1 (BLK-DELTA1$1) I))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (AND (ALMOST-EQUAL1 (BLK-DELTA1$1)
+                                          (BLK-DELTA1$2)
+                                          '1
+                                          (ASIZE&)
+                                          (I$1)
+                                          (MAXI$0))
+                           (AND (NOT (ZGREATERP (I$1) (ASIZE&)))
+                                (PATH-HYPS)))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (I$2) '1))))
+
+#| (COMMENT PASS1-INVRT F) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (I$3) (ZPLUS (I$2) '1))
+                (AND (EQUAL (C$3) (C$2))
+                     (EQUAL (BLK-DELTA1$3)
+                            (BLK-DELTA1$2)))))
+
+(PROVE-LEMMA PASS1-INVRT1 NIL
+       (IMPLIES (AND (ALMOST-EQUAL1 (BLK-DELTA1$1)
+                                    (BLK-DELTA1$2)
+                                    '1
+                                    (ASIZE&)
+                                    (I$1)
+                                    (MAXI$0))
+                     (AND (NOT (ZGREATERP (I$1) (ASIZE&)))
+                          (PATH-HYPS)))
+                (AND (AND (NUMBERP (I$3))
+                          (AND (NOT (EQUAL (I$3) '0))
+                               (AND (NOT (LESSP (ADD1 (ASIZE&)) (I$3)))
+                                    (IMPLIES (AND (NUMBERP J)
+                                                  (AND (NOT (EQUAL J '0))
+                                                       (LESSP J (I$3))))
+                                             (EQUAL (ELT1 (BLK-DELTA1$3) J)
+                                                    (MAXI$0))))))
+                     (LEX (CONS (DIFFERENCE (PLUS '2 (PLUS (ASIZE&) (MAXI$0)))
+                                            (I$3))
+                                'NIL)
+                          (CONS (DIFFERENCE (PLUS '2 (PLUS (ASIZE&) (MAXI$0)))
+                                            (I$1))
+                                'NIL)))))
+
+#| (COMMENT PASS1-INVRT F) |#
+
+(UBT PATHS-FROM-PASS1-INVRT)
+
+(ADD-AXIOM PATHS-FROM-PASS2-INVRT
+           (REWRITE)
+           (IMPLIES (AND (NOT (ZEROP J))
+                         (NOT (LESSP (ASIZE&) J)))
+                    (EQUAL (ELT1 (BLK-DELTA1$1) J)
+                           (PLUS (DELTA1 (A$0) J (SUB1 (I$1)))
+                                 (DIFFERENCE (MAXI$0) (SUB1 (I$1)))))))
+
+(DEFN PATH-HYPS NIL
+      (AND (GLOBAL-HYPS)
+           (AND (NUMBERP (I$1))
+                (AND (NOT (EQUAL (I$1) '0))
+                     (NOT (LESSP (ADD1 (MAXI$0)) (I$1)))))))
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (I$1))))
+
+#| (COMMENT PASS2-INVRT) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(ADD-AXIOM EFFECTS-OF-UNDEFINER
+           (REWRITE)
+           (AND (EQUAL (C$2) (C$1))
+                (EQUAL (BLK-DELTA1$2)
+                       (BLK-DELTA1$1))))
+
+(PROVE-LEMMA OUTPUT NIL
+             (IMPLIES (AND (I$1)
+                           (AND (ZGREATERP (I$1) (MAXI$0))
+                                (PATH-HYPS)))
+                      (IMPLIES (AND (NUMBERP C)
+                                    (AND (NOT (EQUAL C '0))
+                                         (NOT (LESSP (ASIZE&) C))))
+                               (EQUAL (ELT1 (BLK-DELTA1$2) C)
+                                      (DELTA1 (A$0) C (MAXI$0))))))
+
+#| (COMMENT PASS2-INVRT T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-A NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$1) (MAXI$0)))
+                           (PATH-HYPS))
+                      (AND (LESSP '0 (I$1))
+                           (NOT (LESSP (MAXI$0) (I$1))))))
+
+#| (COMMENT PASS2-INVRT F) |#
+
+(PROVE-LEMMA DEFINEDNESS1 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$1) (MAXI$0)))
+                           (PATH-HYPS))
+                      (ZNUMBERP (ELT1 (A$0) (I$1)))))
+
+#| (COMMENT PASS2-INVRT F) |#
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (I$2) (I$1))
+                (AND (EQUAL (C$2) (ELT1 (A$0) (I$1)))
+                     (EQUAL (BLK-DELTA1$2)
+                            (BLK-DELTA1$1)))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZDIFFERENCE NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$1) (MAXI$0)))
+                           (PATH-HYPS))
+                      (EXPRESSIBLE-ZNUMBERP (ZDIFFERENCE (MAXI$0) (I$2)))))
+
+#| (COMMENT PASS2-INVRT F) |#
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-DELTA1 NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$1) (MAXI$0)))
+                           (PATH-HYPS))
+                      (AND (LESSP '0 (C$2))
+                           (NOT (LESSP (ASIZE&) (C$2))))))
+
+#| (COMMENT PASS2-INVRT F) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (I$3) (I$2))
+                (AND (EQUAL (C$3) (C$2))
+                     (EQUAL (ELT1 (BLK-DELTA1$3) I)
+                            (IF (EQUAL I (C$2))
+                                (ZDIFFERENCE (MAXI$0) (I$2))
+                                (ELT1 (BLK-DELTA1$2) I))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (AND (ALMOST-EQUAL1 (BLK-DELTA1$2)
+                                          (BLK-DELTA1$3)
+                                          '1
+                                          (ASIZE&)
+                                          (C$2)
+                                          (ZDIFFERENCE (MAXI$0) (I$2)))
+                           (AND (NOT (ZGREATERP (I$1) (MAXI$0)))
+                                (PATH-HYPS)))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (I$3) '1))))
+
+#| (COMMENT PASS2-INVRT F) |#
+
+(ADD-AXIOM ASSIGNMENT3
+           (REWRITE)
+           (AND (EQUAL (I$4) (ZPLUS (I$3) '1))
+                (AND (EQUAL (C$4) (C$3))
+                     (EQUAL (BLK-DELTA1$4)
+                            (BLK-DELTA1$3)))))
+
+(PROVE-LEMMA DELTA1-SKIP
+             (REWRITE)
+             (IMPLIES (AND (NOT (EQUAL J (ELT1 PAT I)))
+                           (NOT (ZEROP I)))
+                      (EQUAL (DELTA1 PAT J I)
+                             (ADD1 (DELTA1 PAT J (SUB1 I))))))
+
+(PROVE-LEMMA PASS2-INVRT1 NIL
+ (IMPLIES
+      (AND (ALMOST-EQUAL1 (BLK-DELTA1$2)
+                          (BLK-DELTA1$3)
+                          '1
+                          (ASIZE&)
+                          (C$2)
+                          (ZDIFFERENCE (MAXI$0) (I$2)))
+           (AND (NOT (ZGREATERP (I$1) (MAXI$0)))
+                (PATH-HYPS)))
+      (AND (AND (NUMBERP (I$4))
+                (AND (NOT (EQUAL (I$4) '0))
+                     (AND (NOT (LESSP (ADD1 (MAXI$0)) (I$4)))
+                          (IMPLIES (AND (NOT (ZEROP J))
+                                        (NOT (LESSP (ASIZE&) J)))
+                                   (EQUAL (ELT1 (BLK-DELTA1$4) J)
+                                          (PLUS (DELTA1 (A$0) J (SUB1 (I$4)))
+                                                (DIFFERENCE (MAXI$0)
+                                                            (SUB1 (I$4)))))))))
+           (LEX (CONS (DIFFERENCE (ADD1 (MAXI$0)) (I$4))
+                      'NIL)
+                (CONS (DIFFERENCE (ADD1 (MAXI$0)) (I$1))
+                      'NIL)))))
+
+#| (COMMENT PASS2-INVRT F) |#
+
+(UBT PATHS-FROM-PASS2-INVRT)
+
+(UBT FORTRAN)
+
+; (FORTRAN-COMMENT FORTRAN)
+(ADD-AXIOM FORTRAN NIL T)
+
+(DCL BLK-DELTA1$1 NIL)
+
+(DCL BLK-DELTA1$2 NIL)
+
+(DCL BLK-DELTA1$3 NIL)
+
+(DCL BLK-DELTA1$4 NIL)
+
+(DCL C$0 NIL)
+
+(DCL C$1 NIL)
+
+(DCL C$2 NIL)
+
+(DCL C$3 NIL)
+
+(DCL C$4 NIL)
+
+(DCL I$0 NIL)
+
+(DCL I$1 NIL)
+
+(DCL I$2 NIL)
+
+(DCL I$3 NIL)
+
+(DCL I$4 NIL)
+
+(DCL J$0 NIL)
+
+(DCL J$1 NIL)
+
+(DCL J$2 NIL)
+
+(DCL J$3 NIL)
+
+(DCL J$4 NIL)
+
+(DCL NEXTI$0 NIL)
+
+(DCL NEXTI$1 NIL)
+
+(DCL NEXTI$2 NIL)
+
+(DCL NEXTI$3 NIL)
+
+(DCL NEXTI$4 NIL)
+
+(DCL PAT$0 NIL)
+
+(DCL PATLEN$0 NIL)
+
+(DCL STR$0 NIL)
+
+(DCL STRLEN$0 NIL)
+
+(DCL X$0 NIL)
+
+(DCL X$1 NIL)
+
+(DCL X$2 NIL)
+
+(DCL X$3 NIL)
+
+(DCL X$4 NIL)
+
+(DCL ASIZE& NIL)
+
+(ADD-AXIOM ASIZE&-NUMBERP
+           (REWRITE)
+           (NUMBERP (ASIZE&)))
+
+(DEFN DELTA1
+      (A C MAXI)
+      (IF (ZEROP MAXI)
+          0
+          (IF (EQUAL C (ELT1 A MAXI))
+              0
+              (ADD1 (DELTA1 A C (SUB1 MAXI))))))
+
+(DEFN STRINGP
+      (A I SIZE)
+      (IF (ZEROP I)
+          T
+          (AND (NUMBERP (ELT1 A I))
+               (NOT (EQUAL (ELT1 A I) 0))
+               (NOT (LESSP SIZE (ELT1 A I)))
+               (STRINGP A (SUB1 I) SIZE))))
+
+(PROVE-LEMMA STRINGP-IS-A-UNIV-QUANTIFIER
+             (REWRITE)
+             (IMPLIES (AND (STRINGP A I (ASIZE&))
+                           (NOT (EQUAL J 0))
+                           (NUMBERP J)
+                           (NOT (LESSP I J)))
+                      (AND (NUMBERP (ELT1 A J))
+                           (NOT (LESSP (ASIZE&) (ELT1 A J)))
+                           (NOT (EQUAL (ELT1 A J) 0)))))
+
+(DEFN MATCH
+      (PAT J PATLEN STR I STRLEN)
+      (IF (LESSP PATLEN J)
+          T
+          (IF (LESSP STRLEN I)
+              F
+              (AND (EQUAL (ELT1 PAT J) (ELT1 STR I))
+                   (MATCH PAT
+                          (ADD1 J)
+                          PATLEN STR
+                          (ADD1 I)
+                          STRLEN))))
+      ((LESSP (DIFFERENCE (ADD1 PATLEN) J))
+       (LESSP (DIFFERENCE (ADD1 STRLEN) I))))
+
+(DEFN SEARCH
+      (PAT STR PATLEN STRLEN I)
+      (IF (LESSP STRLEN I)
+          (ADD1 STRLEN)
+          (IF (MATCH PAT 1 PATLEN STR I STRLEN)
+              I
+              (SEARCH PAT STR PATLEN STRLEN
+                      (ADD1 I))))
+      ((LESSP (DIFFERENCE (ADD1 STRLEN) I))))
+
+(ADD-AXIOM INPUT-CONDITIONS
+           (REWRITE)
+           '*1*TRUE)
+
+(DEFN GLOBAL-HYPS NIL
+ (AND
+   (NOT (EQUAL (ASIZE&) '0))
+   (AND (LESSP (ADD1 (ASIZE&))
+               (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+        (AND (STRINGP (PAT$0) (PATLEN$0) (ASIZE&))
+             (AND (LESSP '0 (PATLEN$0))
+                  (AND (STRINGP (STR$0) (STRLEN$0) (ASIZE&))
+                       (AND (LESSP '0 (STRLEN$0))
+                            (AND (LESSP (PLUS (PATLEN$0) (STRLEN$0))
+                                        (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+                                 (AND (NUMBERP (PATLEN$0))
+                                      (NUMBERP (STRLEN$0)))))))))))
+
+(PROVE-LEMMA SEARCH-NON-ZERO
+             (REWRITE)
+             (IMPLIES (NOT (ZEROP I))
+                      (LESSP 0
+                             (SEARCH PAT STR PATLEN STRLEN I))))
+
+(PROVE-LEMMA MATCH-AT-PATLEN
+             (REWRITE)
+             (IMPLIES (LESSP PATLEN J)
+                      (MATCH PAT J PATLEN STR I STRLEN)))
+
+(PROVE-LEMMA MATCH-AT-STRLEN
+             (REWRITE)
+             (IMPLIES (LESSP STRLEN I)
+                      (EQUAL (MATCH PAT J PATLEN STR I STRLEN)
+                             (LESSP PATLEN J))))
+
+(PROVE-LEMMA MATCH-NEEDS-PATLEN-CHARS
+             (REWRITE)
+             (IMPLIES (AND (NUMBERP PATLEN)
+                           (NUMBERP STRLEN)
+                           (NOT (LESSP PATLEN J))
+                           (NOT (LESSP STRLEN I))
+                           (LESSP (PLUS J STRLEN)
+                                  (PLUS I PATLEN)))
+                      (NOT (MATCH PAT J PATLEN STR I STRLEN))))
+
+(PROVE-LEMMA SEARCH-BOUNDARY
+             (REWRITE)
+             (IMPLIES (AND (NOT (ZEROP PATLEN))
+                           (NUMBERP STRLEN)
+                           (NOT (LESSP STRLEN I))
+                           (LESSP (ADD1 STRLEN)
+                                  (PLUS PATLEN
+                                        (SEARCH PAT STR PATLEN STRLEN I))))
+                      (EQUAL (SEARCH PAT STR PATLEN STRLEN I)
+                             (ADD1 STRLEN))))
+
+(PROVE-LEMMA DELTA1-LESSEQP-PATLEN
+             (REWRITE)
+             (NOT (LESSP PATLEN
+                         (DELTA1 PAT CHAR PATLEN))))
+
+(PROVE-LEMMA INPUT-DEFINEDNESS NIL
+             (IMPLIES (GLOBAL-HYPS) '*1*TRUE))
+
+#| (COMMENT) |#
+
+; (FORTRAN-COMMENT INPUT)
+(ADD-AXIOM INPUT NIL T)
+
+(PROVE-LEMMA CALL-OF-SETUP NIL
+ (IMPLIES
+       (AND (PATLEN$0) (GLOBAL-HYPS))
+       (AND (STRINGP (PAT$0) (PATLEN$0) (ASIZE&))
+            (AND (NOT (EQUAL (PATLEN$0) '0))
+                 (AND (NUMBERP (PATLEN$0))
+                      (AND (LESSP (ADD1 (ASIZE&))
+                                  (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+                           (LESSP (ADD1 (PATLEN$0))
+                                  (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))))))))
+
+#| (COMMENT INPUT) |#
+
+(ADD-AXIOM EFFECTS-OF-SETUP
+           (REWRITE)
+           (AND (IMPLIES (AND (NUMBERP C)
+                              (AND (NOT (EQUAL C '0))
+                                   (NOT (LESSP (ASIZE&) C))))
+                         (EQUAL (ELT1 (BLK-DELTA1$1) C)
+                                (DELTA1 (PAT$0) C (PATLEN$0))))
+                (AND (EQUAL (I$1) (I$0))
+                     (AND (EQUAL (J$1) (J$0))
+                          (AND (EQUAL (C$1) (C$0))
+                               (AND (EQUAL (NEXTI$1) (NEXTI$0))
+                                    (EQUAL (X$1) (X$0))))))))
+
+(ADD-AXIOM ASSIGNMENT
+           (REWRITE)
+           (AND (EQUAL (I$2) (PATLEN$0))
+                (AND (EQUAL (J$2) (J$1))
+                     (AND (EQUAL (C$2) (C$1))
+                          (AND (EQUAL (NEXTI$2) (NEXTI$1))
+                               (AND (EQUAL (X$2) (X$1))
+                                    (EQUAL (BLK-DELTA1$2)
+                                           (BLK-DELTA1$1))))))))
+
+(PROVE-LEMMA OUTER-INVRT NIL
+ (IMPLIES
+         (AND (PATLEN$0) (GLOBAL-HYPS))
+         (AND (AND (NUMBERP (I$2))
+                   (AND (NOT (LESSP (I$2) (PATLEN$0)))
+                        (AND (LESSP (I$2)
+                                    (PLUS (PATLEN$0)
+                                          (SEARCH (PAT$0)
+                                                  (STR$0)
+                                                  (PATLEN$0)
+                                                  (STRLEN$0)
+                                                  '1)))
+                             (IMPLIES (AND (NUMBERP C)
+                                           (AND (NOT (EQUAL C '0))
+                                                (NOT (LESSP (ASIZE&) C))))
+                                      (EQUAL (ELT1 (BLK-DELTA1$2) C)
+                                             (DELTA1 (PAT$0) C (PATLEN$0)))))))
+              (LEX (CONS (DIFFERENCE (PLUS '1
+                                           (PLUS (STRLEN$0) (PATLEN$0)))
+                                     (I$2))
+                         (CONS (ADD1 (PATLEN$0)) 'NIL))
+                   (CONS (PLUS '1
+                               (PLUS (STRLEN$0) (PATLEN$0)))
+                         (CONS (ADD1 (PATLEN$0)) 'NIL))))))
+
+#| (COMMENT INPUT) |#
+
+(UBT INPUT)
+
+(ADD-AXIOM PATHS-FROM-OUTER-INVRT
+           (REWRITE)
+           (IMPLIES (AND (NUMBERP C)
+                         (AND (NOT (EQUAL C '0))
+                              (NOT (LESSP (ASIZE&) C))))
+                    (EQUAL (ELT1 (BLK-DELTA1$1) C)
+                           (DELTA1 (PAT$0) C (PATLEN$0)))))
+
+(DEFN PATH-HYPS NIL
+      (AND (GLOBAL-HYPS)
+           (AND (NUMBERP (I$1))
+                (AND (NOT (LESSP (I$1) (PATLEN$0)))
+                     (LESSP (I$1)
+                            (PLUS (PATLEN$0)
+                                  (SEARCH (PAT$0)
+                                          (STR$0)
+                                          (PATLEN$0)
+                                          (STRLEN$0)
+                                          '1)))))))
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (I$1))))
+
+#| (COMMENT OUTER-INVRT) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (AND (ZGREATERP (I$1) (STRLEN$0))
+                           (PATH-HYPS))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS (STRLEN$0) '1))))
+
+#| (COMMENT OUTER-INVRT T) |#
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (I$2) (I$1))
+                (AND (EQUAL (J$2) (J$1))
+                     (AND (EQUAL (C$2) (C$1))
+                          (AND (EQUAL (NEXTI$2) (NEXTI$1))
+                               (AND (EQUAL (X$2) (ZPLUS (STRLEN$0) '1))
+                                    (EQUAL (BLK-DELTA1$2)
+                                           (BLK-DELTA1$1))))))))
+
+(PROVE-LEMMA OUTPUT NIL
+             (IMPLIES (AND (ZGREATERP (I$1) (STRLEN$0))
+                           (PATH-HYPS))
+                      (EQUAL (X$2)
+                             (SEARCH (PAT$0)
+                                     (STR$0)
+                                     (PATLEN$0)
+                                     (STRLEN$0)
+                                     '1))))
+
+#| (COMMENT OUTER-INVRT T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F)
+(ADD-AXIOM LOGICAL-IF-F NIL T)
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (I$2) (I$1))
+                (AND (EQUAL (J$2) (PATLEN$0))
+                     (AND (EQUAL (C$2) (C$1))
+                          (AND (EQUAL (NEXTI$2) (NEXTI$1))
+                               (AND (EQUAL (X$2) (X$1))
+                                    (EQUAL (BLK-DELTA1$2)
+                                           (BLK-DELTA1$1))))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+             (IMPLIES (AND (NOT (ZGREATERP (I$1) (STRLEN$0)))
+                           (PATH-HYPS))
+                      (EXPRESSIBLE-ZNUMBERP (ZPLUS '1 (I$2)))))
+
+#| (COMMENT OUTER-INVRT F) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (I$3) (I$2))
+                (AND (EQUAL (J$3) (J$2))
+                     (AND (EQUAL (C$3) (C$2))
+                          (AND (EQUAL (NEXTI$3) (ZPLUS '1 (I$2)))
+                               (AND (EQUAL (X$3) (X$2))
+                                    (EQUAL (BLK-DELTA1$3)
+                                           (BLK-DELTA1$2))))))))
+
+(PROVE-LEMMA INNER-INVRT NIL
+ (IMPLIES
+  (AND (NOT (ZGREATERP (I$1) (STRLEN$0)))
+       (PATH-HYPS))
+  (AND
+   (AND
+    (NOT (LESSP (NEXTI$3) (ADD1 (PATLEN$0))))
+    (AND
+     (LESSP (NEXTI$3)
+            (ADD1 (PLUS (PATLEN$0)
+                        (SEARCH (PAT$0)
+                                (STR$0)
+                                (PATLEN$0)
+                                (STRLEN$0)
+                                '1))))
+     (AND
+      (IMPLIES (AND (NUMBERP C)
+                    (AND (NOT (EQUAL C '0))
+                         (NOT (LESSP (ASIZE&) C))))
+               (EQUAL (ELT1 (BLK-DELTA1$3) C)
+                      (DELTA1 (PAT$0) C (PATLEN$0))))
+      (AND
+       (NUMBERP (I$3))
+       (AND
+        (NOT (EQUAL (I$3) '0))
+        (AND
+         (NUMBERP (J$3))
+         (AND
+          (NOT (EQUAL (J$3) '0))
+          (AND
+           (NUMBERP (NEXTI$3))
+           (AND
+            (NOT (LESSP (PATLEN$0) (J$3)))
+            (AND
+             (NOT (LESSP (STRLEN$0) (I$3)))
+             (AND
+              (EQUAL (NEXTI$3)
+                     (PLUS (ADD1 (PATLEN$0))
+                           (DIFFERENCE (I$3) (J$3))))
+              (AND
+               (NOT (LESSP (ADD1 (STRLEN$0)) (NEXTI$3)))
+               (AND
+                  (NOT (LESSP (I$3) (J$3)))
+                  (AND (MATCH (PAT$0)
+                              (ADD1 (J$3))
+                              (PATLEN$0)
+                              (STR$0)
+                              (ADD1 (I$3))
+                              (STRLEN$0))
+                       (AND (NUMBERP (ELT1 (BLK-DELTA1$3)
+                                           (ELT1 (STR$0) (I$3))))
+                            (AND (NUMBERP (ELT1 (STR$0) (I$3)))
+                                 (NUMBERP (ELT1 (PAT$0) (J$3)))))))))))))))))))
+   (LEX (CONS (DIFFERENCE (PLUS '1
+                                (PLUS (STRLEN$0) (PATLEN$0)))
+                          (SUB1 (NEXTI$3)))
+              (CONS (J$3) 'NIL))
+        (CONS (DIFFERENCE (PLUS '1
+                                (PLUS (STRLEN$0) (PATLEN$0)))
+                          (I$1))
+              (CONS (ADD1 (PATLEN$0)) 'NIL))))))
+
+#| (COMMENT OUTER-INVRT F) |#
+
+(UBT PATHS-FROM-OUTER-INVRT)
+
+(ADD-AXIOM PATHS-FROM-INNER-INVRT
+           (REWRITE)
+           (AND (IMPLIES (AND (NUMBERP C)
+                              (AND (NOT (EQUAL C '0))
+                                   (NOT (LESSP (ASIZE&) C))))
+                         (EQUAL (ELT1 (BLK-DELTA1$1) C)
+                                (DELTA1 (PAT$0) C (PATLEN$0))))
+                (EQUAL (NEXTI$1)
+                       (PLUS (ADD1 (PATLEN$0))
+                             (DIFFERENCE (I$1) (J$1))))))
+
+(DEFN PATH-HYPS NIL
+ (AND
+  (GLOBAL-HYPS)
+  (AND
+   (NOT (LESSP (NEXTI$1) (ADD1 (PATLEN$0))))
+   (AND
+    (LESSP (NEXTI$1)
+           (ADD1 (PLUS (PATLEN$0)
+                       (SEARCH (PAT$0)
+                               (STR$0)
+                               (PATLEN$0)
+                               (STRLEN$0)
+                               '1))))
+    (AND
+     (NUMBERP (I$1))
+     (AND
+      (NOT (EQUAL (I$1) '0))
+      (AND
+       (NUMBERP (J$1))
+       (AND
+        (NOT (EQUAL (J$1) '0))
+        (AND
+         (NUMBERP (NEXTI$1))
+         (AND
+          (NOT (LESSP (PATLEN$0) (J$1)))
+          (AND
+           (NOT (LESSP (STRLEN$0) (I$1)))
+           (AND
+             (NOT (LESSP (ADD1 (STRLEN$0)) (NEXTI$1)))
+             (AND (NOT (LESSP (I$1) (J$1)))
+                  (AND (MATCH (PAT$0)
+                              (ADD1 (J$1))
+                              (PATLEN$0)
+                              (STR$0)
+                              (ADD1 (I$1))
+                              (STRLEN$0))
+                       (AND (NUMBERP (ELT1 (BLK-DELTA1$1)
+                                           (ELT1 (STR$0) (I$1))))
+                            (AND (NUMBERP (ELT1 (STR$0) (I$1)))
+                                 (NUMBERP (ELT1 (PAT$0) (J$1)))))))))))))))))))
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-STR NIL
+             (IMPLIES (PATH-HYPS)
+                      (AND (LESSP '0 (I$1))
+                           (NOT (LESSP (STRLEN$0) (I$1))))))
+
+#| (COMMENT INNER-INVRT) |#
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (ELT1 (STR$0) (I$1)))))
+
+#| (COMMENT INNER-INVRT) |#
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (AND (EQUAL (I$2) (I$1))
+                (AND (EQUAL (J$2) (J$1))
+                     (AND (EQUAL (C$2) (ELT1 (STR$0) (I$1)))
+                          (AND (EQUAL (NEXTI$2) (NEXTI$1))
+                               (AND (EQUAL (X$2) (X$1))
+                                    (EQUAL (BLK-DELTA1$2)
+                                           (BLK-DELTA1$1))))))))
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-PAT NIL
+             (IMPLIES (PATH-HYPS)
+                      (AND (LESSP '0 (J$2))
+                           (NOT (LESSP (PATLEN$0) (J$2))))))
+
+#| (COMMENT INNER-INVRT) |#
+
+(PROVE-LEMMA DEFINEDNESS1 NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (ELT1 (PAT$0) (J$2)))))
+
+#| (COMMENT INNER-INVRT) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA ARRAY-BOUNDS-CHECK-FOR-DELTA1 NIL
+             (IMPLIES (AND (ZNEQP (C$2) (ELT1 (PAT$0) (J$2)))
+                           (PATH-HYPS))
+                      (AND (LESSP '0 (C$2))
+                           (NOT (LESSP (ASIZE&) (C$2))))))
+
+#| (COMMENT INNER-INVRT T) |#
+
+(PROVE-LEMMA DEFINEDNESS2 NIL
+             (IMPLIES (AND (ZNEQP (C$2) (ELT1 (PAT$0) (J$2)))
+                           (PATH-HYPS))
+                      (ZNUMBERP (ELT1 (BLK-DELTA1$2) (C$2)))))
+
+#| (COMMENT INNER-INVRT T) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+          (IMPLIES (AND (ZNEQP (C$2) (ELT1 (PAT$0) (J$2)))
+                        (PATH-HYPS))
+                   (EXPRESSIBLE-ZNUMBERP (ZPLUS (I$2)
+                                                (ELT1 (BLK-DELTA1$2) (C$2))))))
+
+#| (COMMENT INNER-INVRT T) |#
+
+(PROVE-LEMMA DEFINEDNESS3 NIL
+             (IMPLIES (AND (ZNEQP (C$2) (ELT1 (PAT$0) (J$2)))
+                           (PATH-HYPS))
+                      (ZNUMBERP (NEXTI$2))))
+
+#| (COMMENT INNER-INVRT T) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (I$3)
+                       (MAX0 (ZPLUS (I$2)
+                                    (ELT1 (BLK-DELTA1$2) (C$2)))
+                             (NEXTI$2)))
+                (AND (EQUAL (J$3) (J$2))
+                     (AND (EQUAL (C$3) (C$2))
+                          (AND (EQUAL (NEXTI$3) (NEXTI$2))
+                               (AND (EQUAL (X$3) (X$2))
+                                    (EQUAL (BLK-DELTA1$3)
+                                           (BLK-DELTA1$2))))))))
+
+(PROVE-LEMMA DELTA1-PLUS-J-LESSEQP-PATLEN
+             (REWRITE)
+             (IMPLIES (AND (NUMBERP J)
+                           (NOT (EQUAL J 0))
+                           (NOT (LESSP PATLEN J)))
+                      (NOT (LESSP PATLEN
+                                  (PLUS J
+                                        (DELTA1 PAT (ELT1 PAT J) PATLEN))))))
+
+(PROVE-LEMMA DIFFERENCE-PLUS-ID
+             (REWRITE)
+             (EQUAL (DIFFERENCE (PLUS K J) J)
+                    (FIX K)))
+
+(PROVE-LEMMA MATCH-IMPLIES-EQ-CHARS
+             (REWRITE)
+             (IMPLIES (AND (MATCH PAT J PATLEN STR K STRLEN)
+                           (NUMBERP K)
+                           (NUMBERP J)
+                           (NUMBERP PATLEN)
+                           (NUMBERP STRLEN)
+                           (NOT (LESSP STRLEN K))
+                           (NOT (LESSP PATLEN J))
+                           (NOT (EQUAL K 0))
+                           (NOT (EQUAL J 0))
+                           (NUMBERP L)
+                           (NOT (LESSP L K))
+                           (NOT (LESSP (PLUS K PATLEN) (PLUS J L))))
+                      (EQUAL (ELT1 STR L)
+                             (ELT1 PAT
+                                   (DIFFERENCE (PLUS J L) K)))))
+
+(PROVE-LEMMA NEQ-CHARS-IN-REGION-MEANS-SEARCH-SKIPS
+             (REWRITE)
+             (IMPLIES (AND (NOT (EQUAL (ELT1 STR I) (ELT1 PAT J)))
+                           (NUMBERP I)
+                           (NOT (EQUAL I 0))
+                           (NUMBERP STRLEN)
+                           (NOT (LESSP STRLEN I))
+                           (NUMBERP J)
+                           (NOT (EQUAL J 0))
+                           (NUMBERP PATLEN)
+                           (NOT (LESSP PATLEN J))
+                           (NOT (LESSP I J))
+                           (NUMBERP K)
+                           (NOT (EQUAL K 0))
+                           (NOT (LESSP STRLEN K))
+                           (NOT (LESSP (SUB1 (SEARCH PAT STR PATLEN STRLEN K))
+                                       (DIFFERENCE I J))))
+                      (LESSP (DIFFERENCE I J)
+                             (SUB1 (SEARCH PAT STR PATLEN STRLEN K)))))
+
+(PROVE-LEMMA DELTA1-DOESNT-GO-BEYOND-END-OF-MATCH
+             (REWRITE)
+             (IMPLIES (AND (MATCH PAT 1 PATLEN STR K STRLEN)
+                           (NUMBERP I)
+                           (NOT (LESSP STRLEN I))
+                           (NUMBERP PATLEN)
+                           (NUMBERP STRLEN)
+                           (NUMBERP K)
+                           (NOT (EQUAL K 0))
+                           (LESSP I (PLUS K PATLEN)))
+                      (EQUAL (LESSP (PLUS I
+                                          (DELTA1 PAT (ELT1 STR I) PATLEN))
+                                    (PLUS K PATLEN))
+                             (OR (LESSP I K)
+                                 (EQUAL I K)
+                                 (LESSP K I)))))
+
+(DISABLE MATCH-IMPLIES-EQ-CHARS)
+
+(PROVE-LEMMA DELTA1-DOESNT-GO-BEYOND-SEARCH
+             (REWRITE)
+             (IMPLIES (AND (NOT (EQUAL (ELT1 STR I) (ELT1 PAT J)))
+                           (NUMBERP I)
+                           (NOT (LESSP STRLEN I))
+                           (NUMBERP J)
+                           (NOT (LESSP PATLEN J))
+                           (NUMBERP PATLEN)
+                           (NUMBERP STRLEN)
+                           (LESSP (DIFFERENCE I J)
+                                  (SEARCH PAT STR PATLEN STRLEN K))
+                           (NOT (LESSP STRLEN K))
+                           (NOT (LESSP I J))
+                           (NUMBERP K)
+                           (NOT (EQUAL K 0)))
+                      (LESSP (PLUS I
+                                   (DELTA1 PAT (ELT1 STR I) PATLEN))
+                             (PLUS PATLEN
+                                   (SEARCH PAT STR PATLEN STRLEN K)))))
+
+(PROVE-LEMMA OUTER-INVRT1 NIL
+ (IMPLIES
+         (AND (ZNEQP (C$2) (ELT1 (PAT$0) (J$2)))
+              (PATH-HYPS))
+         (AND (AND (NUMBERP (I$3))
+                   (AND (NOT (LESSP (I$3) (PATLEN$0)))
+                        (AND (LESSP (I$3)
+                                    (PLUS (PATLEN$0)
+                                          (SEARCH (PAT$0)
+                                                  (STR$0)
+                                                  (PATLEN$0)
+                                                  (STRLEN$0)
+                                                  '1)))
+                             (IMPLIES (AND (NUMBERP C)
+                                           (AND (NOT (EQUAL C '0))
+                                                (NOT (LESSP (ASIZE&) C))))
+                                      (EQUAL (ELT1 (BLK-DELTA1$3) C)
+                                             (DELTA1 (PAT$0) C (PATLEN$0)))))))
+              (LEX (CONS (DIFFERENCE (PLUS '1
+                                           (PLUS (STRLEN$0) (PATLEN$0)))
+                                     (I$3))
+                         (CONS (ADD1 (PATLEN$0)) 'NIL))
+                   (CONS (DIFFERENCE (PLUS '1
+                                           (PLUS (STRLEN$0) (PATLEN$0)))
+                                     (SUB1 (NEXTI$1)))
+                         (CONS (J$1) 'NIL))))))
+
+#| (COMMENT INNER-INVRT T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F)
+(ADD-AXIOM LOGICAL-IF-F NIL T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA FIRST-MATCH-IS-SEARCH
+             (REWRITE)
+             (IMPLIES (AND (MATCH PAT 1 PATLEN STR I STRLEN)
+                           (NUMBERP STRLEN)
+                           (NUMBERP I)
+                           (NOT (LESSP STRLEN I))
+                           (NUMBERP K)
+                           (NOT (LESSP I K))
+                           (NOT (EQUAL K 0))
+                           (NOT (LESSP (SEARCH PAT STR PATLEN STRLEN K)
+                                       I)))
+                      (EQUAL (EQUAL I
+                                    (SEARCH PAT STR PATLEN STRLEN K))
+                             T)))
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (I$3) (I$2))
+                (AND (EQUAL (J$3) (J$2))
+                     (AND (EQUAL (C$3) (C$2))
+                          (AND (EQUAL (NEXTI$3) (NEXTI$2))
+                               (AND (EQUAL (X$3) (I$2))
+                                    (EQUAL (BLK-DELTA1$3)
+                                           (BLK-DELTA1$2))))))))
+
+(PROVE-LEMMA OUTPUT NIL
+             (IMPLIES (AND (ZEQP (J$2) '1)
+                           (AND (NOT (ZNEQP (C$2) (ELT1 (PAT$0) (J$2))))
+                                (PATH-HYPS)))
+                      (EQUAL (X$3)
+                             (SEARCH (PAT$0)
+                                     (STR$0)
+                                     (PATLEN$0)
+                                     (STRLEN$0)
+                                     '1))))
+
+#| (COMMENT INNER-INVRT F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZDIFFERENCE NIL
+             (IMPLIES (AND (NOT (ZEQP (J$2) '1))
+                           (AND (NOT (ZNEQP (C$2) (ELT1 (PAT$0) (J$2))))
+                                (PATH-HYPS)))
+                      (EXPRESSIBLE-ZNUMBERP (ZDIFFERENCE (J$2) '1))))
+
+#| (COMMENT INNER-INVRT F F) |#
+
+(ADD-AXIOM ASSIGNMENT2
+           (REWRITE)
+           (AND (EQUAL (I$3) (I$2))
+                (AND (EQUAL (J$3) (ZDIFFERENCE (J$2) '1))
+                     (AND (EQUAL (C$3) (C$2))
+                          (AND (EQUAL (NEXTI$3) (NEXTI$2))
+                               (AND (EQUAL (X$3) (X$2))
+                                    (EQUAL (BLK-DELTA1$3)
+                                           (BLK-DELTA1$2))))))))
+
+(PROVE-LEMMA INPUT-COND-OF-ZDIFFERENCE1 NIL
+             (IMPLIES (AND (NOT (ZEQP (J$2) '1))
+                           (AND (NOT (ZNEQP (C$2) (ELT1 (PAT$0) (J$2))))
+                                (PATH-HYPS)))
+                      (EXPRESSIBLE-ZNUMBERP (ZDIFFERENCE (I$3) '1))))
+
+#| (COMMENT INNER-INVRT F F) |#
+
+(ADD-AXIOM ASSIGNMENT3
+           (REWRITE)
+           (AND (EQUAL (I$4) (ZDIFFERENCE (I$3) '1))
+                (AND (EQUAL (J$4) (J$3))
+                     (AND (EQUAL (C$4) (C$3))
+                          (AND (EQUAL (NEXTI$4) (NEXTI$3))
+                               (AND (EQUAL (X$4) (X$3))
+                                    (EQUAL (BLK-DELTA1$4)
+                                           (BLK-DELTA1$3))))))))
+
+(PROVE-LEMMA OPEN-UP-DIFFERENCE
+             (REWRITE)
+             (EQUAL (DIFFERENCE X 1) (SUB1 X)))
+
+(PROVE-LEMMA INNER-INVRT1 NIL
+ (IMPLIES
+  (AND (NOT (ZEQP (J$2) '1))
+       (AND (NOT (ZNEQP (C$2) (ELT1 (PAT$0) (J$2))))
+            (PATH-HYPS)))
+  (AND
+   (AND
+    (NOT (LESSP (NEXTI$4) (ADD1 (PATLEN$0))))
+    (AND
+     (LESSP (NEXTI$4)
+            (ADD1 (PLUS (PATLEN$0)
+                        (SEARCH (PAT$0)
+                                (STR$0)
+                                (PATLEN$0)
+                                (STRLEN$0)
+                                '1))))
+     (AND
+      (IMPLIES (AND (NUMBERP C)
+                    (AND (NOT (EQUAL C '0))
+                         (NOT (LESSP (ASIZE&) C))))
+               (EQUAL (ELT1 (BLK-DELTA1$4) C)
+                      (DELTA1 (PAT$0) C (PATLEN$0))))
+      (AND
+       (NUMBERP (I$4))
+       (AND
+        (NOT (EQUAL (I$4) '0))
+        (AND
+         (NUMBERP (J$4))
+         (AND
+          (NOT (EQUAL (J$4) '0))
+          (AND
+           (NUMBERP (NEXTI$4))
+           (AND
+            (NOT (LESSP (PATLEN$0) (J$4)))
+            (AND
+             (NOT (LESSP (STRLEN$0) (I$4)))
+             (AND
+              (EQUAL (NEXTI$4)
+                     (PLUS (ADD1 (PATLEN$0))
+                           (DIFFERENCE (I$4) (J$4))))
+              (AND
+               (NOT (LESSP (ADD1 (STRLEN$0)) (NEXTI$4)))
+               (AND
+                  (NOT (LESSP (I$4) (J$4)))
+                  (AND (MATCH (PAT$0)
+                              (ADD1 (J$4))
+                              (PATLEN$0)
+                              (STR$0)
+                              (ADD1 (I$4))
+                              (STRLEN$0))
+                       (AND (NUMBERP (ELT1 (BLK-DELTA1$4)
+                                           (ELT1 (STR$0) (I$4))))
+                            (AND (NUMBERP (ELT1 (STR$0) (I$4)))
+                                 (NUMBERP (ELT1 (PAT$0) (J$4)))))))))))))))))))
+   (LEX (CONS (DIFFERENCE (PLUS '1
+                                (PLUS (STRLEN$0) (PATLEN$0)))
+                          (SUB1 (NEXTI$4)))
+              (CONS (J$4) 'NIL))
+        (CONS (DIFFERENCE (PLUS '1
+                                (PLUS (STRLEN$0) (PATLEN$0)))
+                          (SUB1 (NEXTI$1)))
+              (CONS (J$1) 'NIL))))))
+
+#| (COMMENT INNER-INVRT F F) |#
+
+(UBT PATHS-FROM-INNER-INVRT)
+
+(UBT FORTRAN)
+
+#|
+
+
+The correctness of the program depends upon the following events:
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Definition.
+        (DELTA1 A C MAXI)
+           =
+        (IF (ZEROP MAXI)
+            0
+            (IF (EQUAL C (ELT1 A MAXI))
+                0
+                (ADD1 (DELTA1 A C (SUB1 MAXI)))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Definition.
+        (STRINGP A I SIZE)
+           =
+        (IF (ZEROP I)
+            T
+            (AND (NUMBERP (ELT1 A I))
+                 (NOT (EQUAL (ELT1 A I) 0))
+                 (NOT (LESSP SIZE (ELT1 A I)))
+                 (STRINGP A (SUB1 I) SIZE)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        (FORTRAN-COMMENT USEFUL-LEMMAS)
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Definition.
+        (MATCH PAT J PATLEN STR I STRLEN)
+           =
+        (IF (LESSP PATLEN J)
+            T
+            (IF (LESSP STRLEN I)
+                F
+                (AND (EQUAL (ELT1 PAT J) (ELT1 STR I))
+                     (MATCH PAT
+                            (ADD1 J)
+                            PATLEN STR
+                            (ADD1 I)
+                            STRLEN))))
+        Hint:  ((LESSP (DIFFERENCE (ADD1 PATLEN) J))
+                (LESSP (DIFFERENCE (ADD1 STRLEN) I)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Definition.
+        (SEARCH PAT STR PATLEN STRLEN I)
+           =
+        (IF (LESSP STRLEN I)
+            (ADD1 STRLEN)
+            (IF (MATCH PAT 1 PATLEN STR I STRLEN)
+                I
+                (SEARCH PAT STR PATLEN STRLEN
+                        (ADD1 I))))
+        Hint:  Consider the well-founded relation LESSP
+               and the measure (DIFFERENCE (ADD1 STRLEN) I)
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        (FORTRAN-COMMENT USEFUL-LEMMAS-ABOUT-SEARCHING)
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Specification for routine SETUP
+
+The input assertion:
+        (AND (STRINGP (A STATE)
+                      (MAXI STATE)
+                      (ASIZE&))
+             (NOT (EQUAL (MAXI STATE) 0))
+             (NUMBERP (MAXI STATE))
+             (LESSP (ADD1 (ASIZE&))
+                    (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+             (LESSP (ADD1 (MAXI STATE))
+                    (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER)))
+
+
+The output assertion:
+        (IMPLIES (AND (NUMBERP C)
+                      (NOT (EQUAL C 0))
+                      (NOT (LESSP (ASIZE&) C)))
+                 (EQUAL (ELT1 (BLK-DELTA1 NEWSTATE) C)
+                        (DELTA1 (A STATE) C (MAXI STATE))))
+
+Specification for routine FSRCH
+
+The input assertion:
+        (AND (LESSP (ADD1 (ASIZE&))
+                    (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+             (STRINGP (PAT STATE)
+                      (PATLEN STATE)
+                      (ASIZE&))
+             (NUMBERP (PATLEN STATE))
+             (LESSP 0 (PATLEN STATE))
+             (STRINGP (STR STATE)
+                      (STRLEN STATE)
+                      (ASIZE&))
+             (NUMBERP (STRLEN STATE))
+             (LESSP 0 (STRLEN STATE))
+             (LESSP (PLUS (PATLEN STATE) (STRLEN STATE))
+                    (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER)))
+
+
+The output assertion:
+        (EQUAL (X NEWSTATE)
+               (SEARCH (PAT STATE)
+                       (STR STATE)
+                       (PATLEN STATE)
+                       (STRLEN STATE)
+                       1))
+
+      INTEGER DELTA1
+      DIMENSION DELTA1(ASIZE&)
+      COMMON /BLK/DELTA1
+      END
+      SUBROUTINE SETUP(A, MAXI)
+      INTEGER DELTA1
+      INTEGER A
+      INTEGER MAXI
+      INTEGER I
+      INTEGER C
+      DIMENSION DELTA1(ASIZE&)
+      DIMENSION A(MAXI)
+      COMMON /BLK/DELTA1
+      DO 50 I = 1, ASIZE&
+C     DOJUNK PASS1
+      DELTA1(I) = MAXI
+50    CONTINUE
+      DO 100 I = 1, MAXI
+C     DOJUNK PASS2
+      C = A(I)
+      DELTA1(C) = (MAXI - I)
+100   CONTINUE
+      RETURN
+      END
+      SUBROUTINE FSRCH(PAT, STR, PATLEN, STRLEN, X)
+      INTEGER DELTA1
+      INTEGER MAX0
+      INTEGER PATLEN
+      INTEGER STRLEN
+      INTEGER PAT
+      INTEGER STR
+      INTEGER I
+      INTEGER J
+      INTEGER C
+      INTEGER NEXTI
+      INTEGER X
+      DIMENSION DELTA1(ASIZE&)
+      DIMENSION PAT(PATLEN)
+      DIMENSION STR(STRLEN)
+      COMMON /BLK/DELTA1
+      CALL SETUP(PAT, PATLEN)
+      I = PATLEN
+200   CONTINUE
+C     XXX INNER-TO-OUTER-HINTS
+      CONTINUE
+C     ASSERTION OUTER-INVRT
+      IF ((I .GT. STRLEN)) GOTO 500
+      J = PATLEN
+      NEXTI = (1 + I)
+300   CONTINUE
+C     ASSERTION INNER-INVRT
+      C = STR(I)
+      IF ((C .NE. PAT(J))) GOTO 400
+      IF ((J .EQ. 1)) GOTO 600
+      J = (J - 1)
+      I = (I - 1)
+C     XXX INNER-TO-INNER-HINTS
+      GOTO 300
+400   I = MAX0((I + DELTA1(C)), NEXTI)
+      GOTO 200
+500   X = (STRLEN + 1)
+      RETURN
+600   CONTINUE
+C     XXX INNER-TO-EXIT-HINTS
+      X = I
+      RETURN
+      END
+
+
+The XXX at USEFUL-LEMMAS.
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  STRINGP-IS-A-UNIV-QUANTIFIER (rewrite):
+        (IMPLIES (AND (STRINGP A I (ASIZE&))
+                      (NOT (EQUAL J 0))
+                      (NUMBERP J)
+                      (NOT (LESSP I J)))
+                 (AND (NUMBERP (ELT1 A J))
+                      (NOT (LESSP (ASIZE&) (ELT1 A J)))
+                      (NOT (EQUAL (ELT1 A J) 0))))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+The XXX at USEFUL-LEMMAS-ABOUT-SEARCHING.
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  SEARCH-NON-ZERO (rewrite):
+        (IMPLIES (NOT (ZEROP I))
+                 (LESSP 0
+                        (SEARCH PAT STR PATLEN STRLEN I)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MATCH-AT-PATLEN (rewrite):
+        (IMPLIES (LESSP PATLEN J)
+                 (MATCH PAT J PATLEN STR I STRLEN))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MATCH-AT-STRLEN (rewrite):
+        (IMPLIES (LESSP STRLEN I)
+                 (EQUAL (MATCH PAT J PATLEN STR I STRLEN)
+                        (LESSP PATLEN J)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MATCH-NEEDS-PATLEN-CHARS (rewrite):
+        (IMPLIES (AND (NUMBERP PATLEN)
+                      (NUMBERP STRLEN)
+                      (NOT (LESSP PATLEN J))
+                      (NOT (LESSP STRLEN I))
+                      (LESSP (PLUS J STRLEN)
+                             (PLUS I PATLEN)))
+                 (NOT (MATCH PAT J PATLEN STR I STRLEN)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  SEARCH-BOUNDARY (rewrite):
+        (IMPLIES
+               (AND (NOT (ZEROP PATLEN))
+                    (NUMBERP STRLEN)
+                    (NOT (LESSP STRLEN I))
+                    (LESSP (ADD1 STRLEN)
+                           (PLUS PATLEN
+                                 (SEARCH PAT STR PATLEN STRLEN I))))
+               (EQUAL (SEARCH PAT STR PATLEN STRLEN I)
+                      (ADD1 STRLEN)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DELTA1-LESSEQP-PATLEN (rewrite):
+        (NOT (LESSP PATLEN
+                    (DELTA1 PAT CHAR PATLEN)))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Hints for routine SETUP
+
+                              
+
+The input clock:
+        (LIST (PLUS 2 (ASIZE&) (MAXI (START))))
+
+The DO junk named PASS1:
+        ((TEST PASS1-INVRT))
+
+The invariant and clock named PASS1-INVRT.
+
+        (AND (NUMBERP (I STATE))
+             (NOT (EQUAL (I STATE) 0))
+             (NOT (LESSP (ADD1 (ASIZE&)) (I STATE)))
+             (IMPLIES (AND (NUMBERP J)
+                           (NOT (EQUAL J 0))
+                           (LESSP J (I STATE)))
+                      (EQUAL (ELT1 (BLK-DELTA1 STATE) J)
+                             (MAXI (START)))))
+
+        (LIST (DIFFERENCE (PLUS 2 (ASIZE&) (MAXI (START)))
+                          (I STATE)))
+
+The DO junk named PASS2:
+        ((TEST PASS2-INVRT)
+         (JUMP PASS2-TO-PASS2-HINT))
+
+The invariant and clock named PASS2-INVRT.
+
+        (AND (NUMBERP (I STATE))
+             (NOT (EQUAL (I STATE) 0))
+             (NOT (LESSP (ADD1 (MAXI (START)))
+                         (I STATE)))
+             (IMPLIES (AND (NOT (ZEROP J))
+                           (NOT (LESSP (ASIZE&) J)))
+                      (EQUAL (ELT1 (BLK-DELTA1 STATE) J)
+                             (PLUS (DELTA1 (A (START))
+                                           J
+                                           (SUB1 (I STATE)))
+                                   (DIFFERENCE (MAXI (START))
+                                               (SUB1 (I STATE)))))))
+
+        (LIST (DIFFERENCE (ADD1 (MAXI (START)))
+                          (I STATE)))
+
+The XXX named PASS2-TO-PASS2-HINT:
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DELTA1-SKIP (rewrite):
+        (IMPLIES (AND (NOT (EQUAL J (ELT1 PAT I)))
+                      (NOT (ZEROP I)))
+                 (EQUAL (DELTA1 PAT J I)
+                        (ADD1 (DELTA1 PAT J (SUB1 I)))))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Hints for routine FSRCH
+
+                              
+
+The input clock:
+        (LIST (PLUS 1
+                    (STRLEN (START))
+                    (PATLEN (START)))
+              (ADD1 (PATLEN (START))))
+
+The XXX named INNER-TO-OUTER-HINTS:
+        Path encryption:
+        ((INNER-INVRT T))
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DELTA1-PLUS-J-LESSEQP-PATLEN (rewrite):
+        (IMPLIES
+              (AND (NUMBERP J)
+                   (NOT (EQUAL J 0))
+                   (NOT (LESSP PATLEN J)))
+              (NOT (LESSP PATLEN
+                          (PLUS J
+                                (DELTA1 PAT (ELT1 PAT J) PATLEN)))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DIFFERENCE-PLUS-ID (rewrite):
+        (EQUAL (DIFFERENCE (PLUS K J) J)
+               (FIX K))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MATCH-IMPLIES-EQ-CHARS (rewrite):
+        (IMPLIES (AND (MATCH PAT J PATLEN STR K STRLEN)
+                      (NUMBERP K)
+                      (NUMBERP J)
+                      (NUMBERP PATLEN)
+                      (NUMBERP STRLEN)
+                      (NOT (LESSP STRLEN K))
+                      (NOT (LESSP PATLEN J))
+                      (NOT (EQUAL K 0))
+                      (NOT (EQUAL J 0))
+                      (NUMBERP L)
+                      (NOT (LESSP L K))
+                      (NOT (LESSP (PLUS K PATLEN) (PLUS J L))))
+                 (EQUAL (ELT1 STR L)
+                        (ELT1 PAT (DIFFERENCE (PLUS J L) K))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  NEQ-CHARS-IN-REGION-MEANS-SEARCH-SKIPS (rewrite):
+        (IMPLIES
+            (AND (NOT (EQUAL (ELT1 STR I) (ELT1 PAT J)))
+                 (NUMBERP I)
+                 (NOT (EQUAL I 0))
+                 (NUMBERP STRLEN)
+                 (NOT (LESSP STRLEN I))
+                 (NUMBERP J)
+                 (NOT (EQUAL J 0))
+                 (NUMBERP PATLEN)
+                 (NOT (LESSP PATLEN J))
+                 (NOT (LESSP I J))
+                 (NUMBERP K)
+                 (NOT (EQUAL K 0))
+                 (NOT (LESSP STRLEN K))
+                 (NOT (LESSP (SUB1 (SEARCH PAT STR PATLEN STRLEN K))
+                             (DIFFERENCE I J))))
+            (LESSP (DIFFERENCE I J)
+                   (SUB1 (SEARCH PAT STR PATLEN STRLEN K))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DELTA1-DOESNT-GO-BEYOND-END-OF-MATCH (rewrite):
+        (IMPLIES
+               (AND (MATCH PAT 1 PATLEN STR K STRLEN)
+                    (NUMBERP I)
+                    (NOT (LESSP STRLEN I))
+                    (NUMBERP PATLEN)
+                    (NUMBERP STRLEN)
+                    (NUMBERP K)
+                    (NOT (EQUAL K 0))
+                    (LESSP I (PLUS K PATLEN)))
+               (EQUAL (LESSP (PLUS I
+                                   (DELTA1 PAT (ELT1 STR I) PATLEN))
+                             (PLUS K PATLEN))
+                      (OR (LESSP I K)
+                          (EQUAL I K)
+                          (LESSP K I))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Enable MATCH-IMPLIES-EQ-CHARS.
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DELTA1-DOESNT-GO-BEYOND-SEARCH (rewrite):
+        (IMPLIES (AND (NOT (EQUAL (ELT1 STR I) (ELT1 PAT J)))
+                      (NUMBERP I)
+                      (NOT (LESSP STRLEN I))
+                      (NUMBERP J)
+                      (NOT (LESSP PATLEN J))
+                      (NUMBERP PATLEN)
+                      (NUMBERP STRLEN)
+                      (LESSP (DIFFERENCE I J)
+                             (SEARCH PAT STR PATLEN STRLEN K))
+                      (NOT (LESSP STRLEN K))
+                      (NOT (LESSP I J))
+                      (NUMBERP K)
+                      (NOT (EQUAL K 0)))
+                 (LESSP (PLUS I
+                              (DELTA1 PAT (ELT1 STR I) PATLEN))
+                        (PLUS PATLEN
+                              (SEARCH PAT STR PATLEN STRLEN K))))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+The invariant and clock named OUTER-INVRT.
+
+        (AND (NUMBERP (I STATE))
+             (NOT (LESSP (I STATE) (PATLEN (START))))
+             (LESSP (I STATE)
+                    (PLUS (PATLEN (START))
+                          (SEARCH (PAT (START))
+                                  (STR (START))
+                                  (PATLEN (START))
+                                  (STRLEN (START))
+                                  1)))
+             (IMPLIES (AND (NUMBERP C)
+                           (NOT (EQUAL C 0))
+                           (NOT (LESSP (ASIZE&) C)))
+                      (EQUAL (ELT1 (BLK-DELTA1 STATE) C)
+                             (DELTA1 (PAT (START))
+                                     C
+                                     (PATLEN (START))))))
+
+        (LIST (DIFFERENCE (PLUS 1
+                                (STRLEN (START))
+                                (PATLEN (START)))
+                          (I STATE))
+              (ADD1 (PATLEN (START))))
+
+The invariant and clock named INNER-INVRT.
+
+        (AND (NOT (LESSP (NEXTI STATE)
+                         (ADD1 (PATLEN (START)))))
+             (LESSP (NEXTI STATE)
+                    (ADD1 (PLUS (PATLEN (START))
+                                (SEARCH (PAT (START))
+                                        (STR (START))
+                                        (PATLEN (START))
+                                        (STRLEN (START))
+                                        1))))
+             (IMPLIES (AND (NUMBERP C)
+                           (NOT (EQUAL C 0))
+                           (NOT (LESSP (ASIZE&) C)))
+                      (EQUAL (ELT1 (BLK-DELTA1 STATE) C)
+                             (DELTA1 (PAT (START))
+                                     C
+                                     (PATLEN (START)))))
+             (NUMBERP (I STATE))
+             (NOT (EQUAL (I STATE) 0))
+             (NUMBERP (J STATE))
+             (NOT (EQUAL (J STATE) 0))
+             (NUMBERP (NEXTI STATE))
+             (NOT (LESSP (PATLEN (START)) (J STATE)))
+             (NOT (LESSP (STRLEN (START)) (I STATE)))
+             (EQUAL (NEXTI STATE)
+                    (PLUS (ADD1 (PATLEN (START)))
+                          (DIFFERENCE (I STATE) (J STATE))))
+             (NOT (LESSP (ADD1 (STRLEN (START)))
+                         (NEXTI STATE)))
+             (NOT (LESSP (I STATE) (J STATE)))
+             (MATCH (PAT (START))
+                    (ADD1 (J STATE))
+                    (PATLEN (START))
+                    (STR (START))
+                    (ADD1 (I STATE))
+                    (STRLEN (START)))
+             (NUMBERP (ELT1 (BLK-DELTA1 STATE)
+                            (ELT1 (STR (START)) (I STATE))))
+             (NUMBERP (ELT1 (STR (START)) (I STATE)))
+             (NUMBERP (ELT1 (PAT (START)) (J STATE))))
+
+        (LIST (DIFFERENCE (PLUS 1
+                                (STRLEN (START))
+                                (PATLEN (START)))
+                          (SUB1 (NEXTI STATE)))
+              (J STATE))
+
+The XXX named INNER-TO-INNER-HINTS:
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  OPEN-UP-DIFFERENCE (rewrite):
+        (EQUAL (DIFFERENCE X 1) (SUB1 X))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+The XXX named INNER-TO-EXIT-HINTS:
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  FIRST-MATCH-IS-SEARCH (rewrite):
+        (IMPLIES (AND (MATCH PAT 1 PATLEN STR I STRLEN)
+                      (NUMBERP STRLEN)
+                      (NUMBERP I)
+                      (NOT (LESSP STRLEN I))
+                      (NUMBERP K)
+                      (NOT (LESSP I K))
+                      (NOT (EQUAL K 0))
+                      (NOT (LESSP (SEARCH PAT STR PATLEN STRLEN K)
+                                  I)))
+                 (EQUAL (EQUAL I
+                               (SEARCH PAT STR PATLEN STRLEN K))
+                        T))
+@END(VERBATIM)
+@END(GROUP)
+
+|#

@@ -1,0 +1,77 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    TREE-NUMBER.EVENTS
+;;;
+;;;    (TREE-NUMBER tree) returns a unique (we think) number for each
+;;;    equivalence class of trees with the same CONS structure.  We use this
+;;;    to give unique, numerical indices to modules created by tree-based
+;;;    module generators.  We never proved that TREE-NUMBER yields a unique
+;;;    encoding, but our netlist predicates would fail if it were ever the case
+;;;    that non-unique encodings were produced.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    This definition of TREE-NUMBER has the property that a balanced tree
+;;;    with N leaves has (TREE-NUMBER TREE) = N.   In the binary encoding of
+;;;    the tree, each "full" level (whether full of CONS cells or leaves) is
+;;;    encoded as T.  Partially empty levels are encoded by F, followed by a
+;;;    bit string that encodes with T and F those locations that are filled and
+;;;    empty respectively.
+
+(defn fix-breadth-tree-stack (stack n)
+  (if (nlistp stack)
+      nil
+    (cons
+     (append (make-list n f) (car stack))
+     (fix-breadth-tree-stack (cdr stack) (times 2 n)))))
+
+(defn breadth-tree (tree stack n)
+  (if (nlistp tree)
+      (cons (cons t (if (nlistp stack)
+                        (make-list n f)
+                      (car stack)))
+            (fix-breadth-tree-stack (cdr stack) 2))
+    (cons
+     (cons t (if (nlistp stack)
+                 (make-list n f)
+               (car stack)))
+     (breadth-tree (cdr tree)
+                   (breadth-tree (car tree) (cdr stack) (times 2 n))
+                   (add1 (times 2 n))))))
+
+(defn collect-breadth-tree (stack n)
+  (if (nlistp stack)
+      nil
+    (if (equal (car stack) (make-list n t))
+        (cons t (collect-breadth-tree (cdr stack) (times 2 n)))
+      (cons f (append (car stack)
+                      (collect-breadth-tree (cdr stack) (times 2 n)))))))
+
+(defn tree-number (tree)
+  (quotient (add1
+             (v-to-nat (collect-breadth-tree (breadth-tree tree nil 0) 1)))
+            2))
+
+(disable tree-number)
+
+#|
+Problem:  Prove that TREE-NUMBER yields a unique encoding for isomorphic trees.
+That is, given
+
+(defn isomorphic (x y)
+  (if (or (nlistp x) (nlistp y))
+      (and (nlistp x) (nlistp y))
+    (and (isomorphic (car x) (car y))
+         (isomorphic (cdr x) (cdr y)))))
+
+then show
+
+(iff (isomorphic t1 t2)
+     (equal (tree-number t1)
+            (tree-number t2))).
+
+|#

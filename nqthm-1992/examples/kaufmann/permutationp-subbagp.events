@@ -1,0 +1,104 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+;; An implementation of permutationp via bags.
+
+(boot-strap nqthm)
+
+(defn remove1 (a x)
+  (if (listp x)
+      (if (equal (car x) a)
+          (cdr x)
+        (cons (car x)
+              (remove1 a (cdr x))))
+    x))
+
+(defn badguy (x y)
+  (if (listp x)
+      (if (member (car x) y)
+          (badguy (cdr x) (remove1 (car x) y))
+        (car x))
+    0))
+
+(defn subbagp (x y)
+  (if (listp x)
+      (and (member (car x) y)
+           (subbagp (cdr x) (remove1 (car x) y)))
+    t))
+
+(defn occur (a x)
+  (if (listp x)
+      (if (equal (car x) a)
+          (add1 (occur a (cdr x)))
+        (occur a (cdr x)))
+    0))
+
+(prove-lemma member-occur (rewrite)
+  (equal (member a x)
+         (lessp 0 (occur a x))))
+
+(prove-lemma occur-remove1 (rewrite)
+  (equal (occur a (remove1 b x))
+         (if (equal a b)
+             (sub1 (occur a x))
+           (occur a x))))
+
+(prove-lemma subbagp-wit-lemma (rewrite)
+  (equal (subbagp x y)
+         (not (lessp (occur (badguy x y) y)
+                     (occur (badguy x y) x)))))
+
+(prove-lemma occur-append (rewrite)
+  (equal (occur a (append x y))
+         (plus (occur a x) (occur a y))))
+
+(prove-lemma subbagp-append (rewrite)
+             (subbagp (append x y) (append y x)))
+
+(defn permutationp (x y)
+  (and (subbagp x y)
+       (subbagp y x)))
+
+(prove-lemma permutationp-append (rewrite)
+  (permutationp (append x y) (append y x)))
+
+(prove-lemma subbagp-necc (rewrite)
+  (implies (subbagp x y)
+           (not (lessp (occur a y) (occur a x)))))
+
+(prove-lemma subbagp-transitive
+             (rewrite)
+             (implies (and (subbagp x y) (subbagp y z))
+                      (subbagp x z))
+             ((use (subbagp-necc (a (badguy x z)) (y z) (x y))
+                   (subbagp-necc (a (badguy x z))))
+              (disable subbagp-necc)))
+
+(prove-lemma permutationp-transitive
+             (rewrite)
+             (implies (and (permutationp x y) (permutationp y z))
+                      (permutationp x z))
+             ((disable subbagp-wit-lemma)))

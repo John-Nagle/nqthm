@@ -1,0 +1,3952 @@
+#|
+ Copyright (C) 1995 by Matthew Wilding and Computational Logic, Inc.  
+ All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Matthew Wilding and Computational Logic, Inc. PROVIDES ABSOLUTELY NO
+ WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF
+ ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+ ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE
+ DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Matthew Wilding and Computational Logic, Inc. BE
+ LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS, LOST MONIES, OR
+ OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+ USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO
+ LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY
+ THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.  
+|#
+
+;; This file contains the events that lead to the proof of the
+;; optimality of an earliest-deadline-first scheduler on any set of
+;; periodic tasks.  It is documented in CLI Technical Report #110.
+;;
+;; Report #110 will not be available for public dissemination until
+;; December 1995 at the earliest, but the portion about this proof is
+;; available as ftp://ftp.cli.com/home/wilding/scheduler-proof.ps
+;;
+;; Matt Wilding
+;; September, 1995
+
+(note-lib "naturals" t)
+
+(defn tk-name (pt) (car pt))
+
+(defn tk-period (pt) (cadr pt))
+
+(defn tk-duration (pt) (caddr pt))
+
+; periodic task is a triple (name period duration)
+(defn periodic-taskp (pt)
+  (and
+   (listp pt)
+   (litatom (tk-name pt))
+   (not (equal (tk-name pt) nil))
+   (lessp 0 (tk-period pt))
+   (lessp 0 (tk-duration pt))
+   (equal nil (cdr (cdr (cdr pt))))))
+
+(defn periodic-tasksp (pts)
+  (if (listp pts)
+      (and
+       (periodic-taskp (car pts))
+       (not (assoc (tk-name (car pts)) (cdr pts)))
+       (periodic-tasksp (cdr pts)))
+    (equal pts nil)))
+
+;; a task request has the form (name request-time deadline-time duration)
+
+;; generate the requests for a periodic task during a time period
+(defn periodic-task-requests (pt starting-time ending-time)
+  (if (periodic-taskp pt)
+      (if (lessp starting-time ending-time)
+          (cons (list (tk-name pt) starting-time 
+                      (plus starting-time (tk-period pt)) (tk-duration pt))
+                (periodic-task-requests pt (plus starting-time (tk-period pt))
+                                        ending-time))
+        nil)
+    nil)
+  ((lessp (difference ending-time starting-time))))
+
+;; we generate a list of task request lists
+(defn periodic-tasks-requests (pts starting-time ending-time)
+  (if (periodic-tasksp pts)
+      (if (listp pts)
+          (append
+           (periodic-task-requests (car pts) starting-time ending-time)
+           (periodic-tasks-requests (cdr pts) starting-time ending-time))
+        nil)
+    nil))
+        
+(defn repeat (n val)
+  (if (zerop n)
+      nil
+    (cons val (repeat (sub1 n) val))))
+
+;; produce an "obvious" schedule of length c that consists of 
+;; (duration/period)*c calls of each task in a periodic task list
+(defn substring-schedule (pts bigp)
+  (if (listp pts)
+      (append
+       (repeat (quotient (times bigp (caddar pts)) (cadar pts)) (caar pts))
+       (substring-schedule (cdr pts) bigp))
+    nil))
+
+(defn make-length (length list fill)
+  (if (zerop length) nil
+    (if (listp list)
+        (cons (car list) (make-length (sub1 length) (cdr list) fill))
+      (cons fill (make-length (sub1 length) nil fill)))))
+
+(defn repeat-list (list times)
+  (if (zerop times) nil
+    (append list (repeat-list list (sub1 times)))))
+
+(defn make-simple-schedule (pts bigp length)
+  (repeat-list (make-length bigp (substring-schedule pts bigp) nil) 
+               (quotient length bigp)))
+
+(defn firstn (n list)
+  (if (zerop n) nil
+    (cons (car list) (firstn (sub1 n) (cdr list)))))
+
+(defn nth (n list)
+  (if (zerop n) (car list)
+    (nth (sub1 n) (cdr list))))
+
+(defn nthcdr (n list)
+  (if (zerop n) list
+    (nthcdr (sub1 n) (cdr list))))
+
+
+(defn length (list)
+  (if (listp list)
+      (add1 (length (cdr list)))
+    0))
+
+(prove-lemma length-append (rewrite)
+  (equal
+   (length (append x y))
+   (plus (length x) (length y))))
+
+(prove-lemma length-firstn (rewrite)
+  (equal (length (firstn n list)) (fix n)))
+
+(prove-lemma length-nthcdr (rewrite)
+  (equal (length (nthcdr n list)) (difference (length list) n)))
+
+(prove-lemma equal-length-0 (rewrite)
+  (equal
+   (equal (length x) 0)
+   (not (listp x))))
+
+;; each task request period is a multiple of bigp, and bigp*duration
+;; is a multiple of period
+
+(defn expanded-tasksp (ts P)
+  (if (listp ts)
+      (and 
+       (zerop (remainder (cadar ts) P))
+       (zerop (remainder (caddar ts) P))
+       (zerop (remainder (times P (caddar ts)) (cadar ts)))
+       (expanded-tasksp (cdr ts) P))
+    t))
+
+(defn plist (list)
+  (if (listp list)
+      (cons (car list) (plist (cdr list)))
+    nil))
+
+(defn name (r) (car r))
+
+(defn request-time (r) (cadr r))
+
+(defn deadline (r) (caddr r))
+
+(defn duration (r) (cadddr r))
+
+(deftheory task-abbr (name request-time deadline duration tk-name tk-duration
+                           tk-period))
+
+(defn good-schedule (s r)
+  (if (listp r)
+      (and
+       (equal 
+        (occurrences 
+         (name (car r))
+         (firstn (difference (deadline (car r)) (request-time (car r)))
+                 (nthcdr (request-time (car r)) s)))
+         (duration (car r)))
+       (good-schedule s (cdr r)))
+    t))
+
+(defn big-period (pts)
+  (if (listp pts)
+      (times (tk-period (car pts)) (big-period (cdr pts)))
+    1))
+
+(defn active-task-requests (time r)
+  (if (listp r)
+      (if (and (lessp time (deadline (car r)))
+               (not (lessp time (request-time (car r)))))
+          (cons (car r) (active-task-requests time (cdr r)))
+        (active-task-requests time (cdr r)))
+    nil))
+        
+(defn unfulfilled (time s r)
+  (if (listp r)
+      (if (equal 
+           (occurrences 
+            (name (car r))
+            (firstn (difference time (request-time (car r)))
+                    (nthcdr (request-time (car r)) s)))
+           (duration (car r)))
+          (unfulfilled time s (cdr r))
+        (cons (car r) (unfulfilled time s (cdr r))))
+    nil))
+
+;; return a task request with least deadline
+(defn least-deadline (r)
+  (if (listp r)
+      (if (listp (cdr r))
+          (if (lessp (deadline (car r)) (deadline (car (cdr r))))
+              (least-deadline (cons (car r) (cdr (cdr r))))
+            (least-deadline (cdr r)))
+        (car r))
+    nil)
+  ((lessp (length r))))
+
+;; return location of first instance of task in s no earlier than time
+(defn first-instance (time task s)
+  (if (lessp time (length s))
+      (if (equal (nth time s) task)
+          time
+        (first-instance (add1 time) task s))
+    f)
+  ((lessp (difference (length s) time))))
+
+(defn replace-nth (n val list)
+  (if (zerop n) (cons val (cdr list))
+    (cons (car list) (replace-nth (sub1 n) val (cdr list)))))
+
+;; swap locations i and j in list
+(defn swap (i j list)
+  (replace-nth i (nth j list) (replace-nth j (nth i list) list)))
+
+(prove-lemma length-replace-nth (rewrite)
+  (equal
+   (length (replace-nth i val list))
+   (if (lessp i (length list)) (length list) (add1 i))))
+
+(prove-lemma length-swap (rewrite)
+  (equal (length (swap i j list))
+         (if (lessp i (length list))
+             (if (lessp j (length list))
+                 (length list)
+               (add1 j))
+           (if (lessp i j)
+               (add1 j) 
+             (add1 i)))))
+  
+(defn make-element-edf (s r time)
+  (let ((unfulfilled (unfulfilled time s (active-task-requests time r))))
+    (let ((first (first-instance time (car (least-deadline unfulfilled)) s)))
+      (if (and (listp unfulfilled) first)
+          (swap time first s)
+        s))))
+
+(prove-lemma lessp-first-instance (rewrite)
+  (implies
+   (listp s)
+   (lessp (first-instance time task s) (length s))))
+
+(prove-lemma length-make-element-edf (rewrite)
+  (implies
+   (lessp time (length s))
+   (equal (length (make-element-edf s r time)) (length s))))
+
+(disable make-element-edf)
+
+(defn make-schedule-edf (s r first)
+  (if (lessp first (length s))
+      (make-schedule-edf (make-element-edf s r first) r (add1 first))
+    s)
+  ((lessp (difference (length s) first))))
+
+(enable make-element-edf)
+
+
+;;;;;;;;
+
+
+(prove-lemma plist-repeat-list (rewrite)
+  (equal (plist (repeat-list s n)) (repeat-list s n)))
+
+(prove-lemma length-repeat-list (rewrite)
+  (equal (length (repeat-list s n)) (times n (length s))))
+
+(prove-lemma append-nil (rewrite)
+  (equal (append list nil) (plist list)))
+
+(prove-lemma good-schedule-append (rewrite)
+  (equal
+   (good-schedule s (append r1 r2))
+   (and
+    (good-schedule s r1)
+    (good-schedule s r2))))
+
+;; introduce the useful notion of sublist
+(defn sublistp (a b)
+  (if (listp b)
+      (if (listp a)
+          (if (equal (car a) (car b))
+              (sublistp (cdr a) (cdr b))
+            (sublistp a (cdr b)))
+        t)
+    (nlistp a)))
+
+(defn remove-until (v l)
+  (if (listp l)
+      (if (equal v (car l))
+          (cdr l)
+        (remove-until v (cdr l)))
+    l))
+
+(prove-lemma sublistp-cons-rewrite (rewrite)
+  (equal (sublistp (cons c x) y)
+         (and
+          (member c y)
+          (sublistp x (remove-until c y)))))
+
+(prove-lemma listp-remove-until-means-listp (rewrite)
+  (implies
+   (listp (remove-until a z))
+   (listp z)))
+
+(prove-lemma lessp-remove-until (rewrite)
+  (equal
+   (lessp (length (remove-until a y)) (length y))
+   (listp y)))
+
+(prove-lemma remove-until-append (rewrite)
+  (equal 
+   (remove-until a (append x y))
+   (if (member a x)
+       (append (remove-until a x) y)
+     (remove-until a y))))
+
+(defn list-until (v l)
+  (if (listp l)
+      (if (equal v (car l))
+          (list v)
+        (cons (car l) (list-until v (cdr l))))
+    l))
+
+(prove-lemma append-remove-until-list-until (rewrite)
+  (equal (append (list-until v l) (remove-until v l)) l))
+
+;; amazingly complex - easier way? (took me ~3 hours to prove this little guy)
+(defn sublistp-append-induct (a b y z)
+  (if (listp a)
+      (sublistp-append-induct
+       (cdr a) b (append y (list-until (car a) z))
+       (remove-until (car a) z))
+    (if (nlistp b) t
+      (if (listp y)
+          (if (member (car b) y)
+              (sublistp-append-induct
+               (list (car b)) (cdr b) (remove-until (car b) y) z)
+            t)
+        t)))
+  ((ord-lessp (cons (add1 (length b)) (length a)))))
+
+(PROVE-LEMMA MEMBER-APPEND
+             (REWRITE)
+             (EQUAL (MEMBER A (APPEND X Y))
+                    (OR (MEMBER A X) (MEMBER A Y))))
+
+(PROVE-LEMMA LISTP-BAGINT-WITH-SINGLETON-IMPLIES-MEMBER
+             (REWRITE)
+             (IMPLIES (LISTP (BAGINT Y (LIST Z)))
+                      (MEMBER Z Y)))
+
+(PROVE-LEMMA BAGINT-SINGLETON
+             (REWRITE)
+             (EQUAL (BAGINT X (LIST Y))
+                    (IF (MEMBER Y X) (LIST Y) NIL)))
+
+(PROVE-LEMMA TRANSITIVITY-OF-APPEND
+             (REWRITE)
+             (EQUAL (APPEND (APPEND A B) C)
+                    (APPEND A (APPEND B C))))
+
+(prove-lemma sublistp-append (rewrite)
+  (implies
+   (sublistp (append a b) z)
+   (sublistp b (append y z)))
+  ((induct (sublistp-append-induct a b y z))))
+
+(prove-lemma sublistp-cdr1 (rewrite)
+   (implies
+    (sublistp x y)
+    (sublistp (cdr x) y))
+   ((use (sublistp-append (a (list (car x))) (b (cdr x)) (z y) (y nil)))))
+
+(prove-lemma sublistp-cdr2 (rewrite)
+   (implies
+    (sublistp x (cdr y))
+    (sublistp x y))
+   ((use (sublistp-append (a nil) (b x) (y (list (car y))) (z (cdr y))))))
+
+(prove-lemma remainder-big-period-sublist (rewrite)
+  (implies
+   (and
+    (periodic-tasksp y)
+    (sublistp x y))
+   (equal (remainder (big-period y) (big-period x)) 0)))
+
+(prove-lemma remainder-big-period-cdr (rewrite)
+  (implies
+   (equal (remainder n (big-period pts)) 0)
+   (equal (remainder n (big-period (cdr pts))) 0)))
+
+(prove-lemma repeat-list-plus (rewrite)
+  (equal
+   (repeat-list l (plus a b))
+   (append (repeat-list l a) (repeat-list l b))))
+
+(prove-lemma nthcdr-append (rewrite)
+  (equal (nthcdr n (append l1 l2))
+         (if (lessp n (length l1))
+             (append (nthcdr n l1) l2)
+           (nthcdr (difference n (length l1)) l2))))
+
+(prove-lemma firstn-append (rewrite)
+  (equal (firstn n (append l1 l2))
+         (if (lessp (length l1) n)
+             (append l1 (firstn (difference n (length l1)) l2))
+           (firstn n l1))))
+
+(defn nthcdr-repeat-list-induct (n1 n2 list)
+  (if (zerop n1) t
+    (nthcdr-repeat-list-induct (sub1 n1) (difference n2 (length list)) list)))
+
+(prove-lemma nthcdr-repeat-list (rewrite)
+  (implies
+   (and
+    (equal (remainder n1 (length list)) 0)
+    (not (lessp (times n2 (length list)) n1)))
+  (equal
+   (nthcdr n1 (repeat-list list n2))
+   (repeat-list list (difference n2 (quotient n1 (length list))))))
+  ((induct (nthcdr-repeat-list-induct n2 n1 list))
+   (disable quotient-difference quotient-difference1)))
+
+
+(prove-lemma length-make-length (rewrite)
+  (equal (length (make-length n list fill)) (fix n)))
+
+(prove-lemma member-expanded (rewrite)
+  (implies
+   (and
+    (member tk pts)
+    (expanded-tasksp pts bigp))
+   (equal (remainder (cadr tk) bigp) 0)))
+
+(prove-lemma firstn-length-list (rewrite)
+  (equal (firstn (length x) x) (plist x)))
+
+(prove-lemma firstn-repeat-list (rewrite)
+  (implies
+   (and
+    (equal (remainder n1 (length list)) 0)
+    (not (lessp (times n2 (length list)) n1)))
+   (equal
+    (firstn n1 (repeat-list list n2))
+    (repeat-list list (quotient n1 (length list)))))
+  ((induct (nthcdr-repeat-list-induct n2 n1 list))
+   (disable quotient-difference quotient-difference1)))
+
+(prove-lemma lessp-remainder-special (rewrite)
+  (implies
+   (and
+    (equal (remainder x z) 0)
+    (equal (remainder y z) 0))
+   (equal (lessp y (plus x z)) 
+          (and
+           (not (zerop z))
+           (not (lessp x y)))))
+  ((induct (double-remainder-induction z x y))))
+
+(prove-lemma lessp-difference-special (rewrite)
+  (implies
+   (and
+    (equal (remainder x z) 0)
+    (equal (remainder y z) 0))
+   (equal (lessp (difference x y) z) 
+          (and
+           (not (zerop z))
+           (not (lessp y x)))))
+  ((induct (double-remainder-induction z x y))))
+
+(PROVE-LEMMA OCCURRENCES-APPEND
+             (REWRITE)
+             (EQUAL (OCCURRENCES A (APPEND X Y))
+                    (PLUS (OCCURRENCES A X)
+                          (OCCURRENCES A Y))))
+
+(prove-lemma occurrences-repeat-list (rewrite)
+  (equal
+   (occurrences v (repeat-list list n))
+   (times n (occurrences v list))))
+
+(prove-lemma occurrences-make-length (rewrite)
+  (equal (occurrences v (make-length size list fill))
+         (if (lessp size (length list))
+             (occurrences v (firstn size list))
+           (if (equal v fill)
+               (plus (occurrences v list) (difference size (length list)))
+             (occurrences v list))))
+  ((expand (make-length 1 list fill))))
+
+(prove-lemma occurrences-repeat (rewrite)
+  (equal (occurrences x (repeat n y))
+         (if (equal x y) (fix n) 0)))
+
+(prove-lemma member-repeat (rewrite)
+  (equal 
+   (member x (repeat n v))
+   (and
+    (lessp 0 n)
+    (equal x v))))
+
+(prove-lemma member-substring-schedule (rewrite)
+  (implies
+   (and
+    (periodic-tasksp z)
+    (expanded-tasksp z bigp)
+    (not (equal v nil)))
+   (iff (member v (substring-schedule z bigp))
+        (assoc v z)))
+  ((induct (assoc v z))))
+
+(PROVE-LEMMA MEMBER-CAR-X-X
+  (REWRITE)
+  (EQUAL (MEMBER (CAR X) X) (LISTP X)))
+
+(prove-lemma occurrences-substring-schedule (rewrite)
+  (implies
+   (and
+    (member tk pts)
+    (lessp 0 bigp)
+    (periodic-tasksp pts)
+    (expanded-tasksp pts bigp))
+   (equal (occurrences (car tk) (substring-schedule pts bigp))
+          (quotient (times bigp (caddr tk)) (cadr tk)))))
+
+(prove-lemma times-quotient-quotient-special (rewrite)
+  (implies
+   (and
+    (equal (remainder x bigp) 0)
+    (equal (remainder (times bigp y) x) 0)
+    (lessp 0 bigp))
+   (equal (times (quotient x bigp)
+                 (quotient (times bigp y) x))
+          (fix y))))
+
+(prove-lemma good-schedule-periodic-task-requests (rewrite)
+  (implies
+   (and
+    (member tk pts)
+    (periodic-tasksp pts)
+    (expanded-tasksp pts bigp)
+    (lessp 0 bigp)
+    (not (lessp n2 n1))
+    (numberp n2)
+    (numberp n1)
+    (zerop (remainder (cadr tk) bigp))
+    (zerop (remainder (times bigp (caddr tk)) (cadr tk)))
+    (zerop (remainder n1 bigp))
+    (zerop (remainder n1 (cadr tk)))
+    (zerop (remainder n2 bigp))
+    (zerop (remainder n2 (big-period pts)))
+    (zerop (remainder n2 (cadr tk)))
+    (not (lessp bigp (length (substring-schedule pts bigp)))))
+   (good-schedule (repeat-list 
+                   (make-length bigp (substring-schedule pts bigp) nil)
+                   (quotient n2 bigp))
+                  (periodic-task-requests tk n1 n2)))
+  ((induct (periodic-task-requests tk n1 n2))))
+
+(prove-lemma member-sublistp (rewrite)
+  (implies
+   (and
+    (sublistp x y)
+    (member e x))
+   (member e y)))
+
+(prove-lemma member-expanded-tasksp-means (rewrite)
+  (implies
+   (and 
+    (expanded-tasksp pts bigp)
+    (member tk pts))
+   (and
+    (equal (remainder (cadr tk) bigp) 0)
+    (equal (remainder (times bigp (caddr tk)) (cadr tk)) 0))))
+
+(prove-lemma remainder-period-if-remainder-big-period (rewrite)
+  (implies
+   (and
+    (periodic-tasksp pts)
+    (member tk pts)
+    (zerop (remainder n (big-period pts))))
+   (equal (remainder n (cadr tk)) 0)))
+  
+(prove-lemma good-simple-schedule-sublist nil
+           (implies
+            (and
+             (not (lessp bigp (length (substring-schedule pts2 bigp))))
+             (equal n1 0)
+             (sublistp pts1 pts2)
+             (periodic-tasksp pts2)
+             (expanded-tasksp pts2 bigp)
+             (lessp 0 bigp)
+             (numberp n2)
+             (zerop (remainder n2 bigp))
+             (zerop (remainder n2 (big-period pts2))))
+            (good-schedule (make-simple-schedule pts2 bigp n2)
+                           (periodic-tasks-requests pts1 n1 n2)))
+           ((induct (periodic-tasks-requests pts1 n1 n2))))
+
+(prove-lemma sublistp-x-x (rewrite)
+  (sublistp x x))
+
+(prove-lemma periodic-tasks-requests-simple (rewrite)
+  (implies
+   (not (lessp n1 n2))
+   (equal (periodic-tasks-requests pts n1 n2) nil)))
+
+;; big theorem
+(prove-lemma good-simple-schedule (rewrite)
+           (implies
+            (and
+             (not (lessp bigp (length (substring-schedule pts bigp))))
+             (periodic-tasksp pts)
+             (expanded-tasksp pts bigp)
+             (lessp 0 bigp)
+             (zerop (remainder n bigp))
+             (zerop (remainder n (big-period pts))))
+            (good-schedule (make-simple-schedule pts bigp n)
+                           (periodic-tasks-requests pts 0 n)))
+           ((use (good-simple-schedule-sublist (n2 n) (n1 0) (pts2 pts) 
+                                               (pts1 pts)))
+            (disable-theory t)
+            (enable sublistp-x-x periodic-tasks-requests-simple good-schedule)
+            (enable-theory ground-zero task-abbr)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn expand-tasks (pts bigp)
+  (if (listp pts)
+      (cons
+       (list (caar pts) (times bigp (cadar pts)) (times bigp (caddar pts)))
+       (expand-tasks (cdr pts) bigp))
+    nil))
+
+;;;; expanded-tasksp identifies expand-tasks
+(prove-lemma expanded-tasksp-expand-task-helper (rewrite)
+  (implies
+   (and
+    (equal (remainder x (big-period pts1)) 0)
+    (not (zerop x)))
+   (expanded-tasksp (expand-tasks pts1 x) x)))
+
+(prove-lemma zerop-big-period (rewrite)
+  (implies
+   (periodic-tasksp pts)
+   (lessp 0 (big-period pts))))
+
+(prove-lemma expanded-tasksp-expand-task (rewrite)
+  (implies
+   (periodic-tasksp pts)
+   (expanded-tasksp (expand-tasks pts (big-period pts)) (big-period pts))))
+
+(prove-lemma assoc-expand-tasks (rewrite)
+  (implies
+   (periodic-tasksp x)
+  (iff
+   (assoc v (expand-tasks x n))
+   (assoc v x))))
+
+(prove-lemma periodic-tasksp-expand-tasks (rewrite)
+  (implies
+   (periodic-tasksp pts)
+  (equal
+   (periodic-tasksp (expand-tasks pts n))
+   (or
+    (not (zerop n))
+    (not (listp pts))))))
+
+(defn non-overlapping-requests3 (request request-list)
+  (if (listp request-list)
+      (and
+       (or
+        (not (equal (car request) (caar request-list)))
+        (not (lessp (cadr request) (caddar request-list)))
+        (not (lessp (cadar request-list) (caddr request)))
+        (equal (car request-list) request))
+       (non-overlapping-requests3 request (cdr request-list)))
+    t))
+
+
+(defn non-overlapping-requests2 (r1 r2)
+  (if (listp r1)
+      (and
+       (non-overlapping-requests3 (car r1) r2)
+       (non-overlapping-requests2 (cdr r1) r2))
+    t))
+
+(defn non-overlapping-requests (r)
+  (non-overlapping-requests2 r r))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn double-cdr-induction (a b)
+  (if (listp a)
+      (double-cdr-induction (cdr a) (cdr b))
+    t))
+
+(prove-lemma plist-firstn (rewrite)
+  (equal (plist (firstn n l)) (firstn n l)))
+
+(prove-lemma cons-nth-nthcdr (rewrite)
+  (implies
+   (lessp n (length l))
+  (equal
+   (cons (nth n l) (nthcdr n (cdr l)))
+   (nthcdr n l))))
+
+(prove-lemma equal-append (rewrite)
+  (equal
+   (equal (append a b) y)
+   (if (nlistp y) 
+       (and
+        (nlistp a)
+        (equal b y))
+     (and
+      (not (lessp (length y) (length a)))
+      (equal (firstn (length a) y) (plist a))
+      (equal (nthcdr (length a) y) b))))
+   ((induct (double-cdr-induction a y))))
+
+
+(prove-lemma replace-nth-replace-nth (rewrite)
+  (implies
+   (not (equal (fix i) (fix j)))
+   (equal
+    (replace-nth i x (replace-nth j y l))
+    (replace-nth j y (replace-nth i x l)))))
+
+(prove-lemma replace-nth-idempotent(rewrite)
+  (implies
+   (equal (fix i) (fix j))
+   (equal (replace-nth i x (replace-nth j y l))
+          (replace-nth i x l))))
+
+(prove-lemma member-nth (rewrite)
+  (implies
+   (lessp n (length list))
+   (member (nth n list) list)))
+
+(prove-lemma swap-commutative (rewrite)
+  (equal
+   (swap j i s)
+   (swap i j s)))
+
+(prove-lemma member-replace-nth (rewrite)
+  (implies
+   (not (member x l))
+   (equal
+    (member x (replace-nth i v l))
+    (or
+     (equal x v)
+     (and (equal x 0) (lessp (length l) i))))))
+
+(prove-lemma occurrences-replace-nth (rewrite)
+  (equal
+   (occurrences x (replace-nth n v list))
+   (difference
+    (plus
+     (occurrences x list)
+     (if (equal v x) 1 0)
+     (if (equal x 0) (difference n (length list)) 0))
+    (if (and (equal x (nth n list)) (lessp n (length list))) 1 0)))
+  ((do-not-generalize t)))
+
+(prove-lemma nthcdr-1 (rewrite)
+  (equal (nthcdr 1 x) (cdr x)))
+
+(prove-lemma nlistp-nthcdr (rewrite)
+  (implies
+   (not (listp s))
+   (equal (nthcdr n s) (if (zerop n) s 0))))
+
+(prove-lemma nthcdr-firstn-plus (rewrite)
+  (and
+   (equal (nthcdr n (firstn (plus n x) s))
+          (firstn x (nthcdr n s)))
+   (equal (nthcdr n (firstn (plus x n) s))
+          (firstn x (nthcdr n s)))))
+
+(prove-lemma cdr-nthcdr-cons (rewrite)
+  (equal
+   (cdr (nthcdr x (cons a b)))
+   (nthcdr x b)))
+
+(defn add1-sub1-induct (a b)
+  (if (zerop b) t
+    (add1-sub1-induct (add1 a) (sub1 b))))
+
+(prove-lemma nth-nthcdr (rewrite)
+  (equal
+   (nth n1 (nthcdr n2 s))
+   (nth (plus n1 n2) s))
+  ((induct (add1-sub1-induct n1 n2))))
+
+(prove-lemma nthcdr-nthcdr (rewrite)
+  (equal
+   (nthcdr n1 (nthcdr n2 s))
+   (nthcdr (plus n1 n2) s))
+  ((induct (add1-sub1-induct n1 n2))))
+
+(prove-lemma equal-append-a-append-a (rewrite)
+  (equal
+   (equal (append a x) (append a y))
+   (equal x y)))
+
+(prove-lemma nthcdr-replace-nth (rewrite)
+  (equal
+   (nthcdr n (replace-nth i v l))
+   (if (lessp i n)
+       (nthcdr n l)
+     (replace-nth (difference i n) v (nthcdr n l)))))
+
+(prove-lemma firstn-replace-nth (rewrite)
+  (equal 
+   (firstn n (replace-nth i v l))
+   (if (lessp i n)
+       (replace-nth i v (firstn n l))
+     (firstn n l))))
+
+(prove-lemma cdr-firstn-cons (rewrite)
+  (equal
+   (cdr (firstn n (cons a b)))
+   (if (zerop n) 0 (firstn (sub1 n) b))))
+
+(prove-lemma nth-firstn (rewrite)
+  (equal
+   (nth n (firstn n2 s))
+   (if (lessp n n2) (nth n s) 0)))
+
+(prove-lemma firstn-cons (rewrite)
+  (equal
+   (firstn n (cons a b))
+   (if (zerop n) nil
+     (cons a (firstn (sub1 n) b)))))
+
+(defn double-sub1-induction (a b)
+  (if (zerop a) t
+    (double-sub1-induction (sub1 a) (sub1 b))))
+
+(prove-lemma equal-repeat-repeat (rewrite)
+  (equal
+   (equal (repeat n v) (repeat n2 v2))
+   (and
+    (equal (fix n) (fix n2))
+    (or
+     (equal v v2)
+     (zerop n))))
+  ((induct (double-sub1-induction n n2))))
+
+(prove-lemma firstn-too-big (rewrite)
+  (implies
+   (lessp (length x) n)
+   (equal (firstn n x) (append x (repeat (difference n (length x)) 0)))))
+
+(prove-lemma firstn-firstn (rewrite)
+  (equal
+   (firstn a (firstn b x))
+   (if (lessp b a)
+       (append (firstn b x) (repeat (difference a b) 0))
+     (firstn a x))))
+
+(prove-lemma plist-repeat (rewrite)
+  (equal (plist (repeat n x)) (repeat n x)))
+
+(prove-lemma firstn-1 (rewrite)
+  (equal (firstn 1 s) (list (car s))))
+
+(prove-lemma nthcdr-cons-firstn (rewrite)
+  (equal
+   (nthcdr w (cons a (firstn (plus w x) b)))
+   (if (zerop w) (cons a (firstn x b))
+     (nthcdr (sub1 w) (firstn (plus w x) b)))))
+
+(prove-lemma nthcdr-sub1-firstn-plus (rewrite)
+  (implies
+   (not (zerop w))
+   (equal
+    (nthcdr (sub1 w) (firstn (plus w x) b))
+    (firstn (add1 x) (nthcdr (sub1 w) b))))
+  ((use (nthcdr-firstn-plus (n (sub1 w)) (x (add1 x)) (s b)))
+   (disable nthcdr-firstn-plus)))
+
+(prove-lemma nthcdr-repeat (rewrite)
+  (equal (nthcdr n1 (repeat n2 x))
+         (if (lessp n2 n1) 0 (repeat (difference n2 n1) x))))
+
+(prove-lemma firstn-nlistp (rewrite)
+  (implies
+   (nlistp l)
+   (equal (firstn n l) (repeat n 0))))
+
+(defn member-nth-firstn-induction (i y s)
+  (if (zerop i) t
+    (member-nth-firstn-induction (sub1 i) (sub1 y) (cdr s))))
+
+(prove-lemma member-nth-firstn (rewrite)
+  (implies
+   (lessp i j)
+   (member (nth i s) (firstn j s))))
+
+(prove-lemma member-car-firstn (rewrite)
+  (equal
+   (member (car x) (firstn n x))
+   (not (zerop n))))
+
+(prove-lemma member-nth-firstn-nthcdr (rewrite)
+  (implies
+   (and
+    (not (lessp i y))
+    (lessp i (plus x y)))
+  (member (nth i s) (firstn x (nthcdr y s))))
+  ((induct (member-nth-firstn-induction i y s))))
+
+(prove-lemma non-overlapping-requests-means (rewrite)
+  (implies
+   (non-overlapping-requests r)
+   (non-overlapping-requests3 (car r) (cdr r))))
+
+(prove-lemma non-overlapping-requests2-cdr (rewrite)
+  (implies
+   (non-overlapping-requests2 r1 r2)
+   (non-overlapping-requests2 (cdr r1) (cdr r2))))
+
+(prove-lemma non-overlapping-requests-cdr (rewrite)
+  (implies
+   (non-overlapping-requests r)
+   (non-overlapping-requests (cdr r))))
+
+(prove-lemma member-firstn-only-if-member (rewrite)
+  (implies
+   (not (member x l))
+   (equal 
+    (member x (firstn n l)) 
+    (and (equal x 0) (lessp (length l) n)))))
+
+(prove-lemma member-nthcdr-only-if-member (rewrite)
+  (implies
+   (not (member x l))
+   (not (member x (nthcdr n l)))))
+
+(prove-lemma nth-replace-nth (rewrite)
+  (equal 
+   (nth i (replace-nth j v l))
+   (if (equal (fix i) (fix j)) v (nth i l))))
+
+(prove-lemma member-x-firstn-cons-x (rewrite)
+  (equal
+   (member x (firstn n (cons x y)))
+   (lessp 0 n)))
+
+(defn cars-non-nil-litatoms (list)
+  (if (listp list)
+      (and
+       (litatom (caar list))
+       (not (equal (caar list) nil))
+       (cars-non-nil-litatoms (cdr list)))
+    t))
+
+(prove-lemma swap-preserves-good-schedule nil
+  (implies
+   (and
+    (non-overlapping-requests3 task-request-a r)
+    (non-overlapping-requests3 task-request-b r)
+    (cars-non-nil-litatoms r)
+    (not (lessp i (cadr task-request-a)))
+    (not (lessp j (cadr task-request-a)))
+    (lessp i (caddr task-request-a))
+    (lessp j (caddr task-request-a))
+    (not (lessp i (cadr task-request-b)))
+    (not (lessp j (cadr task-request-b)))
+    (lessp i (caddr task-request-b))
+    (lessp j (caddr task-request-b))
+    (equal (nth i s) (car task-request-a))
+    (equal (nth j s) (car task-request-b))
+    (litatom (nth i s))
+    (litatom (nth j s))
+    (good-schedule s r))
+   (good-schedule (swap i j s) r))
+  ((induct (good-schedule s r))
+   (disable-theory t)
+   (enable swap non-overlapping-requests3 good-schedule
+           occurrences-replace-nth firstn-replace-nth  nth-firstn
+           nth-nthcdr nth nthcdr firstn member-nth-firstn
+           member-nthcdr-only-if-member member-firstn-only-if-member
+           member-x-firstn-cons-x member-nth-firstn-nthcdr
+           cars-non-nil-litatoms equal-occurrences-zero
+           length-replace-nth length-firstn nth-replace-nth
+           nthcdr-replace-nth)
+   (enable-theory ground-zero task-abbr naturals)))
+
+; return task request corresponding to task at time
+(defn corresponding-request (task time r)
+  (if (listp r)
+      (if (and
+           (equal (caar r) task)
+           (not (lessp time (cadar r)))
+           (lessp time (caddar r)))
+          (car r)
+        (corresponding-request task time (cdr r)))
+    f))
+
+(defn all-non-nil-corresponding (s r time)
+  (if (lessp time (length s))
+      (and
+       (or
+        (corresponding-request (nth time s) time r)
+        (equal (nth time s) nil))
+       (all-non-nil-corresponding s r (add1 time)))
+    t)
+  ((lessp (difference (length s) time))))
+
+(prove-lemma non-overlapping-requests2-member (rewrite)
+  (implies
+   (and
+    (non-overlapping-requests2 r1 r2)
+    (sublistp r1 r2)
+    (member e r1))
+   (non-overlapping-requests3 e r2)))
+
+(prove-lemma non-overlapping-requests3-member (rewrite)
+  (implies
+   (and
+    (non-overlapping-requests r)
+    (member e r))
+   (non-overlapping-requests3 e r)))
+
+(prove-lemma member-corresponding-request-nth (rewrite)
+  (implies
+    (corresponding-request task time r)
+    (member (corresponding-request task time r) r)))
+
+
+(defn all-litatoms (list)
+  (if (listp list)
+      (and 
+       (litatom (car list))
+       (all-litatoms (cdr list)))
+    t))
+
+(prove-lemma litatom-nth (rewrite)
+  (implies
+   (all-litatoms s)
+   (equal (litatom (nth i s)) (lessp i (length s)))))
+
+(prove-lemma lessp-first-instance-s (rewrite)
+  (equal
+   (lessp (first-instance time task s) (length s))
+   (listp s)))
+
+(prove-lemma member-nthcdr-from-cdr (rewrite)
+  (implies
+   (and
+    (not (member x (nthcdr n (cdr s))))
+    (lessp n (length s)))
+   (equal (member x (nthcdr n s))
+          (equal x (nth n s)))))
+
+(prove-lemma listp-nthcdr (rewrite)
+  (equal
+   (listp (nthcdr n x))
+   (lessp n (length x))))
+
+(prove-lemma car-nthcdr (rewrite)
+  (equal
+   (car (nthcdr n l))
+   (if (lessp n (length l)) (nth n l) 0)))
+
+(prove-lemma nth-first-instance-simple (rewrite)
+  (equal
+   (equal (nth (first-instance n x s) s) x)
+   (or
+    (member x (nthcdr n s))
+    (equal (car s) x))))
+
+
+(prove-lemma equal-occurrences-firstn-nthcdr (rewrite)
+  (implies
+   (lessp n1 n2)
+   (equal
+    (equal (occurrences x (firstn n1 (nthcdr n list)))
+           (occurrences x (firstn n2 (nthcdr n list))))
+    (not (member x (firstn (difference n2 n1) (nthcdr (plus n n1) list)))))))
+
+(prove-lemma member-firstn-lessp (rewrite)
+  (implies
+   (and
+    (member x (firstn n1 l))
+    (not (lessp n2 n1)))
+   (member x (firstn n2 l))))
+
+(prove-lemma member-least-deadline (rewrite)
+  (equal 
+   (member (least-deadline r) r)
+   (listp r)))
+
+(prove-lemma unfulfilled-task-later-in-good-schedule (rewrite)
+  (implies
+   (and
+    (good-schedule s r)
+    (all-litatoms s)
+    (cars-non-nil-litatoms r)
+    (member tr (unfulfilled element s (active-task-requests element r))))
+   (member (car tr) (nthcdr element s))))
+
+(prove-lemma car-corresponding-request (rewrite)
+  (implies
+   (corresponding-request task time r)
+   (equal (car (corresponding-request task time r)) task)))
+
+(prove-lemma active-task-has-later-deadline nil
+  (implies
+   (member tr (active-task-requests element r))
+   (lessp element (caddr tr))))
+
+(prove-lemma sublistp-unfulfilled (rewrite)
+  (sublistp (unfulfilled e s r) r))
+
+(prove-lemma least-deadline-has-later-deadline (rewrite)
+  (implies
+   (listp (unfulfilled element s (active-task-requests element r)))
+   (equal 
+    (lessp 
+     element 
+     (caddr (least-deadline 
+      (unfulfilled element s (active-task-requests element r)))))
+    t))
+  ((use (active-task-has-later-deadline 
+         (tr (least-deadline 
+              (unfulfilled element s (active-task-requests element r)))))
+        (member-sublistp 
+         (e (least-deadline 
+              (unfulfilled element s (active-task-requests element r))))
+         (x (unfulfilled element s (active-task-requests element r)))
+         (y (active-task-requests element r))))))
+
+
+(prove-lemma active-task-hasnt-earlier-start nil
+  (implies
+   (member tr (active-task-requests element r))
+   (not (lessp element (cadr tr)))))
+
+(prove-lemma lessp-corresponding-request-deadline (rewrite)
+  (implies
+   (corresponding-request (nth element s) element r)
+   (equal
+    (lessp element (caddr (corresponding-request (nth element s) element r)))
+    t)))
+
+(prove-lemma least-deadline-hasnt-earlier-start (rewrite)
+  (implies
+   (listp (unfulfilled element s (active-task-requests element r)))
+   (equal 
+    (lessp 
+     element 
+     (cadr (least-deadline 
+      (unfulfilled element s (active-task-requests element r)))))
+    f))
+  ((use (active-task-hasnt-earlier-start
+         (tr (least-deadline 
+              (unfulfilled element s (active-task-requests element r)))))
+        (member-sublistp 
+         (e (least-deadline 
+              (unfulfilled element s (active-task-requests element r))))
+         (x (unfulfilled element s (active-task-requests element r)))
+         (y (active-task-requests element r))))))
+
+(prove-lemma lessp-corresponding-request-start (rewrite)
+  (implies
+   (corresponding-request x time r)
+   (not (lessp time (cadr (corresponding-request x time r))))))
+
+(prove-lemma lessp-corresponding-request-deadline-linear (rewrite)
+  (implies
+   (corresponding-request x time r)
+   (lessp time (caddr (corresponding-request x time r)))))
+
+(prove-lemma sublistp-active-task-requests (rewrite)
+  (sublistp (active-task-requests time r) r))
+
+(prove-lemma member-means-all-cars-not-litatoms (rewrite)
+  (implies
+   (and
+    (member x r)
+    (not (litatom (car x))))
+   (not (cars-non-nil-litatoms r))))
+
+(prove-lemma member-least-deadline-unfulfilled (rewrite)
+  (implies
+   (cars-non-nil-litatoms r)
+   (equal
+    (member 
+     (least-deadline (unfulfilled element s (active-task-requests element r)))
+     r)
+    (listp (unfulfilled element s (active-task-requests element r)))))
+   ((use (member-sublistp
+          (e (least-deadline 
+              (unfulfilled element s (active-task-requests element r))))
+          (x (unfulfilled element s (active-task-requests element r)))
+          (y (active-task-requests element r)))
+         (member-sublistp
+          (e (least-deadline 
+              (unfulfilled element s (active-task-requests element r))))
+          (y r)
+          (x (active-task-requests element r))))))
+
+(prove-lemma not-numberp-corresponding (rewrite)
+  (implies
+   (not (numberp element))
+   (equal (corresponding-request x element r)
+          (corresponding-request x 0 r))))
+
+(prove-lemma member-firstn-means-lessp-first-instance (rewrite)
+  (implies
+   (member v (firstn (difference n time) (nthcdr time s)))
+   (equal (lessp (first-instance time v s) n) t)))
+
+   
+(prove-lemma first-instance-member-unfulfilled-not-past-deadline (rewrite)
+  (implies
+   (and
+    (good-schedule s r)
+    (member tr (unfulfilled element s (active-task-requests element r))))
+   (equal
+    (lessp (first-instance element (car tr) s)
+           (caddr tr))
+    t)))
+
+(prove-lemma lessp-firstn-instance-time (rewrite)
+  (implies
+   (not (lessp time n))
+  (equal
+   (lessp (first-instance time v s) n)
+   (and
+    (not (member v (nthcdr time s)))
+    (not (zerop n))))))
+
+(prove-lemma first-instance-member-unfulfilled-not-before-start (rewrite)
+  (implies
+   (and
+    (good-schedule s r)
+    (cars-non-nil-litatoms r)
+    (member tr (unfulfilled element s (active-task-requests element r))))
+   (equal
+    (lessp (first-instance element (car tr) s)
+           (cadr tr))
+    f)))
+
+(prove-lemma member-corresponding-request (rewrite)
+  (implies
+   (and
+    (good-schedule s r)
+    (corresponding-request (nth element s) element r))
+   (member
+    (corresponding-request (nth element s) element r)
+    (unfulfilled element s (active-task-requests element r)))))
+
+(defn member-deadline-induct (x l)
+  (if (listp l)
+      (if (listp (cdr l))
+          (if (lessp (caddar l) (caddadr l))
+              (if (equal x (cadr l))
+                  (member-deadline-induct (car l) (cons (car l) (cddr l)))
+                (member-deadline-induct x (cons (car l) (cddr l))))
+            (if (equal x (car l))
+                (member-deadline-induct (cadr l) (cons (cadr l) (cddr l)))
+              (member-deadline-induct x (cons (cadr l) (cddr l)))))
+        t)
+    t)
+  ((lessp (length l))))
+            
+
+(prove-lemma member-deadline-not-less-than-least-deadline (rewrite)
+  (implies
+   (member x l)
+   (equal (lessp (caddr x) (caddr (least-deadline l))) f))
+  ((induct (member-deadline-induct x l))))
+
+(prove-lemma first-instance-member-unfulfilled-not-past-deadline-better 
+  (rewrite)
+  (implies
+   (and
+    (good-schedule s r)
+    (member tr (unfulfilled element s (active-task-requests element r)))
+    (not (lessp (caddr tr2) (caddr tr))))
+   (equal
+    (lessp (first-instance element (car tr) s)
+           (caddr tr2))
+    t))
+  ((use (first-instance-member-unfulfilled-not-past-deadline))
+   (disable first-instance-member-unfulfilled-not-past-deadline)))
+
+(prove-lemma non-overlapping-requests3-simple (rewrite)
+  (implies
+   (and
+    (cars-non-nil-litatoms r)
+    (not (listp tr)))
+   (non-overlapping-requests3 tr r)))
+
+
+(prove-lemma swap-preserves-good-schedule-simple nil
+  (implies
+   (and
+    (non-overlapping-requests3 task-request r)
+    (cars-non-nil-litatoms r)
+    (not (lessp i (cadr task-request)))
+    (not (lessp j (cadr task-request)))
+    (lessp i (caddr task-request))
+    (lessp j (caddr task-request))
+    (equal (nth j s) (car task-request))
+    (equal (nth i s) nil)
+    (litatom (nth j s))
+    (good-schedule s r))
+   (good-schedule (swap i j s) r))
+  ((induct (good-schedule s r))
+   (disable-theory t)
+   (enable swap non-overlapping-requests3 good-schedule
+           occurrences-replace-nth firstn-replace-nth  nth-firstn
+           nth-nthcdr nth nthcdr firstn member-nth-firstn
+           member-nthcdr-only-if-member member-firstn-only-if-member
+           member-x-firstn-cons-x member-nth-firstn-nthcdr
+           cars-non-nil-litatoms equal-occurrences-zero
+           length-replace-nth length-firstn nth-replace-nth
+           nthcdr-replace-nth)
+   (enable-theory ground-zero task-abbr naturals)))
+
+(prove-lemma nth-too-big (rewrite)
+  (implies
+   (not (lessp i (length s)))
+   (equal (nth i s) 0)))
+
+(prove-lemma not-corresponding-request-means-nil (rewrite)
+  (implies
+   (and
+    (all-non-nil-corresponding s r n)
+    (not (corresponding-request (nth i s) i r))
+    (not (lessp i n)))
+   (equal (nth i s) (if (lessp i (length s)) nil 0))))
+
+
+;; takes 1/2 hr without disable-theory t
+(prove-lemma make-element-edf-preserves-good-schedule (rewrite)
+  (implies
+   (and
+    (lessp element (length s))
+    (non-overlapping-requests r)
+    (cars-non-nil-litatoms r)
+    (all-litatoms s)
+    (all-non-nil-corresponding s r 0)
+    (good-schedule s r))
+   (good-schedule (make-element-edf s r element) r))
+  ((disable-theory t)
+   (enable-theory ground-zero task-abbr)
+   (enable nth length good-schedule first-instance make-element-edf
+    non-overlapping-requests swap-commutative cars-non-nil-litatoms
+    all-non-nil-corresponding
+    non-overlapping-requests3-member member-corresponding-request-nth
+    all-litatoms litatom-nth lessp-first-instance-s
+    nth-first-instance-simple member-least-deadline
+    unfulfilled-task-later-in-good-schedule car-corresponding-request
+    least-deadline-has-later-deadline
+    least-deadline-hasnt-earlier-start
+    lessp-corresponding-request-start
+    lessp-corresponding-request-deadline-linear
+    member-least-deadline-unfulfilled lessp-firstn-instance-time
+    first-instance-member-unfulfilled-not-before-start
+    member-corresponding-request
+    member-deadline-not-less-than-least-deadline
+    first-instance-member-unfulfilled-not-past-deadline-better
+    non-overlapping-requests3-simple
+    nth-too-big not-corresponding-request-means-nil)
+   (use 
+    (swap-preserves-good-schedule 
+     (task-request-a 
+      (if (corresponding-request (nth element s) element r)
+          (corresponding-request (nth element s) element r)
+        nil))
+     (task-request-b 
+      (least-deadline 
+       (unfulfilled element s (active-task-requests element r))))
+     (time element)
+     (i element)
+     (j
+      (first-instance  element
+       (car (least-deadline 
+             (unfulfilled element s (active-task-requests element r))))
+       s)))
+    (swap-preserves-good-schedule-simple
+     (task-request 
+      (least-deadline 
+       (unfulfilled element s (active-task-requests element r))))
+     (time element)
+     (i element)
+     (j
+      (first-instance  element
+       (car (least-deadline 
+             (unfulfilled element s (active-task-requests element r))))
+       s))))))
+
+(prove-lemma all-litatoms-replace-nth (rewrite)
+  (equal
+   (all-litatoms (replace-nth n v x))
+   (and
+    (litatom v)
+    (not (lessp (length x) n))
+    (all-litatoms (firstn n x))
+    (all-litatoms (nthcdr (add1 n) x)))))
+
+(prove-lemma all-litatoms-nthcdr (rewrite)
+  (implies
+   (all-litatoms s)
+   (all-litatoms (nthcdr n s))))
+
+(prove-lemma all-litatoms-repeat (rewrite)
+  (equal
+   (all-litatoms (repeat n v))
+   (or
+    (zerop n)
+    (litatom v))))
+
+(prove-lemma all-litatoms-firstn (rewrite)
+  (implies
+   (all-litatoms s)
+   (equal (all-litatoms (firstn n s)) (not (lessp (length s) n)))))
+
+(prove-lemma make-element-edf-preserves-all-litatoms (rewrite)
+  (implies
+   (and
+    (lessp element (length s))
+    (non-overlapping-requests r)
+    (cars-non-nil-litatoms r)
+    (all-litatoms s)
+    (all-non-nil-corresponding s r 0)
+    (good-schedule s r))
+   (all-litatoms (make-element-edf s r element)))
+  ((disable non-overlapping-requests)))
+
+(prove-lemma equal-lessp-sub1x-y-x-y (rewrite)
+  (equal
+   (equal (lessp (sub1 x) y) (lessp x y))
+   (or
+    (zerop x)
+    (not (equal (fix x) (fix y))))))
+
+
+(prove-lemma all-non-nil-corresponding-replace-simple (rewrite)
+  (implies
+   (and
+    (all-non-nil-corresponding s r n)
+    (lessp n1 (length s)))
+   (equal
+    (all-non-nil-corresponding (replace-nth n1 v s) r n)
+    (or (corresponding-request v n1 r) (equal v nil) (lessp n1 n)))))
+
+(prove-lemma car-replace-nth (rewrite)
+  (equal (car (replace-nth n v s)) (if (zerop n) v (car s)))
+  ((expand (replace-nth 1 v s))))
+
+(prove-lemma not-corresponding-request-means (rewrite)
+  (implies
+   (and
+    (not (corresponding-request v1 n1 r))
+    (not (equal v1 nil))
+    (equal (nth n1 s) v1)
+    (lessp n1 (length s))
+    (not (lessp n1 n)))
+   (not (all-non-nil-corresponding s r n))))
+  
+(prove-lemma all-non-nil-corresponding-cons (rewrite)
+  (implies
+   (all-non-nil-corresponding (cons a b) r n)
+   (equal
+    (all-non-nil-corresponding (cons x b) r n)
+    (or (equal x nil) (corresponding-request x 0 r) (not (zerop n))))))
+
+
+(prove-lemma all-non-nil-corresponding-replace-replace (rewrite)
+  (implies
+   (and
+    (all-non-nil-corresponding s r n)
+    (lessp n1 (length s))
+    (lessp n2 (length s)))
+   (equal
+    (all-non-nil-corresponding (replace-nth n2 v2 (replace-nth n1 v1 s)) r n)
+    (and
+     (or (corresponding-request v1 n1 r) (equal v1 nil) (lessp n1 n) 
+         (equal (fix n1) (fix n2)))
+     (or (corresponding-request v2 n2 r) (equal v2 nil) (lessp n2 n))))))
+
+(prove-lemma nth-first-instance (rewrite)
+  (implies
+   (member v (nthcdr time s))
+   (equal (nth (first-instance time v s) s) v)))
+
+(prove-lemma car-corresponding-request-better (rewrite)
+  (equal
+   (car (corresponding-request v n r))
+   (if (corresponding-request v n r) v 0)))
+
+(prove-lemma equivalent-corresponding-requests nil
+  (implies
+   (and
+    (non-overlapping-requests3 (corresponding-request v n r) r)
+    (not (lessp n1 (cadr (corresponding-request v n r))))
+    (lessp n1 (caddr (corresponding-request v n r))))
+   (equal (corresponding-request v n1 r) (corresponding-request v n r))))
+   
+
+(prove-lemma lessp-n-1 (rewrite)
+  (equal
+   (lessp n 1)
+   (zerop n)))
+
+(prove-lemma member-corresponding-request-simplify (rewrite)
+  (implies
+   (cars-non-nil-litatoms r)
+   (iff
+    (member (corresponding-request v n r) r)
+    (corresponding-request v n r))))
+
+(prove-lemma member-corresponding-request2 (rewrite)
+  (implies
+   (and
+    (all-non-nil-corresponding s r n1)
+    (not (lessp n n1))
+    (lessp n (length s))
+    (cars-non-nil-litatoms r)
+    (not (equal (nth n s) nil)))
+   (member (corresponding-request (nth n s) n r) r)))
+
+
+;;; the best thereom would be about make-element-edf's preserving
+;;; all-non-nil-corresponding.  But we'll punt on that for now,
+;;; and use the fact that periodic request schedules are "full"
+;;; and thus all reasonable schedules have corresponding requests
+
+(defn all-nils-or-cars (s r)
+  (if (listp s)
+      (and
+       (or (equal (car s) nil) (assoc (car s) r))
+       (all-nils-or-cars (cdr s) r))
+    t))
+
+(prove-lemma corresponding-request-append (rewrite)
+  (iff
+   (corresponding-request v n (append r1 r2))
+   (or
+   (corresponding-request v n r1)
+   (corresponding-request v n r2))))
+
+(prove-lemma corresponding-request-different-name (rewrite)
+  (implies
+   (not (equal (car pt) tk))
+   (not (corresponding-request tk n (periodic-task-requests pt n1 n2)))))
+
+(prove-lemma corresponding-request-periodic-task (rewrite)
+  (implies
+   (and
+    (periodic-taskp pt)
+    (equal (remainder n1 (cadr pt)) 0)
+    (lessp n n2)
+    (not (lessp n n1)))
+   (iff (corresponding-request tk n (periodic-task-requests pt n1 n2))
+        (equal (car pt) tk))))
+
+(prove-lemma all-nils-or-cars-nlistp (rewrite)
+  (implies
+   (not (listp x))
+   (equal (all-nils-or-cars l x) (equal (plist l) (repeat (length l) nil)))))
+
+(prove-lemma assoc-nth-pts (rewrite)
+  (implies
+   (and
+    (lessp n (length s))
+    (all-nils-or-cars s pts)
+    (not (equal (nth n s) nil)))
+   (assoc (nth n s) pts)))
+
+(prove-lemma corresponding-request-periodic-tasks (rewrite)
+  (implies
+   (and
+    (assoc v pts)
+    (periodic-tasksp pts)
+    (equal (remainder n1 (cadr (assoc v pts))) 0)
+    (lessp n n2)
+    (not (lessp n n1)))
+   (corresponding-request v n (periodic-tasks-requests pts n1 n2)))
+  ((induct (length pts))))
+
+(prove-lemma all-nils-or-cars-replace-nth (rewrite)
+  (implies
+   (and
+    (all-nils-or-cars s r)
+    (lessp n (length s)))
+   (equal
+    (all-nils-or-cars (replace-nth n v s) r)
+    (or
+     (equal v nil)
+     (assoc v r)))))
+
+(prove-lemma all-non-nil-corresponding-periodic-requests (rewrite)
+  (implies
+   (and
+    (all-nils-or-cars s pts)
+    (periodic-tasksp pts)
+    (equal (fix n1) (length s)))
+   (all-non-nil-corresponding s (periodic-tasks-requests pts 0 n1) n)))
+
+(defn double-sub1-cdr-induct (n1 n2 s)
+  (if (zerop n2) t
+    (double-sub1-cdr-induct (sub1 n1) (sub1 n2) (cdr s))))
+
+(prove-lemma all-nils-or-cars-replace-nth-replace-nth (rewrite)
+  (implies
+   (and
+    (all-nils-or-cars s r)
+    (lessp n (length s))
+    (lessp n2 (length s)))
+   (equal
+    (all-nils-or-cars (replace-nth n v (replace-nth n2 v2 s)) r)
+    (and
+     (or (equal v nil) (assoc v r))
+     (or (equal v2 nil) (assoc v2 r) (equal (fix n) (fix n2))))))
+  ((induct (double-sub1-cdr-induct n n2 s))))
+
+(prove-lemma lessp-0-length-means-listp (rewrite)
+  (implies
+   (lessp n (length l))
+   (listp l)))
+
+(prove-lemma all-nils-or-cars-make-element-edf (rewrite)
+  (implies
+   (and
+    (all-nils-or-cars s pts)
+    (listp s)
+    (lessp n (length s)))
+   (all-nils-or-cars (make-element-edf s pts1 n) pts)))
+
+(prove-lemma make-schedule-edf-preserves-good-schedule (rewrite)
+  (implies
+   (and
+    (non-overlapping-requests r)
+    (cars-non-nil-litatoms r)
+    (all-litatoms s)
+    (all-non-nil-corresponding s r 0)
+    (all-nils-or-cars s pts)        ; not needed but useful
+    (good-schedule s r)
+    (equal r (periodic-tasks-requests pts 0 (length s)))
+    (periodic-tasksp pts))
+   (good-schedule (make-schedule-edf s r n) r))
+  ((induct (make-schedule-edf s r n))
+   (disable make-element-edf non-overlapping-requests)))
+
+;;;;;;;;;;;
+
+(prove-lemma non-overlapping-requests2-append (rewrite)
+  (equal
+   (non-overlapping-requests2 (append a b) r)
+   (and
+    (non-overlapping-requests2 a r)
+    (non-overlapping-requests2 b r))))
+
+(prove-lemma all-nils-or-cars-plist (rewrite)
+  (equal
+   (all-nils-or-cars (plist a) pts)
+   (all-nils-or-cars a pts)))
+
+(prove-lemma all-nils-or-cars-append (rewrite)
+  (equal
+   (all-nils-or-cars (append a b) pts)
+   (and
+    (all-nils-or-cars a pts)
+    (all-nils-or-cars b pts))))
+
+(prove-lemma all-nils-or-cars-repeat-list (rewrite)
+  (equal
+   (all-nils-or-cars (repeat-list l n) pts)
+   (or 
+    (zerop n)
+    (all-nils-or-cars l pts))))
+
+(prove-lemma all-nils-or-cars-make-length (rewrite)
+  (equal
+   (all-nils-or-cars (make-length n l nil) pts)
+   (if (lessp n (length l))
+     (all-nils-or-cars (firstn n l) pts)
+     (all-nils-or-cars l pts))))
+
+(prove-lemma all-nils-or-cars-repeat (rewrite)
+  (equal
+   (all-nils-or-cars (repeat n v) pts)
+   (or (equal v nil) (assoc v pts) (zerop n))))
+
+(prove-lemma all-nils-or-cars-substring-schedule (rewrite)
+  (implies
+   (cars-non-nil-litatoms pts)
+   (all-nils-or-cars (substring-schedule pts n) pts)))
+
+(prove-lemma all-nils-or-cars-firstn (rewrite)
+  (implies
+   (and
+    (all-nils-or-cars l pts)
+    (lessp n (length l)))
+   (all-nils-or-cars (firstn n l) pts)))
+
+(prove-lemma all-nils-or-cars-make-simple-schedule (rewrite)
+  (implies
+   (cars-non-nil-litatoms pts)
+   (all-nils-or-cars (make-simple-schedule pts bigp n) pts)))
+
+(prove-lemma length-make-simple-schedule (rewrite)
+  (implies
+   (equal (remainder n bigp) 0)
+   (equal (length (make-simple-schedule pts bigp n)) (fix n))))
+
+(prove-lemma periodic-tasksp-means-cars-non-nil-litatoms (rewrite)
+  (implies
+   (periodic-tasksp pts)
+   (cars-non-nil-litatoms pts)))
+
+(prove-lemma all-litatoms-append (rewrite)
+  (equal
+   (all-litatoms (append a b))
+   (and
+    (all-litatoms a)
+    (all-litatoms b))))
+    
+(prove-lemma all-litatoms-repeat-list (rewrite)
+  (equal
+   (all-litatoms (repeat-list l n))
+   (or
+    (zerop n)
+    (all-litatoms l))))
+
+(prove-lemma all-litatoms-make-length (rewrite)
+  (equal
+   (all-litatoms (make-length n l v))
+   (if (lessp (length l) n)
+       (and
+        (all-litatoms l)
+        (litatom v))
+     (all-litatoms (firstn n l)))))
+
+(prove-lemma all-litatoms-substring-schedule (rewrite)
+  (implies
+   (cars-non-nil-litatoms pts)
+   (all-litatoms (substring-schedule pts bigp))))
+
+(prove-lemma all-litatoms-make-simple-schedule (rewrite)
+  (implies
+   (cars-non-nil-litatoms pts)
+   (all-litatoms (make-simple-schedule pts bigp n))))
+
+(prove-lemma cars-non-nil-litatoms-periodic-tasks (rewrite)
+  (implies
+   (cars-non-nil-litatoms pts)
+   (cars-non-nil-litatoms (periodic-tasks-requests pts n1 n2))))
+
+(defn value-all-cars (v list)
+  (if (listp list)
+      (and
+       (equal (caar list) v)
+       (value-all-cars v (cdr list)))
+    t))
+
+(prove-lemma non-overlapping-requests3-append (rewrite)
+  (equal
+   (non-overlapping-requests3 v (append r1 r2))
+   (and
+    (non-overlapping-requests3 v r1)
+    (non-overlapping-requests3 v r2))))
+
+(prove-lemma value-all-cars-periodic-task-requests (rewrite)
+  (equal
+   (value-all-cars x (periodic-task-requests req n1 n2))
+   (or (not (listp (periodic-task-requests req n1 n2)))
+       (equal x (car req)))))
+
+(prove-lemma non-overlapping-requests2-value-all-cars (rewrite)
+  (implies
+   (and
+    (value-all-cars v list)
+    (not (assoc v r))
+    (cars-non-nil-litatoms r))
+   (equal (non-overlapping-requests2 r (append list r2))
+          (non-overlapping-requests2 r r2))))
+
+(prove-lemma assoc-append (rewrite)
+  (implies
+   (not (equal v 0))
+  (iff
+   (assoc v (append x y))
+   (or
+    (assoc v x)
+    (assoc v y)))))
+
+
+(prove-lemma assoc-periodic-task-requests (rewrite)
+  (implies
+    (not (equal v (car req)))
+    (not (assoc v (periodic-task-requests req n1 n2)))))
+
+
+(prove-lemma assoc-periodic-tasks-requests (rewrite)
+  (implies
+   (and
+    (not (equal v 0))
+    (not (assoc v list)))
+   (not (assoc v (periodic-tasks-requests list n1 n2)))))
+
+
+(prove-lemma non-overlapping-requests2-append-arg2 (rewrite)
+  (implies
+   (and
+    (not (assoc (car req) list))
+    (not (equal (car req) 0))
+    (cars-non-nil-litatoms list))
+   (equal 
+    (non-overlapping-requests2 
+     (periodic-tasks-requests list n1 n2)
+     (append (periodic-task-requests req n3 n4) y))
+    (non-overlapping-requests2 (periodic-tasks-requests list n1 n2) y)))
+  ((use (non-overlapping-requests2-value-all-cars 
+         (v (car req)) (list (periodic-task-requests req n3 n4))
+         (r (periodic-tasks-requests list n1 n2))
+         (r2 y)))))
+
+(prove-lemma non-overlapping-requests3-periodic-task (rewrite)
+  (implies
+   (not (lessp n1 end))
+   (non-overlapping-requests3 (list tk start end duration)
+                              (periodic-task-requests pt n1 n2))))
+
+(prove-lemma non-overlapping-requests3-task-name-difference (rewrite)
+  (implies
+   (not (equal (car pt) (car req)))
+   (non-overlapping-requests3 req (periodic-task-requests pt n1 n2))))
+
+(prove-lemma non-overlapping-requests3-name-difference (rewrite)
+  (implies
+   (and
+    (litatom (car req))
+    (not (assoc (car req) list)))
+   (non-overlapping-requests3 req (periodic-tasks-requests list n1 n2))))
+
+(prove-lemma non-overlapping-requests2-cons-too-big (rewrite)
+  (implies
+   (not (lessp n1 (caddr req)))
+  (equal
+   (non-overlapping-requests2 (periodic-task-requests tr n1 n2) (cons req r))
+   (non-overlapping-requests2 (periodic-task-requests tr n1 n2) r))))
+
+(prove-lemma non-overlapping-requests2-periodic-task (rewrite)
+  (implies
+   (not (assoc (car req) x))
+  (non-overlapping-requests2
+   (periodic-task-requests req n1 n2)
+   (append
+    (periodic-task-requests req n1 n2)
+    (periodic-tasks-requests x n3 n4)))))
+
+(prove-lemma non-overlapping-requests2-periodic-tasks (rewrite)
+  (implies
+   (periodic-tasksp pts)
+   (non-overlapping-requests2 
+    (periodic-tasks-requests pts 0 n)
+    (periodic-tasks-requests pts 0 n))))
+
+(prove-lemma non-overlapping-requests-periodic-tasks-requests (rewrite)
+  (implies
+   (periodic-tasksp pts)
+   (non-overlapping-requests (periodic-tasks-requests pts 0 n))))
+
+
+;;;; major lemma
+(prove-lemma edf-schedule-good-for-expanded (rewrite)
+  (implies
+   (and
+    (not (lessp bigp (length (substring-schedule pts bigp))))
+    (periodic-tasksp pts)
+    (expanded-tasksp pts bigp)
+    (lessp 0 bigp)
+    (zerop (remainder n bigp))
+    (zerop (remainder n (big-period pts))))
+    (good-schedule 
+     (make-schedule-edf (make-simple-schedule pts bigp n)
+                        (periodic-tasks-requests pts 0 n)
+                        0)
+     (periodic-tasks-requests pts 0 n)))
+  ((disable make-schedule-edf make-simple-schedule non-overlapping-requests)
+   (use (make-schedule-edf-preserves-good-schedule 
+         (s (make-simple-schedule pts bigp n))
+         (r (periodic-tasks-requests pts 0 n))
+         (n 0)))))
+
+;;;;;;;;;;;;;;;
+
+
+(defn every-nth (n list)
+  (if (zerop n) nil
+    (if (listp list)
+        (cons (car list)
+              (every-nth n (nthcdr n list)))
+      nil))
+  ((lessp (length list))))
+
+(defn expand-tasks-requests (tasks-requests n)
+  (if (listp tasks-requests) 
+      (cons (list (caar tasks-requests) 
+                  (times n (cadar tasks-requests))
+                  (times n (caddar tasks-requests))
+                  (times n (cadddar tasks-requests)))
+            (expand-tasks-requests (cdr tasks-requests) n))
+    nil))
+
+(prove-lemma expand-tasks-requests-append (rewrite)
+  (equal
+   (expand-tasks-requests (append a b) n)
+   (append (expand-tasks-requests a n) (expand-tasks-requests b n))))
+
+(prove-lemma listp-append (rewrite)
+  (equal
+   (listp (append a b))
+   (or (listp a) (listp b))))
+
+(prove-lemma listp-expand-tasks-requests (rewrite)
+  (equal
+   (listp (expand-tasks-requests l n))
+   (listp l)))
+
+(prove-lemma listp-task-requests (rewrite)
+  (equal
+   (listp (periodic-task-requests task n1 n2))
+   (and
+    (lessp n1 n2)
+    (periodic-taskp task))))
+
+(prove-lemma length-expand-tasks-requests (rewrite)
+  (equal
+   (length (expand-tasks-requests l n))
+   (length l)))
+
+(prove-lemma different-lengths-mean-different nil
+  (implies
+   (equal x y)
+   (equal (length x) (length y))))
+
+(prove-lemma equal-nthcdr-x-x (rewrite)
+  (equal
+   (equal (nthcdr n x) x)
+   (or
+    (zerop n)
+    (equal x 0)))
+  ((use (different-lengths-mean-different (x (nthcdr n x)) (y x)))))
+
+(defn length-periodic-task-request-induct (n1 period bigp n2)
+  (if (lessp 0 (times bigp period))
+      (if (lessp n1 n2) 
+          (length-periodic-task-request-induct (plus n1 (times bigp period))
+                                               period bigp n2)
+        t)
+    t)
+  ((lessp (difference n2 n1))))
+      
+(prove-lemma length-periodic-task-requests (rewrite)
+  (implies
+   (and
+    (lessp 0 bigp)
+    (lessp 0 period)
+    (equal (remainder n1 bigp) 0)
+    (equal (remainder n2 bigp) 0))
+   (equal
+    (length (periodic-task-requests (list name (times bigp period)
+                                          duration) n1 n2))
+    (length (periodic-task-requests (list name period duration)
+                                    (quotient n1 bigp) (quotient n2 bigp)))))
+  ((induct (length-periodic-task-request-induct n1 period bigp n2))))
+
+(prove-lemma plist-expand-tasks-requests (rewrite)
+  (equal
+   (plist (expand-tasks-requests task n))
+   (expand-tasks-requests task n)))
+
+(prove-lemma equal-plist-nil (rewrite)
+  (equal
+   (equal (plist l) nil)
+   (nlistp l)))
+
+(prove-lemma length-cons (rewrite)
+  (equal (length (cons a b)) (add1 (length b))))
+
+(prove-lemma cons-append-hack (rewrite)
+  (not (equal (cons a (append b c)) c))
+  ((use (different-lengths-mean-different (x c) (y (cons a (append b c)))))))
+
+(prove-lemma equal-append-b-append-b (rewrite)
+  (equal
+   (equal (append x b) (append y b))
+   (equal (plist x) (plist y)))
+  ((induct (double-cdr-induction x y))))
+
+(prove-lemma plist-periodic-task-requests (rewrite)
+  (equal
+   (plist (periodic-task-requests task n1 n2))
+   (periodic-task-requests task n1 n2)))
+
+(prove-lemma lessp-equal-times-x-a-x (rewrite)
+  (equal (lessp (times a b) a)
+         (and
+          (not (zerop a))
+          (zerop b))))
+
+(prove-lemma periodic-task-requests-expand (rewrite)
+  (implies
+   (and
+    (periodic-taskp pt)
+    (equal (remainder n1 bigp) 0)
+    (equal (remainder n2 bigp) 0)
+    (equal (remainder (cadr pt) bigp) 0)
+    (equal (remainder (caddr pt) bigp) 0)
+    (numberp n1))
+   (equal
+    (periodic-task-requests pt n1 n2)
+    (expand-tasks-requests 
+     (periodic-task-requests (cons (car pt) 
+                                   (cons (quotient (cadr pt) bigp)
+                                         (cons (quotient (caddr pt) bigp) 
+                                               (cdddr pt))))
+                             (quotient n1 bigp) (quotient n2 bigp))
+     bigp)))
+  ((induct (periodic-task-requests pt n1 n2))))
+
+
+(prove-lemma periodic-tasks-requests-expand (rewrite)
+  (implies
+   (and
+    (equal (remainder n1 bigp) 0)
+    (equal (remainder n2 bigp) 0)
+    (periodic-tasksp pts)
+    (numberp n1))
+   (equal
+    (periodic-tasks-requests (expand-tasks pts bigp) n1 n2)
+    (expand-tasks-requests 
+     (periodic-tasks-requests pts (quotient n1 bigp) (quotient n2 bigp))
+     bigp)))
+  ((induct (length pts))
+   (disable equal-append)))
+
+;;;;;
+
+(defn edf (lengthschedule r)
+  (if (zerop lengthschedule) nil
+    (let ((s (edf (sub1 lengthschedule) r)))
+      (let ((unfulfilled 
+             (unfulfilled (sub1 lengthschedule) s 
+                          (active-task-requests (sub1 lengthschedule) r))))
+        (if (listp unfulfilled)
+            (append s (list (name (least-deadline unfulfilled))))
+          (append s (list nil)))))))
+
+(prove-lemma length-edf-simple (rewrite)
+  (equal (length (edf n r)) (fix n)))
+
+(defn valid-requests (reqs)
+  (if (listp reqs)
+      (and
+       (litatom (caar reqs))
+       (not (equal (caar reqs) nil))
+       (numberp (cadar reqs))
+       (numberp (caddar reqs))
+       (lessp 0 (cadddar reqs))
+       (equal (cddddar reqs) nil)
+       (valid-requests (cdr reqs)))
+    (equal reqs nil)))
+
+(prove-lemma valid-requests-periodic-task (rewrite)
+   (equal
+    (valid-requests (periodic-task-requests pt n1 n2))
+    (or
+     (numberp n1)
+     (not (lessp n1 n2))
+     (not (periodic-taskp pt)))))
+
+(prove-lemma valid-requests-append (rewrite)
+  (implies
+   (equal (plist a) a)
+   (equal
+    (valid-requests (append a b))
+    (and
+     (valid-requests a)
+     (valid-requests b)))))
+
+(prove-lemma valid-requests-periodic-tasks (rewrite)
+   (equal
+    (valid-requests (periodic-tasks-requests pts n1 n2))
+    (or
+     (numberp n1)
+     (not (lessp n1 n2))
+     (not (periodic-tasksp pts))
+     (not (listp pts)))))
+
+(prove-lemma listp-active-task-requests-0 (rewrite)
+  (implies
+   (lessp n n2)
+   (equal
+    (listp (active-task-requests n (periodic-task-requests pt n1 n2)))
+    (and (periodic-taskp pt) (not (lessp n n1)))))
+  ((induct (periodic-task-requests pt n1 n2))))
+
+(prove-lemma active-task-requests-append (rewrite)
+  (equal
+   (active-task-requests n (append r1 r2))
+   (append
+    (active-task-requests n r1)
+    (active-task-requests n r2))))
+
+(prove-lemma listp-active-task-requests-0-multiple (rewrite)
+  (implies
+   (lessp n n2)
+   (equal
+    (listp (active-task-requests n (periodic-tasks-requests pts n1 n2)))
+    (and
+     (periodic-tasksp pts)
+     (not (lessp n n1))
+     (listp pts))))
+  ((induct (periodic-tasks-requests pts n1 n2))))
+
+(prove-lemma unfulfilled-0 (rewrite)
+  (implies
+   (valid-requests r)
+   (equal (unfulfilled 0 s r) r)))
+
+(prove-lemma valid-requests-active-task-requests (rewrite)
+  (implies
+   (valid-requests r)
+   (valid-requests (active-task-requests n r))))
+
+(prove-lemma lessp-0-length-means (rewrite)
+  (equal (lessp 0 (length l)) (listp l)))
+
+(prove-lemma listp-repeat (rewrite)
+  (equal (listp (repeat n v)) (not (zerop n))))
+
+(prove-lemma length-repeat (rewrite)
+  (equal (length (repeat n v)) (fix n)))
+
+(prove-lemma plist-append (rewrite)
+  (equal (plist (append x y)) (append x (plist y))))
+
+(prove-lemma length-plist (rewrite)
+  (equal (length (plist x)) (length x)))
+
+(prove-lemma listp-plist (rewrite)
+  (equal (listp (plist x)) (listp x)))
+
+(prove-lemma plist-edf-simple (rewrite)
+  (equal (plist (edf n r)) (edf n r)))
+
+
+(prove-lemma firstn-repeat (rewrite)
+  (equal
+   (firstn n1 (repeat n2 v))
+   (if (lessp n2 n1)
+       (append (repeat n2 v) (repeat (difference n1 n2) 0))
+     (repeat n1 v))))
+  
+(prove-lemma edf-simple-nlistp  (rewrite)
+  (implies
+   (not (listp r))
+   (equal (edf n r) (repeat n nil)))
+  ((expand (edf 1 r))))
+
+(prove-lemma make-schedule-edf-nlistp (rewrite)
+  (implies
+   (not (listp r))
+   (equal (make-schedule-edf s r n) s)))
+
+(prove-lemma replace-nth-nlistp (rewrite)
+  (implies
+   (nlistp l)
+   (equal (replace-nth n v l) (append (repeat n 0) (cons v 0)))))
+
+(prove-lemma plist-replace-nth2 (rewrite)
+  (equal (equal (plist (replace-nth n v s)) (replace-nth n v s))
+         (and
+          (equal (plist s) s)
+          (lessp n (length s)))))
+
+(prove-lemma plist-swap (rewrite)
+  (equal
+   (equal (plist (swap n1 n2 s)) (swap n1 n2 s))
+   (and (equal (plist s) s) (lessp n1 (length s)) (lessp n2 (length s)))))
+
+(prove-lemma plist-make-element-edf (rewrite)
+  (implies
+   (equal (plist s) s)
+   (equal (plist (make-element-edf s r n)) (make-element-edf s r n)))
+  ((disable swap)))
+
+(prove-lemma length-make-schedule-edf (rewrite)
+  (equal (length (make-schedule-edf s r n)) (length s)))
+
+(prove-lemma equal-nthcdr-nthcdr-from-nthcdr-plus1 (rewrite)
+  (implies
+   (and
+    (lessp n (length s1))
+    (lessp n (length s2))
+    (equal (nthcdr n (cdr s1)) (nthcdr n (cdr s2))))
+   (equal
+    (equal (nthcdr n s1) (nthcdr n s2))
+    (equal (nth n s1) (nth n s2)))))
+
+(prove-lemma lessp-first-instance2 (rewrite)
+  (implies
+   (first-instance n2 v l)
+   (not (lessp (first-instance n2 v l) n2))))
+
+(prove-lemma nth-make-schedule-edf-simple (rewrite)
+  (implies
+   (lessp n1 n2)
+   (equal (nth n1 (make-schedule-edf s r n2)) (nth n1 s))))
+
+(prove-lemma car-append (rewrite)
+  (equal
+   (car (append x y))
+   (if (listp x) (car x) (car y))))
+
+(prove-lemma listp-edf-simple (rewrite)
+  (equal (listp (edf n r)) (not (zerop n))))
+
+(prove-lemma unfulfilled-schedule-first-part-only (rewrite)
+  (implies
+   (lessp n (length s))
+   (equal (unfulfilled n s r) (unfulfilled n (firstn n s) r))))
+
+(prove-lemma firstn-n-edf-simple-n nil
+  (implies
+   (equal (fix n1) (fix n2))
+   (equal (firstn n1 (edf n2 r)) (edf n2 r))))
+
+(prove-lemma firstn-edf-simple-regular nil
+  (implies
+   (lessp n1 n2)
+   (equal (firstn n1 (edf n2 r)) (edf n1 r)))
+  ((induct (edf n2 r))))
+
+(prove-lemma firstn-edf-simple-help nil
+  (implies
+   (not (lessp n2 n1))
+   (equal (firstn n1 (edf n2 r)) (edf n1 r)))
+  ((use (firstn-edf-simple-regular) (firstn-n-edf-simple-n))))
+
+(prove-lemma firstn-edf-simple (rewrite)
+  (equal 
+   (firstn n1 (edf n2 r))
+   (if (lessp n2 n1) 
+       (append (edf n2 r) (repeat (difference n1 n2) 0))
+     (edf n1 r)))
+  ((use (firstn-too-big (x (edf n2 r)) (n n1))
+        (firstn-edf-simple-help))))
+
+(prove-lemma nth-append (rewrite)
+  (equal (nth n (append x y))
+         (if (lessp n (length x)) 
+             (nth n x) 
+           (nth (difference n (length x)) y))))
+
+; dangerous - must use in special rules
+(prove-lemma nth-edf-simple-simpler nil
+  (implies
+   (lessp n n2)
+   (equal (nth n (edf n2 r)) (nth n (edf (add1 n) r))))
+  ((induct (edf n2 r))))
+
+(prove-lemma active-task-requests-nnumberp (rewrite)
+  (implies
+   (not (numberp n))
+   (equal (active-task-requests n r) (active-task-requests 0 r))))
+
+(prove-lemma unfulfilled-nnumberp (rewrite)
+  (implies
+   (not (numberp n))
+   (equal (unfulfilled n s r) (unfulfilled 0 s r))))
+
+(prove-lemma nth-edf-simple (rewrite)
+  (equal (nth n (edf n2 r))
+         (if (lessp n n2)
+             (if (listp (unfulfilled n (edf n r) 
+                                     (active-task-requests n r)))
+                 (car (least-deadline 
+                       (unfulfilled n (edf n r) 
+                                    (active-task-requests n r))))
+               nil)
+           0))
+  ((use (nth-edf-simple-simpler))
+   (expand (edf (add1 n) r))
+   (enable edf length-edf-simple nth-too-big nth-append nth
+           unfulfilled-nnumberp active-task-requests-nnumberp)
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr naturals)))
+
+(prove-lemma equal-cdr-cdr-means (rewrite)
+  (implies
+   (and
+    (equal (cdr x) (cdr y))
+    (listp x)
+    (listp y))
+   (equal
+    (equal x y)
+    (equal (car x) (car y)))))
+
+(disable equal-cdr-cdr-means)
+
+(prove-lemma first-instance-same-as-member (rewrite)
+  (implies
+   n
+  (iff
+   (first-instance n v s)
+   (member v (nthcdr n s)))))
+
+(prove-lemma nth-make-element-edf (rewrite)
+  (implies
+   n
+  (equal
+   (nth n (make-element-edf s r n))
+   (if (and (listp (unfulfilled n s (active-task-requests n r)))
+            (first-instance n (car (least-deadline 
+                                    (unfulfilled n s 
+                                                 (active-task-requests n r))))
+                            s))
+       (car (least-deadline 
+             (unfulfilled n s (active-task-requests n r))))
+     (nth n s)))))
+
+(prove-lemma unfulfilled-append (rewrite)
+  (equal
+   (unfulfilled n s (append r1 r2))
+   (append (unfulfilled n s r1) (unfulfilled n s r2))))
+
+(defn no-unfulfilled-active-task-induct (pts oldpts)
+  (if (nlistp pts) t
+    (no-unfulfilled-active-task-induct (cdr pts) 
+                                       (append oldpts (list (car pts))))))
+
+(prove-lemma periodic-tasksp-append-car (rewrite)
+  (implies
+   (and
+    (periodic-tasksp (append x y))
+    (listp y))
+   (periodic-tasksp (append x (list (car y))))))
+
+(prove-lemma assoc-plist (rewrite)
+  (equal (assoc v (plist l)) (assoc v l)))
+
+(prove-lemma all-nils-or-cars-plist2 (rewrite)
+  (equal (all-nils-or-cars l1 (plist l2))
+         (all-nils-or-cars l1 l2)))
+
+;; bad bad bad
+(prove-lemma assoc-append-simple (rewrite)
+  (implies
+   (and
+    (not (assoc v l))
+    (periodic-tasksp l))
+   (equal (assoc v (append l l2)) (assoc v l2))))
+
+(prove-lemma listp-unfulfilled-if-schedule-contains (rewrite)
+  (implies
+   (and
+    (periodic-taskp pt)
+    (good-schedule s (periodic-task-requests pt n1 n2))
+    (equal (nth n s) (car pt))
+    (lessp n n2)
+    (not (lessp n n1)))
+   (listp (unfulfilled 
+           n 
+           (firstn n s) 
+           (active-task-requests n (periodic-task-requests pt n1 n2))))))
+    
+(prove-lemma no-unfulfilled-active-task-if-nil-help nil
+  (implies
+   (and
+    (not (equal (nth n s) nil))
+    (periodic-tasksp (append oldpts pts))
+    (periodic-tasksp oldpts)  ; speeds proof
+    (periodic-tasksp pts)     ; speeds proof
+    (good-schedule s (periodic-tasks-requests pts n1 n2))
+    (all-nils-or-cars s (append oldpts pts))
+    (lessp n n2)
+    (lessp n (length s))
+    (not (lessp n n1)))
+   (or 
+    (listp 
+     (unfulfilled 
+      n
+      (firstn n s) 
+      (active-task-requests n (periodic-tasks-requests pts n1 n2))))
+    (assoc (nth n s) oldpts)))
+  ((induct (no-unfulfilled-active-task-induct pts oldpts))))
+
+(prove-lemma no-unfulfilled-active-task-if-nil (rewrite)
+  (implies
+   (and
+    (not (equal (nth n s) nil))
+    (periodic-tasksp pts)
+    (good-schedule s (periodic-tasks-requests pts n1 n2))
+    (all-nils-or-cars s pts)
+    (lessp n n2)
+    (lessp n (length s))
+    (not (lessp n n1)))
+   (listp 
+    (unfulfilled 
+     n
+     (firstn n s) 
+     (active-task-requests n (periodic-tasks-requests pts n1 n2)))))
+  ((use (no-unfulfilled-active-task-if-nil-help (oldpts nil)))))
+
+(prove-lemma replace-nth-first-instance-nnumberp (rewrite)
+  (implies
+   (not (numberp n))
+   (equal (replace-nth (first-instance n v s) v2 l)
+          (replace-nth (first-instance 0 v s) v2 l))))
+
+(prove-lemma make-element-nnumberp (rewrite)
+  (implies
+   (not (numberp n))
+   (equal (make-element-edf s r n)
+          (make-element-edf s r 0))))
+
+;; versions of nth- theorems with n = 0
+
+(prove-lemma car-make-schedule-edf-simple (rewrite)
+  (implies
+   (lessp 0 n2)
+   (equal (car (make-schedule-edf s r n2)) (car s)))
+  ((use (nth-make-schedule-edf-simple (n1 0)))
+   (disable nth-make-schedule-edf-simple)))
+
+(prove-lemma car-edf-simple (rewrite)
+  (equal (car (edf n2 r))
+         (if (lessp 0 n2)
+             (if (listp (unfulfilled 0 (edf 0 r) 
+                                     (active-task-requests 0 r)))
+                 (car (least-deadline 
+                       (unfulfilled 0 (edf 0 r) 
+                                    (active-task-requests 0 r))))
+               nil)
+           0))
+  ((use (nth-edf-simple (n 0)))
+   (disable nth-edf-simple)))
+
+
+(prove-lemma car-repeat (rewrite)
+  (equal
+   (car (repeat n v))
+   (if (zerop n) 0 v)))
+
+(prove-lemma numberp-first-instance (rewrite)
+  (implies
+   (numberp n)
+   (equal (numberp (first-instance n v l))
+          (member v (nthcdr n l)))))
+   
+(prove-lemma nth-make-element-simple (rewrite)
+  (implies (lessp n1 n2)
+           (equal (nth n1 (make-element-edf s r n2))
+                  (nth n1 s))))
+
+(prove-lemma car-make-element-simple (rewrite)
+  (implies
+   (not (zerop n))
+   (equal (car (make-element-edf s r n))
+          (car s)))
+  ((use (nth-make-element-simple (n2 n) (n1 0)))
+   (disable nth-make-element-simple)))
+
+
+(prove-lemma car-make-element-edf (rewrite)
+  (equal
+   (car (make-element-edf s r n))
+   (if (and (zerop n)
+            (listp (unfulfilled 0 s (active-task-requests 0 r)))
+            (first-instance 0 (car (least-deadline 
+                                    (unfulfilled 0 s 
+                                                 (active-task-requests 0 r))))
+                            s))
+       (car (least-deadline 
+             (unfulfilled 0 s (active-task-requests 0 r))))
+     (car s)))
+  ((use (nth-make-element-edf (n 0)))
+   (disable nth-make-element-edf)))
+
+(prove-lemma firstn-make-element-simple (rewrite)
+  (implies
+   (not (lessp n2 n1))
+   (equal (firstn n1 (make-element-edf s r n2))
+          (firstn n1 s))))
+
+(prove-lemma firstn-sub1-cdr-make-element (rewrite)
+  (implies
+   (not (zerop n))
+  (equal
+   (firstn (sub1 n) (cdr (make-element-edf s r n)))
+   (firstn (sub1 n) (cdr s))))
+  ((use (firstn-make-element-simple (n1 n) (n2 n)))
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr)
+   (enable firstn)))
+
+(prove-lemma nthcdr-n-cons-firstn-n (rewrite)
+  (equal
+   (nthcdr n (cons a (firstn n l)))
+   (if (zerop n) (list a) (list (nth (sub1 n) l)))))
+
+(prove-lemma nth-make-element-edf-sub1 (rewrite)
+  (implies
+   (not (zerop n))
+  (equal
+   (nth (sub1 n) (cdr (make-element-edf s r n)))
+   (if (and (listp (unfulfilled n s (active-task-requests n r)))
+            (first-instance n (car (least-deadline 
+                                    (unfulfilled n s 
+                                                 (active-task-requests n r))))
+                            s))
+       (car (least-deadline 
+             (unfulfilled n s (active-task-requests n r))))
+     (nth n s))))
+  ((use (nth-make-element-edf))
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr)
+   (enable nth)))
+
+(prove-lemma equal-repeat-when-nil-not (rewrite)
+  (implies
+   (not (equal (car s) v))
+   (equal (equal s (repeat (length s) v))
+          (equal s nil))))
+
+(prove-lemma member-car-schedule (rewrite)
+  (implies
+   (and
+    (good-schedule s rs)
+    (valid-requests rs)
+    (member r rs))
+   (member (car r) s)))
+
+(prove-lemma sublistp-remove-until (rewrite)
+  (implies
+   (sublistp x (remove-until v y))
+   (sublistp x y)))
+
+(prove-lemma member-nil-periodic-task-requests (rewrite)
+  (not (member nil (periodic-task-requests pt n1 n2))))
+
+(prove-lemma member-nil-periodic-tasks-requests (rewrite)
+  (not (member nil (periodic-tasks-requests pts n1 n2))))
+
+(prove-lemma member-least-deadline-better (rewrite)
+  (implies
+   (and
+    (sublistp r1 r2)
+    (not (member nil r2)))
+   (equal
+    (member (least-deadline r1) r2)
+    (listp r1)))
+  ((induct (least-deadline r1))))
+
+(prove-lemma make-schedule-edf-is-edf-simple nil
+  (implies
+   (and
+    (non-overlapping-requests r)
+    (cars-non-nil-litatoms r)
+    (all-litatoms s)
+    (good-schedule s r)
+    (equal (plist s) s)
+    (all-non-nil-corresponding s r 0)
+    (equal r (periodic-tasks-requests pts 0 (length s)))
+    (all-nils-or-cars s pts)
+    (periodic-tasksp pts)
+    (equal (edf n r) (firstn n s))
+    (not (lessp (length s) n)))
+   (equal 
+    (nthcdr n (make-schedule-edf s r n))
+    (nthcdr n (edf (length s) r))))
+  ((induct (make-schedule-edf s r n))
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr )
+   (enable difference-leq-arg1 difference-add1-arg2 equal-sub1-0
+    periodic-tasksp periodic-tasks-requests repeat firstn nthcdr length
+    length-firstn equal-length-0 plist good-schedule
+    active-task-requests unfulfilled least-deadline
+    length-make-element-edf make-schedule-edf append-nil
+    firstn-length-list member-car-x-x periodic-tasks-requests-simple
+    non-overlapping-requests plist-firstn equal-append nthcdr-1
+    nlistp-nthcdr firstn-cons firstn-firstn firstn-1 nthcdr-repeat
+    firstn-nlistp cars-non-nil-litatoms all-non-nil-corresponding
+    all-litatoms member-least-deadline
+    unfulfilled-task-later-in-good-schedule
+    sublistp-active-task-requests
+    make-element-edf-preserves-good-schedule
+    make-element-edf-preserves-all-litatoms lessp-n-1 all-nils-or-cars
+    all-nils-or-cars-nlistp all-non-nil-corresponding-periodic-requests
+    lessp-0-length-means-listp all-nils-or-cars-make-element-edf
+    periodic-tasksp-means-cars-non-nil-litatoms
+    cars-non-nil-litatoms-periodic-tasks
+    non-overlapping-requests-periodic-tasks-requests length-cons
+    edf length-edf-simple valid-requests-periodic-tasks
+    listp-active-task-requests-0-multiple unfulfilled-0
+    valid-requests-active-task-requests lessp-0-length-means
+    edf-simple-nlistp make-schedule-edf-nlistp plist-make-element-edf
+    length-make-schedule-edf equal-nthcdr-nthcdr-from-nthcdr-plus1
+    nth-make-schedule-edf-simple car-append listp-edf-simple
+    unfulfilled-schedule-first-part-only nth-edf-simple
+    equal-cdr-cdr-means first-instance-same-as-member
+    nth-make-element-edf no-unfulfilled-active-task-if-nil
+    make-element-nnumberp car-make-schedule-edf-simple car-edf-simple
+    car-make-element-edf firstn-sub1-cdr-make-element
+    nthcdr-n-cons-firstn-n nth-make-element-edf-sub1
+    member-car-schedule member-least-deadline-better
+    member-nil-periodic-tasks-requests)))
+
+;;; big lemma
+(prove-lemma make-schedule-edf-is-edf (rewrite)
+  (implies
+   (and
+    (periodic-tasksp pts)
+    (cars-non-nil-litatoms (periodic-tasks-requests pts 0 (length s)))
+    (all-litatoms s)
+    (good-schedule s (periodic-tasks-requests pts 0 (length s)))
+    (equal (plist s) s)
+    (all-non-nil-corresponding s (periodic-tasks-requests pts 0 (length s)) 0)
+    (all-nils-or-cars s pts)
+    (periodic-tasksp pts)
+    (equal n (length s)))
+   (equal 
+    (make-schedule-edf s (periodic-tasks-requests pts 0 n) 0)
+    (edf (length s) (periodic-tasks-requests pts 0 (length s)))))
+  ((use (make-schedule-edf-is-edf-simple 
+         (n 0) 
+         (r (periodic-tasks-requests pts 0 (length s)))))
+   (disable non-overlapping-requests)))
+
+(prove-lemma plist-make-simple-schedule (rewrite)
+  (equal (plist (make-simple-schedule pts bigp length))
+         (make-simple-schedule pts bigp length)))
+
+
+(defn cpu-utilization (pts bigp)
+  (if (listp pts)
+      (plus (quotient (times bigp (tk-duration (car pts))) 
+                      (tk-period (car pts)))
+            (cpu-utilization (cdr pts) bigp))
+    0))
+
+(prove-lemma length-substring-schedule (rewrite)
+  (implies
+   (and
+    (expanded-tasksp pts bigp)
+    (periodic-tasksp pts))
+   (equal (length (substring-schedule pts bigp))
+          (cpu-utilization pts bigp))))
+
+;; combine big lemmas
+(prove-lemma good-edf-for-expanded (rewrite)
+  (implies
+   (and
+    (expanded-tasksp pts bigp)
+    (not (lessp bigp (cpu-utilization pts bigp)))
+    (periodic-tasksp pts)
+    (equal (remainder n bigp) 0)
+    (equal (remainder n (big-period pts)) 0))
+   (good-schedule 
+    (edf n (periodic-tasks-requests pts 0 n))
+    (periodic-tasks-requests pts 0 n)))
+  ((use (edf-schedule-good-for-expanded))
+   (disable make-simple-schedule)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn expand-list (n list)
+  (if (listp list)
+      (append (repeat n (car list)) 
+              (expand-list n (cdr list)))
+    nil))
+
+(prove-lemma expand-list-append (rewrite)
+  (equal
+   (expand-list n (append l1 l2))
+   (append (expand-list n l1) (expand-list n l2))))
+
+(prove-lemma listp-expand-list (rewrite)
+  (equal
+   (listp (expand-list n list))
+   (and
+    (not (zerop n))
+    (listp list))))
+
+(prove-lemma length-expand-list (rewrite)
+  (equal
+   (length (expand-list n list))
+   (times n (length list))))
+
+(prove-lemma plist-expand-list (rewrite)
+  (equal (plist (expand-list n list)) (expand-list n list)))
+
+(prove-lemma nthcdr-is-nil (rewrite)
+  (equal
+   (equal (nthcdr n l) nil)
+   (and
+    (equal (length l) (fix n))
+    (equal (plist l) l))))
+
+(prove-lemma active-task-requests-expand-tasks-requests (rewrite)
+  (implies
+   (not (zerop bigp))
+  (equal
+   (active-task-requests n (expand-tasks-requests r bigp))
+   (expand-tasks-requests (active-task-requests (quotient n bigp) r) bigp)))
+  ((induct (expand-tasks-requests r bigp))))
+
+(prove-lemma repeat-1 (rewrite)
+  (equal (repeat 1 v) (list v))
+  ((expand (repeat 1 v))))
+
+(disable lessp-difference-special)
+
+(prove-lemma quotient-add1-plus-special (rewrite)
+  (equal (quotient (add1 (plus z (times bigp v))) bigp)
+         (if (zerop bigp) 0
+           (plus v (quotient (add1 z) bigp))))
+  ((use (quotient-plus-proof (a (add1 z)) (c bigp) (b (times bigp v))))))
+
+(prove-lemma remainder-add1-plus-special (rewrite)
+  (equal (remainder (add1 (plus z (times bigp v))) bigp)
+         (if (zerop bigp) (add1 z)
+           (remainder (add1 z) bigp)))
+  ((use (remainder-plus-proof (a (add1 z)) (c bigp) (b (times bigp v))))))
+
+(prove-lemma plist-nthcdr (rewrite)
+  (implies
+   (and
+    (not (lessp (length l) n))
+    (equal (plist l) l))
+   (equal (plist (nthcdr n l)) (nthcdr n l))))
+
+(prove-lemma remainder-plus-add1-hack (rewrite)
+  (and
+   (equal (remainder (plus z (times v z)) (add1 v)) 0)
+   (equal (remainder (plus z (times z v)) (add1 v)) 0))
+  ((use (remainder-times1-instance-proof (y (add1 v)) (x z)))
+   (disable remainder-times1-instance)))
+
+(prove-lemma quotient-plus-add1-hack (rewrite)
+  (and
+   (equal (quotient (plus z (times v z)) (add1 v)) (fix z))
+   (equal (quotient (plus z (times z v)) (add1 v)) (fix z)))
+  ((use (quotient-times-instance-temp-proof (y (add1 v)) (x z)))))
+
+(prove-lemma equal-remainder-sub1-0 (rewrite)
+  (implies
+   (equal (remainder x y) 0)
+   (equal (remainder (sub1 x) y)
+          (if (zerop x) 0
+          (if (zerop y) (sub1 x)
+            (if (equal y 1) 0
+              (sub1 y)))))))
+
+(prove-lemma lessp-round-means (rewrite)
+  (equal
+   (lessp (times bigp (quotient n bigp)) n)
+   (or
+    (not (equal (remainder n bigp) 0))
+    (and
+     (zerop bigp)
+     (not (zerop n))))))
+
+
+(prove-lemma equal-repeat-nil (rewrite)
+  (equal 
+   (equal (repeat n v) nil)
+   (zerop n)))
+
+(prove-lemma times-1-arg2 (rewrite)
+  (equal (times x 1) (fix x)))
+
+(prove-lemma firstn-0 (rewrite)
+  (equal (firstn 0 l) nil))
+
+(prove-lemma lessp-times-sub1-sub1 (rewrite)
+  (equal
+   (lessp (times bigp (sub1 (quotient n bigp))) (sub1 n))
+   (and
+    (lessp 1 n)
+    (not (equal bigp 1)))))
+
+(prove-lemma equal-cons-repeat (rewrite)
+  (equal
+   (equal (cons a b) (repeat n v))
+   (and
+    (equal a v)
+    (not (zerop n))
+    (equal b (repeat (sub1 n) v)))))
+
+(prove-lemma lessp-1-means (rewrite)
+  (equal
+   (lessp 1 x)
+   (and (not (zerop x)) (not (equal x 1)))))
+
+(prove-lemma lessp-sub1-plus-hack (rewrite)
+  (equal
+   (lessp n1 (sub1 (plus n2 n1)))
+   (lessp 1 n2)))
+
+;; backwards
+(prove-lemma firstn-nthcdr (rewrite)
+   (equal (firstn x (nthcdr n s))
+          (nthcdr n (firstn (plus n x) s))))
+
+(disable firstn-nthcdr)
+
+(prove-lemma nthcdr-x-firstn-x (rewrite)
+  (equal (nthcdr n (firstn n l)) nil))
+
+(prove-lemma nthcdr-x-edf-x (rewrite)
+  (equal (nthcdr n (edf n r)) nil))
+
+(prove-lemma nth-cons (rewrite)
+  (equal (nth n (cons a b))
+         (if (zerop n) a (nth (sub1 n) b))))
+
+(prove-lemma firstn-nthcdr-too-big (rewrite)
+  (implies
+   (lessp n (length l))
+   (equal
+    (firstn (difference n z) (nthcdr z l))
+    (if (lessp n z) nil (nthcdr z (firstn n l)))))
+  ((induct (difference n z))))
+
+(prove-lemma firstn-nthcdr-edf-plus (rewrite)
+  (equal
+   (firstn (difference n1 n2) (nthcdr n2 (edf (plus z n1) r)))
+   (firstn (difference n1 n2) (nthcdr n2 (edf n1 r))))
+  ((disable-theory t)
+   (use (firstn-nthcdr-too-big (l (edf (plus z n1) r)) (n n1) (n2 z)))
+   (enable firstn firstn-nthcdr edf nthcdr-x-firstn-x firstn-edf-simple
+           repeat nthcdr-x-edf-x nthcdr length-append
+           nthcdr-repeat nthcdr-x-firstn-x nthcdr-append length-edf-simple)
+   (enable-theory ground-zero task-abbr naturals)))
+
+(defn nthcdr-expand-induct (n b l)
+  (if (listp l)
+      (if (lessp b n)
+          (nthcdr-expand-induct (difference n b) b (cdr l))
+        t)
+    t))
+        
+(prove-lemma nthcdr-expand-list (rewrite)
+  (implies
+   (equal (remainder n b) 0)
+   (equal
+    (nthcdr n (expand-list b l))
+    (if (lessp (times b (length l)) n) 
+        0
+      (expand-list b (nthcdr (quotient n b) l)))))
+  ((induct (nthcdr-expand-induct n b l))
+   (disable quotient-difference quotient-difference1)))
+
+(prove-lemma expand-list-repeat (rewrite)
+  (equal (expand-list b (repeat n v)) (repeat (times n b) v))
+  ((induct (times n b))))
+
+(prove-lemma firstn-expand-list (rewrite)
+  (implies
+   (equal (remainder n b) 0)
+  (equal
+   (firstn n (expand-list b l))
+   (expand-list b (firstn (quotient n b) l))))
+  ((induct (nthcdr-expand-induct n b l))
+   (disable quotient-difference quotient-difference1)))
+
+(prove-lemma occurrences-expand-list (rewrite)
+  (equal
+   (occurrences v (expand-list bigp l))
+   (times bigp (occurrences v l))))
+
+(prove-lemma expand-list-0 (rewrite)
+  (implies
+   (zerop n)
+   (equal (expand-list n l) nil)))
+
+(prove-lemma listp-firstn (rewrite)
+  (equal (listp (firstn n l)) (not (zerop n))))
+
+(prove-lemma equal-nil-firstn (rewrite)
+  (equal (equal nil (firstn n l)) (zerop n)))
+
+(prove-lemma firstn-difference-plus-nthcdr (rewrite)
+  (implies
+   (and
+    (not (lessp (length l) (plus a b)))
+    (not (lessp b c)))
+  (equal
+   (firstn (difference (plus a b) c) (nthcdr c l))
+   (append
+    (firstn (difference b c) (nthcdr c l))
+    (firstn a (nthcdr b l))))))
+
+(prove-lemma lessp-occurrences-firstn (rewrite)
+  (not (lessp n (occurrences v (firstn n l)))))
+
+(disable lessp-occurrences-firstn)
+
+(prove-lemma lessp-occurrences-edf (rewrite)
+  (not (lessp n (occurrences v (edf n r))))
+  ((use (lessp-occurrences-firstn (l (edf n r))))))
+
+(prove-lemma equal-times-hack (rewrite)
+  (implies
+   (lessp a b)
+   (equal 
+    (equal a (times b n))
+    (and
+     (equal a 0)
+     (not (zerop b))
+     (zerop n)))))
+
+(prove-lemma equal-occurrences-firstn-times (rewrite)
+  (implies
+   (lessp z b)
+  (equal
+   (equal (occurrences v (firstn z l)) (times b n))
+   (and
+    (zerop n)
+    (zerop (occurrences v (firstn z l))))))
+  ((use (lessp-occurrences-firstn (n z)))))
+
+
+(prove-lemma firstn-plus (rewrite)
+  (equal (firstn (plus a b) l)
+         (append (firstn b l) (firstn a (nthcdr b l)))))
+
+(prove-lemma equal-plus-times (rewrite)
+  (implies
+   (lessp z b)
+   (equal 
+    (equal (plus (times b n) z) (times b v))
+    (and
+     (zerop z)
+     (equal (fix n) (fix v)))))
+  ((induct (double-sub1-induction n v))))
+
+(prove-lemma firstn-noop (rewrite)
+  (implies
+   (equal (length l) (fix n))
+   (equal (firstn n l) (plist l))))
+
+(prove-lemma lessp-x-x (rewrite)
+  (equal (lessp x x) f))
+
+(prove-lemma overlapping-non-overlapping3-means (rewrite)
+  (implies
+   (and
+    (non-overlapping-requests3 r r2)
+    (not (lessp x (cadr r)))
+    (equal (car req) (car r))
+    (not (lessp x (cadr req)))
+    (lessp x (caddr r))
+    (member req r2))
+   (equal (lessp x (caddr req)) (equal r req)))
+  ((induct (non-overlapping-requests3 r r2))
+   (disable-theory t)
+   (enable non-overlapping-requests3)
+   (enable-theory ground-zero task-abbr naturals)))
+
+(prove-lemma assoc-unfulfilled-expanded-non-overlapping (rewrite)
+  (implies
+   (and
+    (not (member r r2))
+    (non-overlapping-requests3 r r2)
+    (lessp z b)
+    (lessp x (caddr r))
+    (not (lessp x (cadr r))))
+   (not (assoc (car r) 
+               (unfulfilled (plus z (times b x)) s 
+                            (expand-tasks-requests (active-task-requests x r2)
+                                                   b)))))
+  ((induct (non-overlapping-requests3 r r2))
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr naturals)
+   (enable   LISTP-BAGINT-WITH-SINGLETON-IMPLIES-MEMBER
+             expand-tasks-requests unfulfilled
+             NON-OVERLAPPING-REQUESTS3 ACTIVE-TASK-REQUESTS)))
+
+(prove-lemma not-assoc-car-req (rewrite)
+  (implies
+   (and
+    (valid-requests r2)
+    (member req r2)
+    (lessp x (caddr req))
+    (not (lessp x (cadr req)))
+    (non-overlapping-requests r2)
+    (lessp z b)
+    (equal (occurrences (car req) 
+                        (firstn (difference (plus z (times b x))
+                                            (times b (cadr req)))
+                                (nthcdr (times b (cadr req)) s)))
+           (times b (cadddr req))))
+   (not (assoc (car req) 
+               (unfulfilled (plus z (times b x))
+                            s
+                            (expand-tasks-requests (active-task-requests x r2)
+                                                   b)))))
+  ((induct (active-task-requests x r2))
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr naturals)
+   (enable overlapping-non-overlapping3-means
+           valid-requests non-overlapping-requests2 
+           non-overlapping-requests3       non-overlapping-requests2
+           assoc-unfulfilled-expanded-non-overlapping
+           non-overlapping-requests active-task-requests 
+           NON-OVERLAPPING-REQUESTS-CDR equal-occurrences-zero
+           expand-tasks-requests unfulfilled)))
+           
+(prove-lemma equal-car-car-hack (rewrite)
+  (implies
+   (and
+    (member e1 l)
+    (not (assoc (car e2) l))
+    (valid-requests l)
+    (listp e1)
+    (listp e2))
+   (not (equal (car e1) (car e2)))))
+
+(prove-lemma not-member-nthcdr-add1 (rewrite)
+  (implies
+   (not (member v (nthcdr (add1 x) s)))
+   (equal (member v (nthcdr x s)) 
+          (and
+           (lessp x (length s))
+           (equal v (nth x s))))))
+
+(prove-lemma occurrences-hack (rewrite)
+  (implies
+   (and
+   (not (member v (nthcdr n s)))
+   (not (lessp n b))
+   (litatom v))
+   (equal 
+    (occurrences v (firstn (difference (plus a n) b) (nthcdr b s)))
+    (occurrences v (firstn (difference n b) (nthcdr b s)))))
+  ((induct (plus n a))))
+
+(prove-lemma occurrences-hack2 (rewrite)
+  (implies
+   (and
+    (not (member v (nthcdr n l)))
+    (lessp n (length l)))
+    (equal (occurrences v (nthcdr n1 l))
+           (occurrences v (nthcdr n1 (firstn n l))))))
+
+(prove-lemma valid-requests-unfulfilled (rewrite)
+  (implies
+   (valid-requests r)
+   (valid-requests (unfulfilled n s r))))
+
+
+(prove-lemma valid-requests-expand-tasks-requests (rewrite)
+  (implies
+   (valid-requests r)
+   (equal
+    (valid-requests (expand-tasks-requests r b))
+    (or
+     (not (zerop b))
+     (not (listp r))))))
+
+(prove-lemma litatom-caar (rewrite)
+  (implies
+   (valid-requests r)
+   (equal (litatom (caar r)) (listp r))))
+
+(disable litatom-caar)
+
+(prove-lemma numberp-cadar (rewrite)
+  (implies
+   (valid-requests r)
+   (numberp (cadar r))))
+
+(disable numberp-cadar)
+
+(prove-lemma not-equal-car-least-deadline (rewrite)
+  (implies
+   (and
+    (valid-requests r2)
+    (member req r2)
+    (lessp x (caddr req))
+    (not (lessp x (cadr req)))
+    (non-overlapping-requests r2)
+    (lessp z b)
+    (not (zerop b))
+    (litatom (car req))
+    (equal (occurrences (car req) 
+                        (firstn (difference (plus z (times b x))
+                                            (times b (cadr req)))
+                                (nthcdr (times b (cadr req)) s)))
+           (times b (cadddr req))))
+   (not (equal
+         (car req)
+         (car (least-deadline
+               (unfulfilled (plus z (times b x))
+                            s
+                            (expand-tasks-requests (active-task-requests x r2)
+                                                   b)))))))
+  ((use (equal-car-car-hack 
+         (e1 (least-deadline
+              (unfulfilled (plus z (times b x))
+                           s
+                           (expand-tasks-requests (active-task-requests x r2)
+                                                  b))))
+         (l  (unfulfilled (plus z (times b x))
+                           s
+                           (expand-tasks-requests (active-task-requests x r2)
+                                                  b)))
+         (e2 req)))
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr naturals)
+   (enable member-least-deadline not-assoc-car-req least-deadline
+           valid-requests-unfulfilled valid-requests-active-task-requests
+           valid-requests-expand-tasks-requests)))
+
+(prove-lemma not-equal-car-least-deadline-special (rewrite)
+  (implies
+   (and
+    (valid-requests r2)
+    (member req r2)
+    (lessp x (caddr req))
+    (not (lessp x (cadr req)))
+    (non-overlapping-requests r2)
+    (not (zerop b))
+    (litatom (car req))
+    (equal (occurrences (car req) 
+                        (firstn (difference (times b x)
+                                            (times b (cadr req)))
+                                (nthcdr (times b (cadr req)) s)))
+           (times b (cadddr req))))
+   (not (equal
+         (car req)
+         (car (least-deadline
+               (unfulfilled (times b x)
+                            s
+                            (expand-tasks-requests (active-task-requests x r2)
+                                                   b)))))))
+  ((use (not-equal-car-least-deadline (z 0)))))
+
+(prove-lemma occurrences-edf-satisfied (rewrite)
+            (IMPLIES
+             (AND
+              (LISTP R)
+              (LESSP X (CADDAR R))
+              (NOT (LESSP X (CADAR R)))
+              (LESSP Z B)
+              (EQUAL (EXPAND-LIST B (EDF X R2))
+                     (EDF (TIMES B X)
+                          (EXPAND-TASKS-REQUESTS R2 B)))
+              (VALID-REQUESTS R2)
+              (valid-requests r)
+              (NON-OVERLAPPING-REQUESTS R2)
+              (SUBLISTP R R2)
+              (NOT (EQUAL B 0))
+              (NUMBERP B)
+              (NUMBERP X)
+              (EQUAL
+                  (OCCURRENCES (CAAR R)
+                               (FIRSTN (DIFFERENCE X (CADAR R))
+                                       (NTHCDR (CADAR R) (EDF X R2))))
+                  (CADDDAR R)))
+             (EQUAL
+              (OCCURRENCES
+                 (CAAR R)
+                 (FIRSTN Z
+                         (NTHCDR (TIMES B X)
+                                 (EDF (PLUS Z (TIMES B X))
+                                      (EXPAND-TASKS-REQUESTS R2 B)))))
+              0))
+            ((induct (plus z b))
+             (expand (edf (add1 (plus (sub1 z) (times b x)))
+                          (expand-tasks-requests r2 b)))
+             (disable-theory t)
+             (enable-theory ground-zero task-abbr naturals)
+             (enable equal-occurrences-zero member-append
+                     occurrences-hack member-sublistp member-car-x-x
+                     numberp-cadar not-equal-car-least-deadline-special
+                     litatom-caar occurrences-hack2 firstn-edf-simple
+                     nthcdr-x-edf-x member-non-list firstn-nlistp 
+                     firstn-expand-list expand-list
+                     firstn repeat zerop lessp-x-x firstn-append valid-requests
+                     ACTIVE-TASK-REQUESTS-EXPAND-TASKS-REQUESTS
+                     LENGTH-EDF-SIMPLE EQUAL-SUB1-0
+                     nthcdr-expand-list occurrences-expand-list
+                     not-equal-car-least-deadline occurrences-hack
+                     nthcdr-append firstn-noop plist-nthcdr plist-edf-simple
+                     nthcdr length-nthcdr firstn-nlistp firstn-cons
+                     firstn-too-big )))
+
+                     
+(prove-lemma unfulfilled-expanded-on-line (rewrite)
+  (implies
+   (and
+    (lessp z b)
+    (equal (expand-list b (edf x r2))
+           (edf (times x b) (expand-tasks-requests r2 b)))
+    (valid-requests r2) 
+    (valid-requests r) 
+    (non-overlapping-requests r2) 
+    (sublistp r r2))
+  (equal
+   (unfulfilled (plus z (times x b))
+                (edf (plus z (times x b)) (expand-tasks-requests r2 b))
+                (expand-tasks-requests (active-task-requests x r) b))
+   (unfulfilled (times x b)
+                (edf (plus z (times x b)) (expand-tasks-requests r2 b))
+                (expand-tasks-requests (active-task-requests x r) b))))
+  ((induct (active-task-requests x r))
+   (enable sublistp-cdr1 sublistp-cdr2 edf 
+           firstn-nthcdr-edf-plus length-edf-simple occurrences
+           firstn-edf-simple lessp-occurrences-edf
+           occurrences-expand-list valid-requests firstn nthcdr
+           equal-times-hack firstn-plus equal-plus-times
+           firstn-difference-plus-nthcdr occurrences-append
+           occurrences-edf-satisfied lessp-occurrences-firstn
+           nthcdr-expand-list expand-list-0 firstn-expand-list
+           active-task-requests expand-tasks-requests unfulfilled)
+   (enable-theory ground-zero task-abbr naturals)
+   (disable-theory t)))
+
+(prove-lemma unfulfilled-expand-list (rewrite)
+  (implies
+   (and
+    (valid-requests r)
+    (equal (remainder n b) 0)
+    (not (zerop b)))
+   (equal
+    (unfulfilled n (expand-list b s) (expand-tasks-requests r b))
+    (expand-tasks-requests (unfulfilled (quotient n b) s r) b)))
+  ((induct (expand-tasks-requests r b))))
+
+(prove-lemma equal-nil-expand-list (rewrite)
+  (equal
+   (equal nil (expand-list b l))
+   (or
+    (zerop b)
+    (nlistp l))))
+
+(prove-lemma valid-requests-sublistp (rewrite)
+  (implies
+   (and
+    (sublistp x y)
+    (equal (plist x) x)
+    (valid-requests y))
+   (valid-requests x)))
+
+(prove-lemma unfulfilled-sub1-expanded-on-line (rewrite)
+  (implies
+   (and
+    (not (zerop a))
+    (lessp a b)
+    (equal (expand-list b (edf x r2))
+           (edf (times x b) (expand-tasks-requests r2 b)))
+    (non-overlapping-requests r2)
+    (valid-requests r2)
+    (valid-requests r)
+    (sublistp r r2))
+  (equal
+   (unfulfilled (sub1 (plus a (times b x)))
+                (edf (sub1 (plus a (times b x))) (expand-tasks-requests r2 b))
+                (expand-tasks-requests (active-task-requests x r) b))
+   (unfulfilled (times x b)
+                (edf (sub1 (plus a (times x b))) (expand-tasks-requests r2 b))
+                (expand-tasks-requests (active-task-requests x r) b))))
+  ((use (unfulfilled-expanded-on-line (z (sub1 a))))
+   (disable-theory t)
+   (enable-theory naturals ground-zero task-abbr)))
+
+(prove-lemma firstn-only-helper nil
+  (implies
+   (equal (firstn n a) (firstn n b))
+   (equal (firstn (difference n c) (nthcdr c a))
+          (firstn (difference n c) (nthcdr c b)))))
+
+(prove-lemma firstn-nthcdr-edf-plus-simple (rewrite)
+  (equal (firstn (difference n a) (nthcdr a (edf (plus b n) r)))
+         (firstn (difference n a) (nthcdr a (edf n r))))
+  ((use (firstn-only-helper (n n) (a (edf n r)) (b (edf (plus b n) r))
+                            (c a)))))
+
+(prove-lemma unfulfilled-too-big (rewrite)
+  (equal
+   (unfulfilled n (edf (plus a n) r1) r2)
+   (unfulfilled n (edf n r1) r2)))
+
+(prove-lemma unfulfilled-too-big-sub1 (rewrite)
+  (implies
+   (not (zerop a))
+   (equal
+    (unfulfilled n (edf (sub1 (plus a n)) r1) r2)
+    (unfulfilled n (edf n r1) r2)))
+  ((use (unfulfilled-too-big (a (sub1 a))))
+   (disable unfulfilled-too-big)))
+
+(prove-lemma car-least-deadline-expand-tasks-requests (rewrite)
+  (implies
+   (not (zerop b))
+  (equal
+   (car (least-deadline (expand-tasks-requests r b)))
+   (car (least-deadline r))))
+  ((induct (least-deadline r))))
+
+(prove-lemma remainder-hack (rewrite)
+  (implies
+   (equal (remainder n p) 0)
+   (equal
+    (remainder (sub1 (plus x n)) p)
+    (if (zerop x) 
+        (remainder (sub1 n) p) 
+      (remainder (sub1 x) p))))
+  ((use (remainder-plus-proof (b n) (c p) (a (sub1 x))))))
+
+(prove-lemma equal-car-least-deadline-nil (rewrite)
+  (implies
+   (valid-requests r)
+   (not (equal (car (least-deadline r)) nil))))
+
+(prove-lemma unfulfilled-0-expand-tasks-requests (rewrite)
+  (implies
+   (and
+    (valid-requests r)
+    (not (zerop b)))
+  (equal
+   (unfulfilled 0 s (expand-tasks-requests r b))
+   (expand-tasks-requests (unfulfilled 0 s r) b))))
+
+
+(prove-lemma unfulfilled-0-edf (rewrite)
+  (equal
+   (unfulfilled 0 (edf n r) r2)
+   (unfulfilled 0 nil r2)))
+
+(prove-lemma unfulfilled-expanded-on-line-beginning (rewrite)
+  (implies
+   (and
+    (lessp z b)
+    (non-overlapping-requests r2)
+    (not (equal z 0))
+    (sublistp r r2)
+    (valid-requests r)
+    (valid-requests r2))
+  (equal
+   (unfulfilled z
+             (edf z (expand-tasks-requests r2 b))
+            (expand-tasks-requests (active-task-requests 0 r) b))
+   (unfulfilled 0
+          (edf z (expand-tasks-requests r2 b))
+            (expand-tasks-requests (active-task-requests 0 r) b))))
+  ((use (unfulfilled-expanded-on-line (x 0)))))
+
+;(prove-lemma edf-simple-expand-tasks-requests (rewrite)
+;  (implies
+;   (and
+;    (lessp 1 bigp)
+;    (non-overlapping-requests r)
+;    (valid-requests r))
+;  (equal
+;   (edf n (expand-tasks-requests r bigp))
+;   (append
+;    (expand-list bigp (edf (quotient n bigp) r))
+;    (repeat (remainder n bigp)
+;            (if (listp (unfulfilled 
+;                        (quotient n bigp) 
+;                        (edf (quotient n bigp) r)
+;                        (active-task-requests (quotient n bigp) r)))
+;                (car (least-deadline 
+;                      (unfulfilled 
+;                       (quotient n bigp)
+;                       (edf (quotient n bigp) r)
+;                       (active-task-requests (quotient n bigp) r))))
+;              nil)))))
+;  ((induct (plus n bigp))
+;   (disable-theory t)
+;   (enable-theory naturals ground-zero task-abbr)
+;   (disable times-add1)
+;   (enable edf expand-list listp-edf-simple listp-expand-list
+;           valid-requests-unfulfilled unfulfilled-expanded-on-line-beginning
+;           equal-car-least-deadline-nil
+;           length-edf-simple length-expand-list plist-expand-list 
+;           firstn-edf-simple equal-append equal-repeat-repeat
+;           equal-cons-repeat lessp-1-means remainder-add1-plus-special
+;           equal-repeat-nil  firstn-0 lessp-times-sub1-sub1 firstn
+;           unfulfilled-sub1-expanded-on-line   unfulfilled-expanded-on-line 
+;           sublistp-x-x unfulfilled-too-big
+;           car-least-deadline-expand-tasks-requests
+;           nthcdr-expand-list listp-expand-tasks-requests
+;           valid-requests-active-task-requests
+;           expand-list-repeat unfulfilled-too-big-sub1
+;           firstn-expand-list unfulfilled-0-edf
+;           remainder-hack unfulfilled-0-expand-tasks-requests
+;           occurrences-expand-list
+;           unfulfilled-expand-list
+;           equal-remainder-sub1-0 lessp-sub1-plus-hack
+;           active-task-requests-expand-tasks-requests append-nil
+;           remainder-plus-add1-hack quotient-plus-add1-hack
+;           firstn-append firstn-edf-simple length-nthcdr plist-repeat
+;           plist-edf-simple listp-edf-simple lessp-round-means
+;           firstn-repeat length-repeat nthcdr-repeat length
+;           plist-expand-list quotient-add1-plus-special repeat-1
+;           plist-nthcdr nthcdr-is-nil length-append expand-list-append
+;           nlistp-nthcdr listp-nthcdr nthcdr-append nthcdr listp-repeat
+;           equal-nil-expand-list
+;           times-1-arg2
+;           repeat expand-list)))
+
+(prove-lemma edf-simple-expand-tasks-requests (rewrite)
+  (implies
+   (and
+    (lessp 1 bigp)
+    (non-overlapping-requests r)
+    (valid-requests r))
+  (equal
+   (edf n (expand-tasks-requests r bigp))
+   (append
+    (expand-list bigp (edf (quotient n bigp) r))
+    (let ((undone (unfulfilled 
+                        (quotient n bigp) 
+                        (edf (quotient n bigp) r)
+                        (active-task-requests (quotient n bigp) r))))
+      (repeat (remainder n bigp)
+	      (if (listp undone)
+                (car (least-deadline 
+                      undone))
+              nil))))))
+  ((induct (plus n bigp))
+   (disable-theory t)
+   (enable-theory naturals ground-zero task-abbr)
+   (disable times-add1)
+   (enable edf expand-list listp-edf-simple listp-expand-list
+           valid-requests-unfulfilled unfulfilled-expanded-on-line-beginning
+           equal-car-least-deadline-nil
+           length-edf-simple length-expand-list plist-expand-list 
+           firstn-edf-simple equal-append equal-repeat-repeat
+           equal-cons-repeat lessp-1-means remainder-add1-plus-special
+           equal-repeat-nil  firstn-0 lessp-times-sub1-sub1 firstn
+           unfulfilled-sub1-expanded-on-line   unfulfilled-expanded-on-line 
+           sublistp-x-x unfulfilled-too-big
+           car-least-deadline-expand-tasks-requests
+           nthcdr-expand-list listp-expand-tasks-requests
+           valid-requests-active-task-requests
+           expand-list-repeat unfulfilled-too-big-sub1
+           firstn-expand-list unfulfilled-0-edf
+           remainder-hack unfulfilled-0-expand-tasks-requests
+           occurrences-expand-list
+           unfulfilled-expand-list
+           equal-remainder-sub1-0 lessp-sub1-plus-hack
+           active-task-requests-expand-tasks-requests append-nil
+           remainder-plus-add1-hack quotient-plus-add1-hack
+           firstn-append firstn-edf-simple length-nthcdr plist-repeat
+           plist-edf-simple listp-edf-simple lessp-round-means
+           firstn-repeat length-repeat nthcdr-repeat length
+           plist-expand-list quotient-add1-plus-special repeat-1
+           plist-nthcdr nthcdr-is-nil length-append expand-list-append
+           nlistp-nthcdr listp-nthcdr nthcdr-append nthcdr listp-repeat
+           equal-nil-expand-list
+           times-1-arg2
+           repeat expand-list)))
+
+(prove-lemma quotient-difference-special (rewrite)
+  (equal 
+   (quotient (difference (times a b) (times a c)) a)
+   (if (zerop a) 0 (difference b c))))
+
+(prove-lemma good-schedule-expand-tasks-reduces (rewrite)
+  (implies
+   (and
+    (lessp 1 bigp)
+    (non-overlapping-requests r1)
+    (sublistp r2 r1)
+    (valid-requests r1)
+    (valid-requests r2)
+    (equal (remainder n bigp) 0)
+    (good-schedule (edf n (expand-tasks-requests r1 bigp))
+                   (expand-tasks-requests r2 bigp)))
+   (good-schedule (edf (quotient n bigp) r1) r2))
+  ((induct (expand-tasks-requests r2 bigp))
+   (enable-theory ground-zero task-abbr)
+   (disable-theory t)
+   (enable equal-times-0 commutativity-of-times times-quotient
+    correctness-of-cancel-equal-times remainder-noop
+    remainder-of-non-number remainder-times1-instance firstn
+    remainder-difference1 quotient-times-instance quotient-lessp-arg1
+    repeat nthcdr good-schedule append-nil sublistp sublistp-cdr1
+    sublistp-cdr2 occurrences-repeat nlistp-nthcdr firstn-nlistp
+    expand-tasks-requests edf length-edf-simple valid-requests
+    expand-list plist-expand-list edf-simple-expand-tasks-requests
+    nthcdr-expand-list firstn-expand-list occurrences-expand-list
+    quotient-difference-special)))
+
+(prove-lemma expand-tasks-1 (rewrite)
+  (implies
+   (periodic-tasksp pts)
+   (equal (expand-tasks pts 1) pts)))
+
+(prove-lemma cpu-utilization-expand-tasks (rewrite)
+  (implies
+   (periodic-tasksp pts)
+  (equal
+   (cpu-utilization (expand-tasks pts n) n2)
+   (if (zerop n) 0 (cpu-utilization pts n2)))))
+
+(prove-lemma big-period-expand-tasks (rewrite)
+  (equal
+   (big-period (expand-tasks pts n))
+   (times (exp n (length pts)) (big-period pts))))
+
+(prove-lemma remainder-from-exp (rewrite)
+  (implies
+   (and
+    (equal (remainder n (exp x y)) 0)
+    (not (zerop y)))
+   (equal (remainder n x) 0)))
+
+(prove-lemma good-edf-help nil
+  (implies
+   (and
+    (not (lessp (big-period pts) (cpu-utilization pts (big-period pts))))
+    (periodic-tasksp pts)
+    (listp pts)
+    (lessp 1 (big-period pts))
+    (equal (remainder n (exp (big-period pts) (length pts))) 0))
+    (good-schedule 
+     (edf n (periodic-tasks-requests pts 0 n))
+     (periodic-tasks-requests pts 0 n)))
+  ((use (good-edf-for-expanded 
+         (pts (expand-tasks pts (big-period pts)))
+         (bigp (big-period pts)) (n (times n (big-period pts))))
+        (good-schedule-expand-tasks-reduces 
+         (bigp (big-period pts))
+         (n (times n (big-period pts)))
+         (r1 (periodic-tasks-requests pts 0 n))
+         (r2 (periodic-tasks-requests pts 0 n))))
+   (disable-theory t)
+   (enable expanded-tasksp-expand-task expand-tasks-1 sublistp-x-x
+           valid-requests-periodic-tasks cpu-utilization-expand-tasks
+           periodic-tasks-requests-simple good-schedule equal-length-0
+           periodic-tasks-requests remainder-from-exp
+           periodic-tasks-requests-expand 
+           periodic-tasksp-expand-tasks big-period-expand-tasks
+           non-overlapping-requests-periodic-tasks-requests)
+   (enable-theory ground-zero task-abbr naturals)))
+
+(prove-lemma good-edf-with-remainder nil
+  (implies
+   (and
+    (not (lessp (big-period pts) (cpu-utilization pts (big-period pts))))
+    (periodic-tasksp pts)
+    (lessp 1 (big-period pts))
+    (equal (remainder n (exp (big-period pts) (length pts))) 0))
+    (good-schedule 
+     (edf n (periodic-tasks-requests pts 0 n))
+     (periodic-tasks-requests pts 0 n)))
+  ((use (good-edf-help))))
+
+(defn requests-deadlines-not-greater (r time)
+  (if (listp r)
+      (if (lessp time (caddar r))
+          (requests-deadlines-not-greater (cdr r) time)
+        (cons (car r) (requests-deadlines-not-greater (cdr r) time)))
+    nil))
+
+(defn firstn-nthcdr-firstn-induct (a b n l)
+  (if (zerop a) t
+    (firstn-nthcdr-firstn-induct (sub1 a) (sub1 b) (sub1 n) l)))
+      
+(prove-lemma firstn-nthcdr-firstn-simple (rewrite)
+  (implies
+   (not (lessp n (plus a b)))
+   (equal (firstn a (nthcdr b (firstn n l))) (firstn a (nthcdr b l))))
+  ((enable firstn-nthcdr firstn-firstn)
+   (disable-theory t)
+   (enable-theory ground-zero task-abbr naturals)))
+
+(prove-lemma good-schedule-requests-not-greater (rewrite)
+  (implies
+   (and
+    (good-schedule s r)
+    (valid-requests r))
+   (good-schedule (firstn n s) (requests-deadlines-not-greater r n))))
+
+(prove-lemma requests-deadlines-append (rewrite)
+  (equal
+   (requests-deadlines-not-greater (append a b) time)
+   (append
+    (requests-deadlines-not-greater a time)
+    (requests-deadlines-not-greater b time))))
+
+(prove-lemma plist-requests-deadlines (rewrite)
+  (equal (plist (requests-deadlines-not-greater a time))
+         (requests-deadlines-not-greater a time)))
+
+(prove-lemma requests-deadlines-periodic-task-simple (rewrite)
+  (implies
+   (not (lessp n1 n2))
+   (equal (requests-deadlines-not-greater (periodic-task-requests pt n1 n) n2)
+          nil)))
+
+(prove-lemma equal-nil-periodic-task-requests (rewrite)
+  (equal
+   (equal (periodic-task-requests pt n1 n2) nil)
+   (or
+    (not (periodic-taskp pt))
+    (not (lessp n1 n2)))))
+
+(prove-lemma requests-deadlines-not-greater-periodic-task (rewrite)
+  (implies
+   (and
+    (equal (remainder n (cadr pt)) 0)
+    (equal (remainder n2 (cadr pt)) 0)
+    (equal (remainder n1 (cadr pt)) 0))
+  (equal
+   (requests-deadlines-not-greater (periodic-task-requests pt n1 n2) n)
+   (if (lessp n n2)
+       (periodic-task-requests pt n1 n)
+     (periodic-task-requests pt n1 n2)))))
+
+(prove-lemma equal-remainder-big-period (rewrite)
+  (implies
+   (member e l)
+   (equal (remainder (big-period l) (cadr e)) 0)))
+
+(prove-lemma remainder-period-0-if-big-period (rewrite)
+  (implies
+   (and
+    (periodic-tasksp pts)
+    (equal (remainder n (big-period pts)) 0)
+    (member pt pts))
+   (equal (remainder n (cadr pt)) 0))
+  ((induct (member pt pts))))
+
+(prove-lemma equal-nil-periodic-tasks-requests (rewrite)
+  (equal
+   (equal nil (periodic-tasks-requests pts n1 n2))
+   (or (nlistp pts) (not (periodic-tasksp pts)) (not (lessp n1 n2)))))
+
+(prove-lemma requests-deadlines-not-greater-periodic-help nil
+  (implies
+   (and
+    (periodic-tasksp pts2)
+    (sublistp pts1 pts2)
+    (equal n1 0)
+    (not (lessp n2 n3))
+    (equal (remainder n2 (big-period pts2)) 0)
+    (equal (remainder n3 (big-period pts2)) 0))
+   (equal
+    (requests-deadlines-not-greater (periodic-tasks-requests pts1 n1 n2) n3)
+    (periodic-tasks-requests pts1 n1 n3)))
+  ((induct (periodic-tasks-requests pts1 n1 n2))))
+
+(prove-lemma requests-deadlines-not-greater-periodic-rewrite (rewrite)
+  (implies
+   (and
+    (periodic-tasksp pts)
+    (equal n1 0)
+    (not (lessp n2 n3))
+    (equal (remainder n2 (big-period pts)) 0)
+    (equal (remainder n3 (big-period pts)) 0))
+   (equal
+    (requests-deadlines-not-greater (periodic-tasks-requests pts n1 n2) n3)
+    (periodic-tasks-requests pts n1 n3)))
+  ((use (requests-deadlines-not-greater-periodic-help 
+        (pts1 pts) (pts2 pts)))))
+
+(prove-lemma plist-active-task-requests (rewrite)
+  (equal (plist (active-task-requests n r)) (active-task-requests n r)))
+
+
+(prove-lemma lessp-plus-times-hack (rewrite)
+  (equal
+   (lessp (plus x (times x y)) (times x z))
+   (and
+    (not (zerop x))
+    (lessp (add1 y) z))))
+
+(prove-lemma periodic-task-requests-simple (rewrite)
+  (implies
+   (not (lessp n1 n2))
+   (equal (periodic-task-requests pt n1 n2) nil)))
+
+(prove-lemma active-task-requests-periodic-task-requests-simple (rewrite)
+  (implies
+   (lessp n n1)
+   (equal (active-task-requests n (periodic-task-requests pt n1 n2)) nil)))
+
+(prove-lemma active-task-requests-periodic-task-requests (rewrite)
+  (implies
+   (and
+    (equal (remainder n1 (cadr pt)) 0)
+    (equal (remainder n2 (cadr pt)) 0)
+    (equal (remainder n (cadr pt)) 0)
+    (numberp n1))
+   (equal
+    (active-task-requests n (periodic-task-requests pt n1 n2))
+    (if (or (not (periodic-taskp pt)) (lessp n n1) (not (lessp n n2))) nil
+      (list
+       (list (car pt) 
+             (times (cadr pt) (quotient n (cadr pt)))
+             (plus (cadr pt) (times (cadr pt) (quotient n (cadr pt))))
+             (caddr pt))))))
+  ((induct (periodic-task-requests pt n1 n2))))
+
+(prove-lemma active-task-requests-not-greater (rewrite)
+  (equal (active-task-requests n1 (requests-deadlines-not-greater r n2))
+         (requests-deadlines-not-greater (active-task-requests n1 r) n2)))
+
+(defn requests-starts-earlier (r time)
+  (if (listp r)
+      (if (lessp (cadar r) time)
+          (cons (car r) (requests-starts-earlier (cdr r) time))
+        (requests-starts-earlier (cdr r) time))
+    nil))
+
+(prove-lemma requests-starts-earlier-append (rewrite)
+  (equal
+   (requests-starts-earlier (append a b) n)
+   (append 
+   (requests-starts-earlier a n)
+   (requests-starts-earlier b n))))
+
+(prove-lemma active-task-requests-requests-starts-earlier (rewrite)
+  (implies
+   (lessp n n1)
+   (equal (active-task-requests n (requests-starts-earlier r n1))
+          (active-task-requests n r))))
+
+(prove-lemma edf-requests-starts-earlier (rewrite)
+  (implies
+   (not (lessp n1 n))
+   (equal
+    (edf n (requests-starts-earlier r n1))
+    (edf n r)))
+  ((induct (edf n r))))
+
+(prove-lemma plist-requests-starts-earlier (rewrite)
+  (equal (plist (requests-starts-earlier r n))
+         (requests-starts-earlier r n)))
+
+(prove-lemma requests-starts-earlier-periodic-task (rewrite)
+  (implies
+   (and
+    (equal (remainder n (cadr pt)) 0)
+    (equal (remainder n1 (cadr pt)) 0)
+    (equal (remainder n2 (cadr pt)) 0))
+   (equal (requests-starts-earlier (periodic-task-requests pt n1 n2) n)
+          (periodic-task-requests pt n1 (if (lessp n n2) n n2))))
+  ((induct (periodic-task-requests pt n1 n2))))
+
+(prove-lemma requests-starts-earlier-periodic-tasks (rewrite)
+  (implies
+   (and
+    (equal (remainder n (big-period pts2)) 0)
+    (equal (remainder n1 (big-period pts2)) 0)
+    (equal (remainder n2 (big-period pts2)) 0)
+    (sublistp pts1 pts2)
+    (periodic-tasksp pts2))
+   (equal (requests-starts-earlier (periodic-tasks-requests pts1 n1 n2) n)
+          (periodic-tasks-requests pts1 n1 (if (lessp n n2) n n2))))
+  ((induct (periodic-tasks-requests pts1 n1 n2))))
+          
+(prove-lemma good-edf-almost nil
+  (implies
+   (and
+    (not (lessp (big-period pts) (cpu-utilization pts (big-period pts))))
+    (periodic-tasksp pts)
+    (lessp 1 (big-period pts))
+    (equal (remainder n (big-period pts)) 0))
+    (good-schedule 
+     (edf n (periodic-tasks-requests pts 0 n))
+     (periodic-tasks-requests pts 0 n)))
+  ((use (good-edf-with-remainder 
+         (n (times n (exp (big-period pts) (length pts)))))
+        (good-schedule-requests-not-greater
+         (s (edf (times n (exp (big-period pts) (length pts)))
+                 (periodic-tasks-requests 
+                  pts 0 (times n (exp (big-period pts) (length pts)))))) 
+         (r (periodic-tasks-requests 
+             pts 0 (times n (exp (big-period pts) (length pts)))))
+         (n n))
+        (edf-requests-starts-earlier 
+         (n1 n)
+         (r (PERIODIC-TASKS-REQUESTS PTS 0
+                         (TIMES N
+                                (EXP (BIG-PERIOD PTS) (LENGTH PTS)))))))))
+
+
+(prove-lemma equal-plus-1 (rewrite)      
+  (equal
+   (equal (plus a b) 1)
+   (or
+    (and (zerop a) (equal b 1))
+    (and (zerop b) (equal a 1)))))
+
+(prove-lemma equal-cpu-utilization-0 (rewrite)
+  (implies
+   (and
+    (equal (remainder n (big-period x)) 0)
+    (not (zerop n))
+    (periodic-tasksp x))
+   (equal
+    (equal (cpu-utilization x n) 0)
+    (equal x nil)))
+  ((expand (cpu-utilization x n))))
+
+(prove-lemma equal-1-big-period (rewrite)
+  (implies
+   (and
+    (not (lessp (big-period pts) (cpu-utilization pts (big-period pts))))
+    (equal (big-period pts) 1))
+   (equal 
+    (periodic-tasksp pts)
+    (or (equal pts nil)
+        (and
+         (equal (plist pts) pts)
+         (equal (length pts) 1)
+         (periodic-taskp (car pts))
+         (equal (cadar pts) 1)
+         (equal (caddar pts) 1)))))
+  ((expand (big-period pts))))
+
+(defn simple-requests (v n1 n2)
+  (if (lessp n1 n2)
+      (cons (list v n1 (add1 n1) 1) (simple-requests v (add1 n1) n2))
+    nil)
+  ((lessp (difference n2 n1))))
+
+(prove-lemma periodic-task-requests-as-simple-requests (rewrite)
+  (equal (periodic-task-requests (list v 1 1) n1 n2)
+         (if (or (not (litatom v)) (equal v nil)) nil
+           (simple-requests v n1 n2))))
+
+
+(prove-lemma active-task-requests-simple-requests (rewrite)
+  (implies
+   (and
+    (numberp n1)
+    (numberp n))
+  (equal
+   (active-task-requests n (simple-requests v n1 n2))
+   (if (lessp n n1) nil
+     (if (lessp n n2)
+         (list (list v n (add1 n) 1))
+       nil)))))
+
+(prove-lemma nthcdr-cons-cons-repeat (rewrite)
+  (equal
+   (nthcdr n (cons a (cons a (repeat m a))))
+   (if (lessp (plus 2 m) n) 0
+     (repeat (difference (plus 2 m) n) a)))
+  ((induct (repeat m a))
+   (expand (nthcdr n (list a a)))))
+
+
+(prove-lemma requests-starts-earlier-simple-requests (rewrite)
+  (equal
+   (requests-starts-earlier (simple-requests v n1 n2) n)
+   (if (lessp n n2)
+       (simple-requests v n1 n)
+     (simple-requests v n1 n2)))
+  ((expand (simple-requests v (add1 n1) n))))
+
+(prove-lemma edf-simple-requests-too-big (rewrite)
+  (implies
+   (lessp z n2)
+   (equal
+    (edf z (simple-requests v n1 n2))
+    (edf z (simple-requests v n1 z))))
+  ((use (edf-requests-starts-earlier (n z) (n1 z)
+                                     (r (simple-requests v n1 n2))))
+   (disable edf-requests-starts-earlier)))
+
+(prove-lemma edf-n-simple-requests (rewrite)
+  (equal
+   (edf n (simple-requests v 0 n))
+   (repeat n v)))
+
+(prove-lemma good-schedule-repeat-simple (rewrite)
+  (good-schedule (repeat n v) (simple-requests v n1 n)))
+
+(prove-lemma plist-simple-requests (rewrite)
+  (equal (plist (simple-requests v n1 n2)) (simple-requests v n1 n2)))
+   
+(prove-lemma good-edf-bigp-1 nil
+  (implies
+   (and
+    (not (lessp (big-period pts) (cpu-utilization pts (big-period pts))))
+    (periodic-tasksp pts)
+    (equal (big-period pts) 1)
+    (equal (remainder n (big-period pts)) 0))
+    (good-schedule 
+     (edf n (periodic-tasks-requests pts 0 n))
+     (periodic-tasks-requests pts 0 n))))
+
+(prove-lemma good-edf-periodic nil
+  (implies
+   (and
+    (not (lessp (big-period pts) (cpu-utilization pts (big-period pts))))
+    (periodic-tasksp pts)
+    (equal (remainder n (big-period pts)) 0))
+    (good-schedule 
+     (edf n (periodic-tasks-requests pts 0 n))
+     (periodic-tasks-requests pts 0 n)))
+  ((use (good-edf-bigp-1) (good-edf-almost))
+   (disable-theory t) (enable-theory ground-zero task-abbr naturals) 
+   (enable zerop-big-period)))
+
+
+(make-lib "scheduler" t)

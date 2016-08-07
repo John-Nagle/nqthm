@@ -1,0 +1,144 @@
+#|
+
+ Copyright (C) 1994 by Alex Bronstein and Carolyn Talcott.  All Rights
+ Reserved.
+
+ You may copy and distribute verbatim copies of this Nqthm-1992 event script as
+ you receive it, in any medium, including embedding it verbatim in derivative
+ works, provided that you conspicuously and appropriately publish on each copy
+ a valid copyright notice "Copyright (C) 1994 by Alex Bronstein and Carolyn
+ Talcott.  All Rights Reserved."
+
+ NO WARRANTY
+
+ Alex Bronstein and Carolyn Talcott PROVIDE ABSOLUTELY NO WARRANTY.  THE EVENT
+ SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR
+ IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Alex Bronstein or Carolyn Talcott BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(note-lib "mlp" t)
+
+;(setq theta '(
+
+; theta.bm
+;   This is a 2nd order circuit constructor, derived from all the "Accumulator"
+; examples, as well as the simple counter example.  Basically, it arises in
+; a case where the SPEC is easily expressible: as the iteration of "last-char"
+; function which can be expressed only using the input string (x).  So in other
+; words, we have a string to char function "last-char" which defines the 
+; circuit, for example: the sum of all inputs, the length of input, etc...
+; and we just build the corresponding string function in a "standard" fashion.
+; This standard fashion is the THETA operator.
+; This file just attempts to abstract the construction, and the correctness
+; proof that goes with it, to facilitate future instantiations.
+; 
+; Clearly, there is no sugar involved.
+;
+; Standard hints necessary for a PROVE-LEMMA have been removed in the
+; corresponding ADD-AXIOM.
+
+;;; DEFINITION OF CIRCUIT:
+
+(dcl sysd-theta (line x))
+
+;sysd-stringp is normally deduced by BM.
+(add-axiom sysd-stringp (rewrite) 
+	   (stringp (sysd-theta line x)))
+
+;;; SPEC definition:
+
+(dcl spec-theta-lastchar (x))
+
+; this is the standard extension from last-char-fun to MLP-string-fun.
+(defn spec-theta (x)
+  (if (empty x)
+      (e)
+      (A (spec-theta (p x))
+	 (spec-theta-lastchar x))))
+
+;;; PROOF of equivalence with spec:
+
+;;; 2nd order instantiations for circuits:
+;; theta-begin
+(add-axiom A2-EMPTY-theta (rewrite)
+(equal (empty (sysd-theta line x))
+       (empty x))
+)
+
+(add-axiom A2-E-theta (rewrite)
+(equal (equal (sysd-theta line x) (e))
+       (empty x))
+)
+
+(add-axiom A2-LP-theta (rewrite)
+(equal (len (sysd-theta line x))
+       (len x))
+)
+
+(add-axiom A2-LPE-theta (rewrite)
+(eqlen (sysd-theta line x) x)
+)
+
+(add-axiom A2-PC-theta (rewrite)
+(implies (not (empty x))
+	 (equal (p (sysd-theta line x))
+		(sysd-theta line (p x)) ))
+)
+;; theta-end
+
+;;; Circuit CORRECTNESS:
+
+; Theta-correct-ax is a "predicative correctness statement",i.e. what we would
+; do if we didn't have functional equality as a specification method, but 
+; instead used a purely axiomatic approach.  It matches the intuitive view 
+; of just looking at the last char.
+
+(add-axiom theta-correct-ax (rewrite)
+(implies (not (empty x))
+	 (equal (l (sysd-theta 'Ytheta x))
+		(spec-theta-lastchar x)))
+; ((expand (sysd-theta 'Ytheta x))
+;  (enable STR-l-I2) ; to get case disjunction BEFORE equality hyp is used..
+; )
+)
+
+; To go to a functional equality once we have the "last" (ax) statement is
+; a trivial induction, if we start out with an P-L split which is unnatural
+; for BM, so we force it w/ a USE hint of A-p-l-split
+
+(prove-lemma A-p-l-split () ; USE hints only.
+(implies (not (empty x))
+	 (equal (sysd-theta 'Ytheta x)
+		(A (p (sysd-theta 'Ytheta x))
+		     (l (sysd-theta 'Ytheta x)) )))
+((disable theta-correct-ax a2-pc-theta)
+ )
+)
+
+; Interestingly: A-P-L needs to be disabled for theta-correct to go through.
+; yet in more specific cases such as macc, or funacc, it is not needed, and 
+; in fact just makes a very minor time improvement.
+
+(prove-lemma theta-correct (rewrite)
+(equal (sysd-theta 'Ytheta x)
+       (spec-theta x))
+((induct (induct-P x))
+ (use (A-p-l-split))
+ (disable A-P-L spec-theta-lastchar sysd-theta empty) 
+ )
+)
+
+; eof: theta.bm
+;))

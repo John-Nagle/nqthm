@@ -1,0 +1,517 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer and J Strother Moore.  All Rights
+ Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer and J Strother Moore PROVIDE ABSOLUTELY NO WARRANTY.  THE
+ EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+ OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer or J Strother Moore BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+; This is the list of verification conditions for a FORTRAN square
+; root program.  For the details of the algorithm, see the comment at
+; the end of the file.  Boyer and Moore.
+
+; This list of events has been further edited, for processing by
+; DO-FILE, by (1) inserting the following NOTE-LIB, (2) commenting out
+; each FORTRAN-COMMENT and following the comment with the
+; corresponding macroexpansion, and (3) by commenting out each
+; (COMMENT ...).
+
+(NOTE-LIB "fortran" T)
+
+; (FORTRAN-COMMENT FORTRAN)
+(ADD-AXIOM FORTRAN NIL T)
+
+(DCL I$0 NIL)
+
+(DCL ISQRT$1 NIL)
+
+(DCL ISQRT$2 NIL)
+
+(DEFN SQ (I) (TIMES I I))
+
+(ADD-AXIOM INPUT-CONDITIONS
+           (REWRITE)
+           '*1*TRUE)
+
+(DEFN GLOBAL-HYPS NIL
+      (AND (NUMBERP (I$0))
+           (AND (LESSP (I$0)
+                       (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+                (ZNUMBERP (I$0)))))
+
+(PROVE-LEMMA PLUS-1
+             (REWRITE)
+             (EQUAL (PLUS 1 X) (ADD1 X)))
+
+(PROVE-LEMMA DIFFERENCE-2
+             (REWRITE)
+             (EQUAL (DIFFERENCE (ADD1 (ADD1 X)) 2)
+                    (FIX X)))
+
+(PROVE-LEMMA QUOTIENT-BY-2
+             (REWRITE)
+             (NOT (LESSP (PLUS (QUOTIENT A 2) (QUOTIENT A 2))
+                         (SUB1 A))))
+
+(PROVE-LEMMA MAIN-TRICK
+             (REWRITE)
+             (NOT (LESSP (SQ (ADD1 (QUOTIENT (PLUS J K) 2)))
+                         (PLUS (TIMES J K) J)))
+             ((INDUCT (LESSP J K))))
+
+(PROVE-LEMMA LESSP-REMAINDER2
+             (REWRITE GENERALIZE)
+             (EQUAL (LESSP (REMAINDER X Y) Y)
+                    (NOT (ZEROP Y))))
+
+(PROVE-LEMMA REMAINDER-QUOTIENT-ELIM
+             (ELIM)
+             (IMPLIES (AND (NOT (ZEROP Y)) (NUMBERP X))
+                      (EQUAL (PLUS (REMAINDER X Y)
+                                   (TIMES Y (QUOTIENT X Y)))
+                             X)))
+
+(PROVE-LEMMA SQ-ADD1-NON-ZERO
+             (REWRITE)
+             (NOT (EQUAL (SQ (ADD1 X)) 0)))
+
+(DISABLE SQ)
+
+(PROVE-LEMMA MAIN
+         (REWRITE)
+         (IMPLIES (NOT (ZEROP J))
+                  (LESSP I
+                         (SQ (ADD1 (QUOTIENT (PLUS J (QUOTIENT I J))
+                                             2))))))
+
+(ENABLE SQ)
+
+(PROVE-LEMMA LESSP-TIMES-CANCELLATION-RESTATED-FOR-LINEAR
+             (REWRITE)
+             (IMPLIES (NOT (LESSP I J))
+                      (NOT (LESSP (TIMES A I) (TIMES A J))))
+             NIL)
+
+(PROVE-LEMMA MULTIPLY-THRU-BY-DIVISOR
+             (REWRITE)
+             (IMPLIES (LESSP A (TIMES B C))
+                      (EQUAL (LESSP (QUOTIENT A B) C) T)))
+
+(PROVE-LEMMA TIMES-GREATERP-ZERO
+             (REWRITE)
+             (IMPLIES (AND (NOT (ZEROP X)) (NOT (ZEROP Y)))
+                      (LESSP 0 (TIMES X Y))))
+
+(PROVE-LEMMA QUOTIENT-SHRINKS
+             (REWRITE)
+             (NOT (LESSP I (QUOTIENT I J))))
+
+(PROVE-LEMMA QUOTIENT-SHRINKS-FAST
+             (REWRITE)
+             (NOT (LESSP I (TIMES 2 (QUOTIENT I 2)))))
+
+(PROVE-LEMMA QUOTIENT-BY-1
+             (REWRITE)
+             (EQUAL (QUOTIENT I 1) (FIX I)))
+
+; (FORTRAN-COMMENT INPUT)
+(ADD-AXIOM INPUT NIL T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA STOP NIL
+             (OR (NOT (ZLESSP (I$0) '0))
+                 (NOT (GLOBAL-HYPS))))
+
+#| (COMMENT INPUT T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F)
+(ADD-AXIOM LOGICAL-IF-F NIL T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT NIL
+       (IMPLIES (AND (ZGREATERP (I$0) '1)
+                     (GLOBAL-HYPS))
+                (AND (NOT (ZEQP '2 '0))
+                     (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (I$0) '2)))))
+
+#| (COMMENT INPUT F T) |#
+
+(ADD-AXIOM ASSIGNMENT
+           (REWRITE)
+           (EQUAL (ISQRT$1)
+                  (ZQUOTIENT (I$0) '2)))
+
+(PROVE-LEMMA LP NIL
+ (IMPLIES (AND (ZGREATERP (I$0) '1)
+               (GLOBAL-HYPS))
+          (AND (AND (LESSP '0 (ISQRT$1))
+                    (AND (NOT (LESSP (I$0) (TIMES '2 (ISQRT$1))))
+                         (AND (NUMBERP (ISQRT$1))
+                              (LESSP (I$0) (SQ (ADD1 (ISQRT$1)))))))
+               (LEX (CONS (ISQRT$1) 'NIL)
+                    (CONS (I$0) 'NIL)))))
+
+#| (COMMENT INPUT F T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F1)
+(ADD-AXIOM LOGICAL-IF-F1 NIL T)
+
+(ADD-AXIOM ASSIGNMENT
+           (REWRITE)
+           (EQUAL (ISQRT$1) (I$0)))
+
+(PROVE-LEMMA OUTPUT NIL
+      (IMPLIES (AND (NOT (ZGREATERP (I$0) '1))
+                    (GLOBAL-HYPS))
+               (AND (ZNUMBERP (ISQRT$1))
+                    (AND (ZGREATEREQP (ISQRT$1) '0)
+                         (AND (NOT (LESSP (I$0) (SQ (ISQRT$1))))
+                              (LESSP (I$0)
+                                     (SQ (PLUS '1 (ISQRT$1)))))))))
+
+#| (COMMENT INPUT F F) |#
+
+(UBT INPUT)
+
+(ADD-AXIOM PATHS-FROM-LP
+           (REWRITE)
+           '*1*TRUE)
+
+(DEFN PATH-HYPS NIL
+      (AND (GLOBAL-HYPS)
+           (AND (LESSP '0 (ISQRT$1))
+                (AND (NOT (LESSP (I$0) (TIMES '2 (ISQRT$1))))
+                     (AND (NUMBERP (ISQRT$1))
+                          (LESSP (I$0)
+                                 (SQ (ADD1 (ISQRT$1)))))))))
+
+(PROVE-LEMMA DEFINEDNESS NIL
+             (IMPLIES (PATH-HYPS)
+                      (ZNUMBERP (ISQRT$1))))
+
+#| (COMMENT LP) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT NIL
+ (IMPLIES (PATH-HYPS)
+          (AND (NOT (ZEQP (ISQRT$1) '0))
+               (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (I$0) (ISQRT$1))))))
+
+#| (COMMENT LP) |#
+
+; (FORTRAN-COMMENT LOGICAL-IF-T)
+(ADD-AXIOM LOGICAL-IF-T NIL T)
+
+(PROVE-LEMMA OUTPUT1 NIL
+      (IMPLIES (AND (ZGREATEREQP (ZQUOTIENT (I$0) (ISQRT$1))
+                                 (ISQRT$1))
+                    (PATH-HYPS))
+               (AND (ZNUMBERP (ISQRT$1))
+                    (AND (ZGREATEREQP (ISQRT$1) '0)
+                         (AND (NOT (LESSP (I$0) (SQ (ISQRT$1))))
+                              (LESSP (I$0)
+                                     (SQ (PLUS '1 (ISQRT$1)))))))))
+
+#| (COMMENT LP T) |#
+
+(UBT LOGICAL-IF-T)
+
+; (FORTRAN-COMMENT LOGICAL-IF-F2)
+(ADD-AXIOM LOGICAL-IF-F2 NIL T)
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT1 NIL
+ (IMPLIES (AND (NOT (ZGREATEREQP (ZQUOTIENT (I$0) (ISQRT$1))
+                                 (ISQRT$1)))
+               (PATH-HYPS))
+          (AND (NOT (ZEQP (ISQRT$1) '0))
+               (EXPRESSIBLE-ZNUMBERP (ZQUOTIENT (I$0) (ISQRT$1))))))
+
+#| (COMMENT LP F) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZPLUS NIL
+ (IMPLIES
+        (AND (NOT (ZGREATEREQP (ZQUOTIENT (I$0) (ISQRT$1))
+                               (ISQRT$1)))
+             (PATH-HYPS))
+        (EXPRESSIBLE-ZNUMBERP (ZPLUS (ISQRT$1)
+                                     (ZQUOTIENT (I$0) (ISQRT$1))))))
+
+#| (COMMENT LP F) |#
+
+(PROVE-LEMMA INPUT-COND-OF-ZQUOTIENT2 NIL
+ (IMPLIES
+  (AND (NOT (ZGREATEREQP (ZQUOTIENT (I$0) (ISQRT$1))
+                         (ISQRT$1)))
+       (PATH-HYPS))
+  (AND
+   (NOT (ZEQP '2 '0))
+   (EXPRESSIBLE-ZNUMBERP
+                      (ZQUOTIENT (ZPLUS (ISQRT$1)
+                                        (ZQUOTIENT (I$0) (ISQRT$1)))
+                                 '2)))))
+
+#| (COMMENT LP F) |#
+
+(ADD-AXIOM ASSIGNMENT1
+           (REWRITE)
+           (EQUAL (ISQRT$2)
+                  (ZQUOTIENT (ZPLUS (ISQRT$1)
+                                    (ZQUOTIENT (I$0) (ISQRT$1)))
+                             '2)))
+
+(DISABLE SQ)
+
+(PROVE-LEMMA LP1 NIL
+ (IMPLIES (AND (NOT (ZGREATEREQP (ZQUOTIENT (I$0) (ISQRT$1))
+                                 (ISQRT$1)))
+               (PATH-HYPS))
+          (AND (AND (LESSP '0 (ISQRT$2))
+                    (AND (NOT (LESSP (I$0) (TIMES '2 (ISQRT$2))))
+                         (AND (NUMBERP (ISQRT$2))
+                              (LESSP (I$0) (SQ (ADD1 (ISQRT$2)))))))
+               (LEX (CONS (ISQRT$2) 'NIL)
+                    (CONS (ISQRT$1) 'NIL)))))
+
+#| (COMMENT LP F) |#
+
+(UBT PATHS-FROM-LP)
+
+(UBT FORTRAN)
+
+
+#|
+
+
+
+The correctness of the program depends upon the following events:
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Definition.
+        (SQ I)
+           =
+        (TIMES I I)
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        (FORTRAN-COMMENT ISQRT-STUFF)
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Specification for routine ISQRT
+
+The input assertion:
+        (AND (NUMBERP (I STATE))
+             (LESSP (I STATE)
+                    (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER)))
+
+
+The output assertion:
+        (AND (ZGREATEREQP ANS 0)
+             (NOT (LESSP (I STATE) (SQ ANS)))
+             (LESSP (I STATE) (SQ (PLUS 1 ANS))))
+
+      END
+      INTEGER FUNCTION ISQRT(I)
+      INTEGER I
+C     CALCULATE THE SQUARE ROOT OF I USING THE NEWTON METHOD. 
+      IF ((I .LT. 0)) STOP
+      IF ((I .GT. 1)) GOTO 100
+      ISQRT = I
+      RETURN
+C     ISQRT TAKES ON INCREASINGLY SMALLER VALUES AND CONVERGES TO THE SQ
+C     UARE ROOT OF I. THE FIRST APPROXIMATION IS ONE HALF I, WHICH IS NO
+C     T LESS THAN THE SQUARE ROOT OF I WHEN 1 IS LESS THAN I. 
+100   ISQRT = (I / 2)
+200   CONTINUE
+C     ASSERTION LP
+      IF (((I / ISQRT) .GE. ISQRT)) RETURN
+      ISQRT = ((ISQRT + (I / ISQRT)) / 2)
+C     XXX SQ-REWRITE-OFF-AGAIN
+      GOTO 200
+      END
+
+
+The XXX at ISQRT-STUFF.
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  PLUS-1 (rewrite):
+        (EQUAL (PLUS 1 X) (ADD1 X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  DIFFERENCE-2 (rewrite):
+        (EQUAL (DIFFERENCE (ADD1 (ADD1 X)) 2)
+               (FIX X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  QUOTIENT-BY-2 (rewrite):
+        (NOT (LESSP (PLUS (QUOTIENT A 2) (QUOTIENT A 2))
+                    (SUB1 A)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MAIN-TRICK (rewrite):
+        (NOT (LESSP (SQ (ADD1 (QUOTIENT (PLUS J K) 2)))
+                    (PLUS (TIMES J K) J)))
+        Hint:  Induct as for (LESSP J K).
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  LESSP-REMAINDER2 (rewrite and generalize):
+        (EQUAL (LESSP (REMAINDER X Y) Y)
+               (NOT (ZEROP Y)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  REMAINDER-QUOTIENT-ELIM (elimination):
+        (IMPLIES (AND (NOT (ZEROP Y)) (NUMBERP X))
+                 (EQUAL (PLUS (REMAINDER X Y)
+                              (TIMES Y (QUOTIENT X Y)))
+                        X))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  SQ-ADD1-NON-ZERO (rewrite):
+        (NOT (EQUAL (SQ (ADD1 X)) 0))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Enable SQ.
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MAIN (rewrite):
+        (IMPLIES (NOT (ZEROP J))
+                 (LESSP I
+                        (SQ (ADD1 (QUOTIENT (PLUS J (QUOTIENT I J))
+                                            2)))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Disable SQ.
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  LESSP-TIMES-CANCELLATION-RESTATED-FOR-LINEAR (rewrite):
+        (IMPLIES (NOT (LESSP I J))
+                 (NOT (LESSP (TIMES A I) (TIMES A J))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  MULTIPLY-THRU-BY-DIVISOR (rewrite):
+        (IMPLIES (LESSP A (TIMES B C))
+                 (EQUAL (LESSP (QUOTIENT A B) C) T))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  TIMES-GREATERP-ZERO (rewrite):
+        (IMPLIES (AND (NOT (ZEROP X)) (NOT (ZEROP Y)))
+                 (LESSP 0 (TIMES X Y)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  QUOTIENT-SHRINKS (rewrite):
+        (NOT (LESSP I (QUOTIENT I J)))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  QUOTIENT-SHRINKS-FAST (rewrite):
+        (NOT (LESSP I (TIMES 2 (QUOTIENT I 2))))
+@END(VERBATIM)
+@END(GROUP)
+
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Theorem.  QUOTIENT-BY-1 (rewrite):
+        (EQUAL (QUOTIENT I 1) (FIX I))
+@END(VERBATIM)
+@END(GROUP)
+
+
+
+Hints for routine ISQRT
+
+                              
+
+The input clock:
+        (LIST (I (START)))
+
+The invariant and clock named LP.
+
+        (AND (LESSP 0 (ISQRT STATE))
+             (NOT (LESSP (I STATE)
+                         (TIMES 2 (ISQRT STATE))))
+             (NUMBERP (ISQRT STATE))
+             (LESSP (I STATE)
+                    (SQ (ADD1 (ISQRT STATE)))))
+
+        (LIST (ISQRT STATE))
+
+The XXX named SQ-REWRITE-OFF-AGAIN:
+@BEGIN(GROUP)
+@BEGIN(VERBATIM)
+        Enable SQ.
+@END(VERBATIM)
+@END(GROUP)
+
+|#

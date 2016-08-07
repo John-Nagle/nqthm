@@ -1,0 +1,467 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PREDICATE-HELP.EVENTS
+;;;
+;;;  This file contains definitions that are used in file "predicate.events".
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; ~~~~~~~~~~~~
+;;;  Arithmetic
+;;; ~~~~~~~~~~~~
+
+(defn min (x y)
+  (if (lessp y x)
+      y
+      x))
+
+(disable min)
+
+
+;;; ~~~~~~
+;;;  Sets
+;;; ~~~~~~
+
+(defn insert (e x)
+  (if (member e x)
+      x
+      (cons e x)))
+
+(disable insert)
+
+(defn set-equal (x y)
+  (and (subset x y)
+       (subset y x)))
+
+(disable set-equal)
+
+(defn set-diff (x y)
+  (if (listp x)
+      (let ((e (car x))
+            (r (cdr x)))
+        (if (member e y)
+            (set-diff r y)
+            (cons e (set-diff r y))))
+      nil))
+
+(disable set-diff)
+
+(defn intersection (x y)
+  (if (listp x)
+      (let ((e (car x))
+            (r (cdr x)))
+        (if (member e y)
+            (cons e (intersection r y))
+            (intersection r y)))
+      nil))
+
+(disable intersection)
+
+
+;;; ~~~~~~~
+;;;  Lists
+;;; ~~~~~~~
+
+(defn last-cdr (x)
+  (if (listp x)
+      (last-cdr (cdr x))
+      x))
+
+(disable last-cdr)
+
+(defn list-duplicates (x duplicates)
+  (if (listp x)
+      (let ((e (car x))
+            (r (cdr x)))
+        (list-duplicates r (if (member e r)
+                               (insert e duplicates)
+                               duplicates)))
+      duplicates))
+
+(disable list-duplicates)
+
+(defn remove-duplicates (x)
+  (if (listp x)
+      (let ((e (car x))
+            (r (cdr x)))
+        (if (member e r)
+            (remove-duplicates r)
+            (cons e (remove-duplicates r))))
+      x))
+
+(disable remove-duplicates)
+
+(defn append-list (x)
+  (if (listp x)
+      (append (car x)
+              (append-list (cdr x)))
+      nil))
+
+(disable append-list)
+
+(defn flatten-list (x)
+  (remove-duplicates (append-list x)))
+
+(disable flatten-list)
+
+(defn is-head (x y)
+  (if (and (listp x) (listp y))
+      (and (equal (car x) (car y))
+           (is-head (cdr x) (cdr y)))
+      (nlistp x)))
+
+(disable is-head)
+
+(defn listify (x)
+  (if (listp x)
+      (cons (list (car x))
+            (listify (cdr x)))
+      nil))
+
+(disable listify)
+
+
+;;; ~~~~~~~~
+;;;  Alists
+;;; ~~~~~~~~
+
+(defn alistp (x)
+  (if (listp x)
+      (and (listp (car x))
+           (alistp (cdr x)))
+      (equal x nil)))
+
+(disable alistp)
+
+(defn boundp (key alist)
+  (listp (lookup-module key alist)))
+
+;; (defn value (key alist) ...) is in file "dual-eval.events".
+
+(defn alist-entry (key alist)
+  (lookup-module key alist))
+
+(disable alist-entry)
+
+(defn unbind (key alist)
+  (delete-module key alist))
+
+(defn set-value (key value alist)
+  (let ((entry (alist-entry key alist)))
+    (cond ((nlistp entry)
+           (cons (cons key value) alist))
+          ((equal value (cdr entry))
+           alist)
+          (T (cons (cons key value)
+                   (unbind key alist))))))
+
+(disable set-value)
+
+
+(defn union-values (keys alist)
+  (if (listp keys)
+      (union (value (car keys) alist)
+             (union-values (cdr keys) alist))
+      nil))
+
+(disable union-values)
+
+(defn list-union-values (list-of-args alist)
+  ;; list-of-args is a list of lists
+  (if (listp list-of-args)
+      (cons (union-values (car list-of-args) alist)
+            (list-union-values (cdr list-of-args) alist))
+      nil))
+
+(disable list-union-values)
+
+(defn unbound-keys (keys alist)
+  (if (listp keys)
+      (let ((key1 (car keys))
+            (rslt (unbound-keys (cdr keys) alist)))
+        (if (boundp key1 alist)
+            rslt
+            (insert key1 rslt)))
+      nil))
+
+(disable unbound-keys)
+
+(defn unbind-list (keys alist)
+  (if (listp keys)
+      (unbind (car keys)
+              (unbind-list (cdr keys) alist))
+      alist))
+
+(prove-lemma lookup-module-in-delete-module (rewrite)
+  (implies (and (not (equal k1 k2))
+                (lookup-module k1 m))
+           (lookup-module k1 (delete-module k2 m)))
+  ((enable delete-module lookup-module)))
+
+(prove-lemma lookup-module-in-unbind-list (rewrite)
+  (implies (and (not (member k u))
+                (lookup-module k m))
+           (lookup-module k (unbind-list u m))))
+
+(disable lookup-module-in-delete-module)
+
+
+(prove-lemma lessp-unbind-list-count (rewrite)
+  (implies (and (not (member k u))
+                (boundp k m))
+           (lessp (count (unbind-list (cons k u) m))
+                  (count (unbind-list u m)))))
+
+(disable boundp)
+(disable unbind)
+(disable unbind-list)
+(disable lookup-module-in-unbind-list)
+
+
+;;; ~~~~~~~~~
+;;;  Netlist
+;;; ~~~~~~~~~
+
+(defn m-states-list (m-states)
+  (if (or (listp m-states)
+          (equal m-states nil))
+      m-states
+    (list m-states)))
+
+(disable m-states-list)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Sorting Names
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn list-lessp (x y)
+  (if (listp x)
+      (if (listp y)
+          (if (lessp (car x) (car y))
+              t
+              (if (equal (car x) (car y))
+                  (list-lessp (cdr x) (cdr y))
+                  f))
+          f)
+      (listp y)))
+
+(disable list-lessp)
+
+(defn token-lessp (x y)
+  (cond ((and (litatom x)
+              (litatom y))
+         (list-lessp (unpack x) (unpack y)))
+        ((and (litatom x)
+              (indexp y))
+         t)
+        ((and (indexp x)
+              (litatom y)) f)
+        ((and (indexp x)
+              (indexp y))
+         (if (equal (i-name x) (i-name y))
+             (lessp (i-num x) (i-num y))
+             (list-lessp (unpack (i-name x))
+                         (unpack (i-name y)))))
+        (t f)))
+         
+
+(disable token-lessp)
+
+(defn min-token-help (seed list)
+  (if (listp list)
+      (if (token-lessp seed (car list))
+          (min-token-help seed (cdr list))
+          (min-token-help (car list) (cdr list)))
+      seed))
+
+(disable min-token-help)
+
+(defn min-token (list)
+  (if (listp list)
+      (if (listp (cdr list))
+          (min-token-help (car list) (cdr list))
+          (car list))
+      0))
+
+(disable min-token)
+
+(prove-lemma min-token-help-lemma nil
+  (or (equal (min-token-help seed list) seed)
+      (member (min-token-help seed list) list))
+  ((enable min-token-help)))
+
+(prove-lemma min-token-lemma (rewrite)
+  (implies (listp lst)
+           (member (min-token lst) lst))
+  ((use (min-token-help-lemma (seed (car lst)) (list (cdr lst))))
+   (enable min-token)))
+
+
+(prove-lemma delete*-count (rewrite)
+  (lessp (count (delete* e x))
+         (count (cons e x)))
+  ((enable delete*)))
+
+(prove-lemma delete*-lemma (rewrite)
+  (implies (member e lst)
+           (lessp (count (delete* e lst))
+                  (count lst)))
+  ((enable delete*)))
+
+(defn list-sort (list)
+  (if (listp list)
+      (cons (min-token list)
+            (list-sort (delete* (min-token list) list)))
+      nil))
+
+(disable list-sort)
+
+(defn list-list-sort (list)
+  (if (listp list)
+      (cons (list-sort (car list))
+            (list-list-sort (cdr list)))
+      nil))
+
+(disable list-list-sort)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Errors
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(add-shell net-error nil net-errorp
+           ((error-label (none-of) false)
+            (error-body (none-of) true)))
+
+;; Redefine *1*report-error to make errors break into Lisp.
+
+(defn report-error (err)
+  err)
+
+(disable report-error)
+
+(defn pred-error (label body)
+  (report-error (net-error label body)))
+
+(disable pred-error)
+
+(defn error-entry (lst label)
+  (if (listp lst)
+      (let ((e (car lst))
+            (r (cdr lst)))
+        (if (net-errorp e)
+            (if (equal (error-label e) label)
+                e
+                (error-entry r label))
+            (error-entry r label)))
+      F))
+
+(disable error-entry)
+
+(defn net-errors (lst)
+  (if (listp lst)
+      (let ((e (car lst))
+            (r (cdr lst)))
+        (if (net-errorp e)
+            (cons e (net-errors r))
+            (net-errors r)))
+      nil))
+
+(disable net-errors)
+
+(defn collect-net-errors (lst)
+  (if (listp lst)
+      (append (net-errors (car lst))
+              (collect-net-errors (cdr lst)))
+      nil))
+
+(disable collect-net-errors)
+
+(defn err-and (lst label)
+  (let ((r (net-errors lst)))
+    (if (nlistp r)
+        T
+        (pred-error label r))))
+
+(disable err-and)
+
+(defn T-or-err (p label body)
+  (if (and p (not (net-errorp p)))
+      t
+      (pred-error label body)))
+
+(disable T-or-err)
+
+(defn nlistp-or-err (x label)
+  (if (nlistp x)
+      T
+      (pred-error label x)))
+
+(disable nlistp-or-err)
+
+(defn nil-or-err (x label)
+  (if (equal x nil)
+      T
+      (pred-error label x)))
+
+(disable nil-or-err)
+
+(defn subset-or-err (x y label)
+  (let ((r (set-diff x y)))
+    (if (nlistp r)
+        T
+        (pred-error label r))))
+
+(disable subset-or-err)
+
+(defn no-duplicates-or-err (x label)
+  (let ((r (list-duplicates x nil)))
+    (if (nlistp r)
+        T
+        (pred-error label r))))
+
+(disable no-duplicates-or-err)
+
+(defn disjoint-or-err (x y label)
+  (let ((r (intersection x y)))
+    (if (nlistp r)
+        T
+        (pred-error label r))))
+
+(disable disjoint-or-err)
+
+(defn all-bound-or-err (keys alist label)
+  (let ((r (unbound-keys keys alist)))
+    (if (nlistp r)
+        T
+        (pred-error label r))))
+
+(disable all-bound-or-err)
+
+(defn label-error (x label)
+  (if (net-errorp x)
+      (pred-error label x)
+      x))
+
+(disable label-error)
+
+(defn list-collect-value (list-of-args alist)
+  ; list-of-args is a list of lists
+  (if (nlistp list-of-args)
+      nil
+      (cons (flatten-list
+             (collect-value (car list-of-args) alist))
+            (list-collect-value (cdr list-of-args) alist))))
+
+(disable list-collect-value)

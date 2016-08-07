@@ -1,0 +1,1276 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+; An NQTHM Formalization of a Small Machine
+
+; by J Strother Moore II
+; May 30, 1991
+
+; This file serves as a good introduction to the Nqthm approach to
+; language semantics.  We have carried out this approach on much larger
+; examples than presented here.  It is, for example, that used at all
+; levels of the CLI short stack (hardware description language, machine
+; language, assembly language, high-level language).  The semantics of those
+; levels are so large and complicated that it is difficult to see the
+; basic ideas.  Those ideas are highlighted here simply by dealing with
+; a trivial language.
+
+; This is a list of events to be processed by NQTHM starting from the
+; GROUND-ZERO state.  In it I develop
+; (a) an operational semantics for a simple programming language
+; (b) a program that implements multiplication by repeated addition
+; (c) a proof of the correctness of the multiplication program
+;     directly from the "operational" semantics
+; (d) a program that does exponentiation and uses the multiplier
+; (e) a proof of the correctness of the exponentiation program
+; (f) the most general correctness theorem about the multiplier
+; (g) the definition and correctness of the "McCarthy" functional
+;     semantics of the multiplier
+; (h) a proof of the correctness of the multiplier by the inductive
+;     assertion method.
+; (i) May 13, 1992.  a proof of the general theorem that our
+;     standard form of a correctness result for a subroutine 
+;     implies our standard form of a termination result.  This
+;     part of the file is not part of the tutorial because the
+;     proof is pretty messy.
+
+; The programming language is not particularly elegant.  Its only
+; redeeming features are that its semantics is easily written down and
+; it lets me illustrate the points I'm trying to make.  This is by no
+; means a complete or exemplary "library" for dealing with programs in
+; this language; I have in fact kept the facts to a bare minimum.
+
+; We start by defining our "small machine."
+
+(boot-strap nqthm)
+
+; States are represented by the following shell objects:
+
+(add-shell st nil stp
+           ((pc (none-of) zero)
+            (stk (none-of) zero)
+            (mem (none-of) zero)
+            (haltedp (none-of) zero)
+            (defs (none-of) zero)))
+
+; Utility Functions
+
+(defn add1-pc (pc)
+  (cons (car pc) (add1 (cdr pc))))
+
+(defn get (n lst)
+  (if (zerop n) (car lst) (get (sub1 n) (cdr lst))))
+
+(defn put (n v lst)
+  (if (zerop n)
+      (cons v (cdr lst))
+      (cons (car lst) (put (sub1 n) v (cdr lst)))))
+
+(defn fetch (pc defs)
+  (get (cdr pc)
+       (cdr (assoc (car pc) defs))))
+
+; The Semantics of Individual Instructions
+
+; Move Instructions
+
+(defn move (addr1 addr2 s)
+  (st (add1-pc (pc s))
+      (stk s)
+      (put addr1 (get addr2 (mem s)) (mem s))
+      f
+      (defs s)))
+
+(defn movi (addr val s)
+  (st (add1-pc (pc s))
+      (stk s)
+      (put addr val (mem s))
+      f
+      (defs s)))
+
+; Arithmetic Instructions
+
+(defn add (addr1 addr2 s)
+  (st (add1-pc (pc s))
+      (stk s)
+      (put addr1
+           (plus (get addr1 (mem s))
+                 (get addr2 (mem s)))
+           (mem s))
+      f
+      (defs s)))
+
+(defn subi (addr val s)
+  (st (add1-pc (pc s))
+      (stk s)
+      (put addr
+           (difference (get addr (mem s))
+                       val)
+           (mem s))
+      f
+      (defs s)))
+
+; Jump Instructions
+
+(defn jumpz (addr pc s)
+  (st (if (zerop (get addr (mem s)))
+          (cons (car (pc s)) pc)
+          (add1-pc (pc s)))
+      (stk s)
+      (mem s)
+      f
+      (defs s)))
+
+(defn jump (pc s)
+  (st (cons (car (pc s)) pc)
+      (stk s)
+      (mem s)
+      f
+      (defs s)))
+
+; Subroutine Call and Return
+
+(defn call (subr s)
+  (st (cons subr 0)
+      (cons (add1-pc (pc s)) (stk s))
+      (mem s)
+      f
+      (defs s)))
+
+(defn ret (s)
+  (if (nlistp (stk s))
+      (st (pc s) (stk s) (mem s) t (defs s))
+      (st (car (stk s)) (cdr (stk s)) (mem s) f (defs s))))
+
+; One can imagine adding new instructions.
+
+; The Interpreter
+
+(defn execute (ins s)
+  (if (equal (car ins) 'move) (move (cadr ins) (caddr ins) s)
+  (if (equal (car ins) 'movi) (movi (cadr ins) (caddr ins) s)
+  (if (equal (car ins) 'add) (add (cadr ins) (caddr ins) s)
+  (if (equal (car ins) 'subi) (subi (cadr ins) (caddr ins) s)
+  (if (equal (car ins) 'jumpz) (jumpz (cadr ins) (caddr ins) s)
+  (if (equal (car ins) 'jump) (jump (cadr ins) s)
+  (if (equal (car ins) 'call) (call (cadr ins) s)
+  (if (equal (car ins) 'ret)  (ret s)
+      s)))))))))
+
+(defn step (s)
+  (if (haltedp s)
+      s
+      (execute (fetch (pc s) (defs s)) s)))
+
+(defn sm (s n)
+  (if (zerop n)
+      s
+      (sm (step s) (sub1 n))))
+
+; This concludes our formal definition of the intepreter.
+
+; We next prove a small collection of lemmas that tightly control the
+; expansion of the the interpreter.  The idea is that we don't want sm
+; or step to expand unless we know what the current instruction is and
+; have enough time on the clock to execute it.  So we will prove
+; certain rewrite rules that manipulate step and sm and then disable
+; those functions so that only the rules are available.
+
+(prove-lemma step-opener (rewrite)
+  (and (implies (haltedp s) (equal (step s) s))
+       (implies (listp (fetch (pc s) (defs s)))
+                (equal (step s)
+                       (if (haltedp s)
+                           s
+                           (execute (fetch (pc s) (defs s)) s)))))
+  ((disable execute)))
+
+(disable step)
+
+(prove-lemma sm-plus (rewrite)
+  (equal (sm s (plus i j))
+         (sm (sm s i) j)))
+
+(prove-lemma sm-add1 (rewrite)
+  (equal (sm s (add1 i))
+         (sm (step s) i)))
+
+(prove-lemma sm-0 (rewrite)
+  (equal (sm s 0) s))
+
+(disable sm)
+
+; Now we move to our first example program.  We will define a program
+; that multiplies two naturals by successive addition.  We will then
+; prove it correct.
+
+; The program we have in mind is:
+
+; (times (movi 2 0)
+;        (jumpz 0 5)
+;        (add 2 1)
+;        (subi 0 1)
+;        (jump 1)
+;        (ret))
+
+; Observe that the program multiplies the contents of reg 0 by the
+; contents of reg 1 and leaves the result in reg 2.  At the end, reg 0
+; is 0 and reg 1 is unchanged.  If we start at a (call times) this
+; program requires 2+4i+2 instructions, where i is the initial
+; contents of reg 0.  To keep the proof incredibly simple, we will
+; prove the program correct only for the 5 register version of our
+; machine!  (Why 5?  Why not 3?  Because eventually we will use times
+; in another program that uses 5 registers.  In general we should
+; prove it for an arbitrarily large memory -- and we will -- but that
+; just complicates the statement without contributing to the example.)
+
+; We start by defining the constant that is this program:
+
+(defn times-program nil
+
+; This program multiplies r0 times r1 by adding r1 to
+; an accumulator (r2) r0 times.  The accumulator is
+; initialized to 0.
+
+;         instruction  pc     comment
+
+  '(times (movi 2 0) ; 0  Initialize accumulator r2
+          (jumpz 0 5); 1  Jump to end if r0 is 0
+          (add 2 1)  ; 2  Add r1 to r2
+          (subi 0 1) ; 3  Decrement r0 by 1
+          (jump 1)   ; 4  Jump to pc 1
+          (ret)))    ; 5  Return
+
+; and a function that multiplies the "same way."
+
+(defn times-fn (i j ans)
+  (if (zerop i)
+      ans
+      (times-fn (sub1 i) j (plus ans j))))
+
+; In some sense, the following mathematical fact completely captures
+; the correctness of the program:
+
+(prove-lemma times-fn-is-times (rewrite)
+  (implies (numberp ans)
+           (equal (times-fn i j ans)
+                  (plus (times i j) ans))))
+
+; at least if one also understands
+
+(prove-lemma plus-right-id (rewrite)
+  (equal (plus x 0) (fix x)))
+
+
+; The real problem is proving that the program has this semantics.
+; First, how much time does the program need?  It takes one tick to do
+; the CALL, one for the MOVI at pc 0, then 4 ticks for each iteration
+; of the loop at pc 1, and then 2 more ticks to get out of the loop
+; and do the RET.  So:
+
+(defn times-clock (i)
+  (plus 2 (times i 4) 2))
+
+; We could have written (plus 4 (times i 4)) but by using this
+; algebraically odd expression we make sm-plus, above, immediately
+; applicable.
+
+; We next address ourselves to the loop from pc 1 through 4.  Consider
+; an arbitary arrival at pc 1 and suppose you have (times i 4) ticks.
+; The following theorem tells us what you get:
+
+(prove-lemma times-correct-lemma (rewrite)
+  (implies (and (numberp i)
+                (equal (assoc 'times defs) (times-program)))
+           (equal (sm (st '(times . 1)
+                          stk1
+                          (list i j ans r3 r4)
+                          f
+                          defs)
+                      (times i 4))
+                  (st '(times . 1)
+                      stk1
+                      (list 0 j (times-fn i j ans) r3 r4)
+                      f
+                      defs))))
+
+; It is then trivial to construct the entire correctness proof:
+
+(prove-lemma times-correct (rewrite)
+  (implies (and (equal (fetch pc defs) '(call times))
+                (equal (assoc 'times defs) (times-program))
+                (numberp i))
+           (equal (sm (st pc stk (list i j r2 r3 r4) f defs)
+                      (times-clock i))
+                  (st (add1-pc pc)
+                      stk
+                      (list 0 j (times i j) r3 r4)
+                      f
+                      defs))))
+                
+; We disable the clock function so that subsequent programs can
+; use it without its expansion messing up their algebraic
+; form.
+
+(disable times-clock)
+
+; It is worth noting that this file has been rather carefully crafted
+; to make the above proof go through with a minimum of fuss.  In
+; general, we will have to prove lots of lemmas about the utility
+; functions GET and PUT to handle arbitrarily sized memories.  And we
+; have to prove lots of lemmas about arithmetic to explain the data
+; handling in our programs.  To some extent those arithmetic facts get
+; in the way of our desired treatment of the clock in our proofs,
+; e.g., if the theorem prover knows the usual facts about PLUS and
+; TIMES then (PLUS 2 (TIMES I 4) 2) would become (PLUS 4 (TIMES 4 I))
+; and we'd then have to take special care to force sm to open the way
+; we want in this proof.  One avenue that has been used to avoid this
+; problem is to define the clock functions with special arithmetic
+; primitives, e.g., CLK-PLUS and CLK-TIMES (which are in fact just the
+; familiar functions) but which we then disable and isolate from the
+; free-wheeling arithmetic simplifications.
+
+; We now consider the role of subroutine call and return in this
+; language.  To illustrate it we'll implement exponentiation, which
+; will CALL our TIMES program.  The proof of the correctness of the
+; exponentiation program will rely on the correctness of TIMES, not on
+; re-analysis of the code for TIMES.
+
+; The mathematical function we wish to implement is:
+
+(defn exp (i j)
+  (if (zerop j)
+      1
+      (times (exp i (sub1 j)) i)))
+
+; The program we have in mind is:
+
+(defn exp-program nil
+
+; This program computes (exp r0 r1) and leaves the result in r1.
+; Because we use times (which requires repeatedly loading r0 and r1 to
+; pass in its parameters) and because times smashes r2 with its
+; result, we will use r3 and r4 as our "locals."  We will use r1
+; as our running answer, which starts at 1.  After moving r0 and r1
+; to r3 and r4 respectively and initializing our running answer to 1,
+; we just multiply r3 by r1 (r4 times), moving the product back into
+; r1 after each multiplication.
+
+  '(exp (move 3 0)   ; 0  move r0 to r3
+        (move 4 1)   ; 1  move r1 to r4
+        (movi 1 1)   ; 2  initialize r1 as our running ans
+        (jumpz 4 9)  ; 3  if r4 is 0, quit
+        (move 0 3)   ; 4  move r3 into r0
+        (call times) ; 5  multiply r0 times r1, result in r2
+        (move 1 2)   ; 6  move result back to r1
+        (subi 4 1)   ; 7  decrement r4
+        (jump 3)     ; 8  repeat
+        (ret)))      ; 9  return
+
+; A recursive description of the loop (pc 3 through 8) in this
+; algorithm is:
+
+(defn exp-fn (r0 r1 r2 r3 r4)
+  (if (zerop r4)
+      r1
+      (exp-fn 0 (times r3 r1) (times r3 r1) r3 (sub1 r4))))
+
+; Pretty weird.
+
+; We need a little more arithmetic than we have, namely
+; associativity and right identity for times:
+
+(prove-lemma associativity-of-times (rewrite)
+  (equal (times (times i j) k) (times i (times j k))))
+
+(prove-lemma times-right-id (rewrite)
+  (equal (times i 1) (fix i)))
+
+; So now the system can prove that the weird exp-fn is just exp (in a
+; generalized sense that accomodates the initial value of r1).
+
+(prove-lemma exp-fn-is-exp (rewrite)
+  (implies (numberp r1)
+           (equal (exp-fn r0 r1 r2 r3 r4)
+                  (times (exp r3 r4) r1))))
+
+; Here is the clock function for exp.  Again we use an algebraically
+; odd form simply to gain instant access to the desired sm-plus
+; decomposition.  The "4" gets us past the CALL and the first 3
+; initialization instructions; the times expression takes us around
+; the exp loop j times, and the final "2" gets us out through the RET.
+; Note that as we go around the loop we make explicit reference to
+; TIMES-CLOCK to explain the CALL of TIMES.
+
+(defn exp-clock (i j)
+  (plus 4 (times j (plus 2 (times-clock i) 3)) 2))
+
+; Now we prove the "loop invariant" for the EXP program.  We simply
+; tell the system to induct according to exp-fn.  We could "trick" it
+; into doing that by using exp-fn in place of the (times (exp r3 r4)
+; r1) expressions, but that is devious and doesn't always work.
+
+(prove-lemma exp-correct-lemma (rewrite)
+  (implies (and (numberp r3)
+                (numberp r4)
+                (equal (assoc 'exp defs) (exp-program))
+                (equal (assoc 'times defs) (times-program)))
+           (equal (sm (st '(exp . 3)
+                          stk
+                          (list r0 r1 r2 r3 r4)
+                          f
+                          defs)
+                      (times r4 (plus 2 (times-clock r3) 3)))
+                  (st '(exp . 3)
+                      stk
+                      (if (zerop r4)
+                          (list r0 r1 r2 r3 r4)
+                          (list 0
+                                (times (exp r3 r4) r1)
+                                (times (exp r3 r4) r1)
+                                r3
+                                0))
+                      f
+                      defs)))
+  ((induct (exp-fn r0 r1 r2 r3 r4))))
+
+; The theorem prover is now set up to prove that exp is correct
+; without further assistance.  (But you must not underestimate how
+; clever this assistance has been to make this possible!)
+
+(prove-lemma exp-correct (rewrite)
+  (implies (and (numberp i)
+                (numberp j)
+                (equal (fetch pc defs) '(call exp))
+                (equal (assoc 'exp defs) (exp-program))
+                (equal (assoc 'times defs) (times-program)))
+           (equal (sm (st pc stk (list i j r2 r3 r4) f defs)
+                      (exp-clock i j))
+                  (st (add1-pc pc)
+                      stk
+                      (if (zerop j)
+                          (list i (exp i j) r2 i 0)
+                          (list 0 (exp i j) (exp i j) i 0))
+                      f
+                      defs))))
+
+; Ok, enough of this.  Presumably the point has been made:  correctness
+; proofs can be "stacked."
+
+; Recall that we have been dealing with an unnecessarily restricted
+; view of the machine, namely that it only have 5 memory locations.
+; Before leaving this approach and pursuing some others, let us
+; quickly prove the most general form of the correctness result for
+; TIMES.
+
+; We start with the basic normalization rules for get and put.
+
+(defn length (lst)
+  (if (nlistp lst)
+      0
+      (add1 (length (cdr lst)))))
+
+(prove-lemma put-put-0 (rewrite)
+  (implies (and (lessp addr (length mem))
+                (equal (get addr mem) val))
+           (equal (put addr val mem) mem)))
+
+(prove-lemma put-put-1 (rewrite)
+  (equal (put addr v2 (put addr v1 mem))
+         (put addr v2 mem)))
+
+(prove-lemma put-put-2 (rewrite)
+  (implies (and (numberp addr1)
+                (numberp addr2)
+                (not (equal addr1 addr2)))
+           (equal (put addr2 v2 (put addr1 v1 mem))
+                  (put addr1 v1 (put addr2 v2 mem)))))
+
+(prove-lemma get-put (rewrite)
+  (implies (and (numberp addr1) (numberp addr2))
+           (equal (get addr1 (put addr2 val mem))
+                  (if (equal addr1 addr2)
+                      val
+                      (get addr1 mem)))))
+
+
+(prove-lemma length-put (rewrite)
+  (implies (lessp addr (length mem))
+           (equal (length (put addr val mem)) (length mem))))
+
+(disable get)
+(disable put)
+
+; And a few basic arithmetic facts.
+
+(prove-lemma difference-1 (rewrite) (equal (difference x 1) (sub1 x)))
+
+(prove-lemma difference-elim (elim)
+  (implies (and (numberp i)
+                (not (lessp i j)))
+           (equal (plus j (difference i j)) i)))
+
+(prove-lemma associativity-of-plus (rewrite)
+  (equal (plus (plus i j) k) (plus i (plus j k))))
+
+(prove-lemma commutativity-of-plus (rewrite)
+  (equal (plus i j) (plus j i)))
+
+(prove-lemma commutativity2-of-plus (rewrite)
+  (equal (plus i (plus k j)) (plus k (plus i j))))
+
+; Ok, now we get specific to the TIMES program.  The following function
+; "is" loop in the TIMES program vis-a-vis its effect on a completely
+; arbitrary memory mem.  If a program is run entirely for its effect on
+; memory (as opposed to the subroutine stack or the haltedp flag, then
+; this program "is" the McCarthy-esque functional analogue of the loop.
+
+(defn times-mem-fn-loop (mem)
+  (if (zerop (get 0 mem))
+      mem
+      (times-mem-fn-loop
+       (put 0 (sub1 (get 0 mem))
+         (put 2 (plus (get 2 mem) (get 1 mem))
+              mem))))
+  ((lessp (get 0 mem))))
+
+(defn times-mem-fn (mem)
+  (times-mem-fn-loop (put 2 0 mem)))
+
+; In proving this functional analogue correct we essentially carry
+; our McCarthy's functional semantics approach.  The theorem below
+; establishes that times-mem-fn-loop just does two puts into mem:  it
+; 0's r0 and it puts (r0*r1)+r2 into location r2:
+
+(prove-lemma times-mem-fn-loop-is-times (rewrite)
+  (implies (and (numberp (get 0 mem))
+                (numberp (get 2 mem))
+                (lessp 2 (length mem)))
+           (equal (times-mem-fn-loop mem)
+                  (put 0 0
+                       (put 2 (plus (times (get 0 mem) (get 1 mem)) (get 2 mem))
+                            mem)))))
+
+(prove-lemma times-mem-fn-is-correct nil
+  (implies (and (numberp (get 0 mem))
+                (lessp 2 (length mem)))
+           (equal (times-mem-fn mem)
+                  (put 0 0
+                       (put 2 (times (get 0 mem) (get 1 mem))
+                            mem)))))
+
+; Our aim, in the revisited times-correct theorem, is to establish that
+; executing a CALL of TIMES has the following effect on an almost arbitrary
+; state s: 
+
+(defn times-step (s)
+  (st (add1-pc (pc s))
+      (stk s)
+      (put 0 0
+           (put 2 (times (get 0 (mem s))
+                         (get 1 (mem s)))
+                (mem s)))
+      f
+      (defs s)))
+
+; The proof proceeds, as we have seen twice before, first by an
+; inductive analysis of the loop itself.  Note that we induct
+; according to times-mem-fn-loop.
+
+(prove-lemma times-correct-lemma-revisited (rewrite)
+  (implies (and (numberp (get 0 mem))
+                (equal (assoc 'times defs) (times-program)))
+           (equal (sm (st '(times . 1)
+                          stk1
+                          mem
+                          f
+                          defs)
+                      (times (get 0 mem) 4))
+                  (st '(times . 1)
+                      stk1
+                      (times-mem-fn-loop mem)
+                      f
+                      defs)))
+  ((induct (times-mem-fn-loop mem))))
+
+; Unfortunately, the above lemma is not quite applicable in our use below
+; because the mem that occurs in the state in the lhs of the conclusion is
+; not going to be syntactically identical to the mem that occurs in the
+; (times (get 0 mem) 4) in the clock.  The reason is that the clock mem is
+; the original mem while the state mem is the one produced by moving a 0
+; into r2.  Of course, they have the same r0 value.  So, having proved
+; the inductive fact we need, we now "generalize" it.
+
+(prove-lemma times-correct-lemma-revisited-and-generalized (rewrite)
+  (implies (and (equal r0 (get 0 mem))
+                (numberp (get 0 mem))
+                (equal (assoc 'times defs) (times-program)))
+           (equal (sm (st '(times . 1)
+                          stk1
+                          mem
+                          f
+                          defs)
+                      (times r0 4))
+                  (st '(times . 1)
+                      stk1
+                      (times-mem-fn-loop mem)
+                      f
+                      defs))))
+
+; And now we can prove the most general form of the correctness of our
+; TIMES program.  It tells us that if you are interested in (sm s n),
+; where the pc points to a CALL of TIMES, the definition of 'TIMES is
+; ours, memory is at least 3 long, r0 is numeric, the halt flag is
+; off, and there are at least (times-clock r0) ticks on the clock,
+; then you can just take a times-step and decrease the clock by
+; (times-clock r0).  What more could you want?
+
+(prove-lemma times-correct-revisited nil
+  (implies
+   (and (equal (fetch (pc s) (defs s))
+               '(CALL TIMES))
+        (equal (assoc 'TIMES (defs s))
+               (times-program))
+        (lessp 2 (length (mem s)))
+        (equal r0 (get 0 (mem s)))
+        (numberp r0)
+        (not (lessp n (times-clock r0)))
+        (not (haltedp s)))
+   (equal (sm s n)
+          (sm (times-step s)
+              (difference n
+                          (times-clock r0)))))
+  ((disable commutativity-of-plus
+            commutativity2-of-plus)
+   (enable times-clock)))
+
+
+
+; The Inductive Assertion Approach
+
+; First, we simply prove the hand-generated verification
+; conditions from an informal annotation of our TIMES
+; program.
+
+(prove-lemma verification-conditions-for-times nil
+  (and (implies (and (numberp i0)
+                     (numberp i1))
+                (and (numberp 0)
+                     (equal (times i0 i1)
+                            (plus 0 (times i0 i1)))))
+
+       (implies (and (numberp r2)
+                     (equal (times i0 i1)
+                            (plus r2 (times r0 r1)))
+                     (not (zerop r0)))
+                (and (numberp (plus r2 r1))
+                     (equal (times i0 i1)
+                            (plus (plus r2 r1)
+                                  (times (sub1 r0) r1)))))
+
+       (implies (and (numberp r2)
+                     (equal (times i0 i1)
+                            (plus r2 (times r0 r1)))
+                     (zerop r0))
+                (equal r2 (times i0 i1)))))
+
+; Now we develop the analogue of the inductive assertion
+; method formally.
+
+; Introduce p as an arbitrary invariant under stepping.  The
+; everywhere true predicate witnesses this constraint.
+
+(constrain p-step (rewrite) (implies (p s) (p (step s))) 
+  ((p (lambda (s) t))))
+
+; Observe that such a p is invariant under arbitrary length runs of the
+; machine.
+
+(prove-lemma p-invariant (rewrite)
+  (implies (p s0) (p (sm s0 n)))
+  ((enable sm)))
+
+; That's it.  It is really deep isn't it?
+
+; Now we'll define a p that suits our specification for TIMES.  We call
+; it timesp.
+
+(defn r0 (s) (get 0 (mem s)))
+(defn r1 (s) (get 1 (mem s)))
+(defn r2 (s) (get 2 (mem s)))
+
+(defn timesp (i0 i1 s)
+  (and (numberp i0)
+       (numberp i1)
+       (stp s)
+       (nlistp (stk s))
+       (equal (assoc 'times (defs s)) (times-program))
+       (equal i1 (r1 s))
+       
+       (if (equal (pc s) '(times . 0))
+           (equal i0 (r0 s))
+       (if (equal (pc s) '(times . 1))
+           (and (numberp (r2 s))
+                (equal (times i0 i1) (plus (r2 s) (times (r0 s) (r1 s)))))
+       (if (equal (pc s) '(times . 2))
+           (and (not (zerop (r0 s)))
+                (numberp (r2 s))
+                (equal (times i0 i1) (plus (r2 s) (times (r0 s) (r1 s)))))
+       (if (equal (pc s) '(times . 3))
+           (and (not (zerop (r0 s)))
+                (numberp (r2 s))
+                (equal (plus i1 (times i0 i1))
+                       (plus (r2 s) (times (r0 s) (r1 s)))))
+       (if (equal (pc s) '(times . 4))
+           (and (numberp (r2 s))
+                (equal (times i0 i1) (plus (r2 s) (times (r0 s) (r1 s)))))
+       (if (equal (pc s) '(times . 5))
+           (equal (r2 s) (times i0 i1))
+           f))))))))
+
+; Since timesp is preserved by step:
+
+(prove-lemma timesp-step (rewrite)
+  (implies (timesp i0 i1 s)
+           (timesp i0 i1 (step s))))
+
+; we can immediately conclude by functional instantiation that
+; it is preserved under arbitrary runs of the machine:
+
+(functionally-instantiate timesp-invariant nil
+  (implies (timesp i0 i1 s0) (timesp i0 i1 (sm s0 n)))
+  p-invariant
+  ((p (lambda (s) (timesp i0 i1 s))))
+  ((disable timesp)))
+  
+; By additionally assuming that the initial and final pcs
+; are at 0 and 5 respectively in TIMES, we derive the
+; desired theorem.
+
+(prove-lemma times-correct-revisited-again nil
+  (implies (and (stp s0)
+                (nlistp (stk s0))
+                (equal (assoc 'times (defs s0)) (times-program))
+                (equal i0 (get 0 (mem s0)))
+                (equal i1 (get 1 (mem s0)))
+                (numberp i0)
+                (numberp i1)
+                (equal (pc s0) '(times . 0))
+                (equal (pc (sm s0 n)) '(times . 5)))
+           (equal (get 2 (mem (sm s0 n))) (times i0 i1)))
+  ((use (timesp-invariant))))
+
+
+; The following events are not at all easy to follow and should not be
+; considered part of the tutorial.  They are included in this file to
+; justify the sentence, in the second edition of the Handbook, that
+; our standard form of correctness theorem for a subroutine implies
+; the standard form of the termination theorem for that subroutine.
+; In particular, we lead the system the proof of the following
+; theorem.  Suppose s is a state poised to execute a CALL of some
+; subroutine fn (and the halt flag of s is F).  Suppose that some
+; non-zero number of steps, n, later the stack is the same as it is in
+; s.  Intuitively, this means that the subroutine was called and
+; eventually returned.  Then if the subroutine is called as the
+; top-level program the halt flag is eventually set.  That is to say,
+; let s' be obtained from s by setting the pc to (fn . 0), the first
+; instruction in fn, and let the stack be nil, i.e., this is the
+; top-level, main program.  Then by running s' n steps we obtain a
+; state with the halt flag set.  That is the theorem
+; standard-correctness-implies-termination, below.
+
+; It is a fairly difficult theorem for two reasons.  First, it
+; considers running fn in two different states: as part of a
+; continuing computation and as the top-level main program.  We
+; therefore have to develop lemmas that let us modify the state, e.g.,
+; change the stack, without damaging some aspects of the computation.
+; Second, the hypothesis that the stack eventually (at tick n) is the
+; same as before the CALL means that a balanced RET was executed.  But
+; it does not mean the balancing RET was executed at tick n.  For all
+; we know, the CALL returned immediately and during the remaining
+; ticks we possibly called other routines or even returned from the
+; caller and eventually re-entered!  But we can convert that
+; hypothesis into one that says for some k<n the balancing RET was
+; executed on the kth tick and if we considered the top-level
+; computation at that tick, we'll see that it sets the halt flag.  The
+; remaining ticks at the top-level computation just leave the halt
+; flag on.
+
+; This proof took several days to construct and I found it frustrating
+; in its complexity.  Perhaps someone can simplify it.  That said,
+; here are the events with which I proved it.
+
+; Because the tutorial has left the data base in a state designed to
+; prove things of individual programs, there is a fair amount of
+; enabling and disabling to get access to the guts of the machine.
+
+; First we prove that once the machine halts, it stays halted.
+
+(prove-lemma step-preserves-haltedp (rewrite)
+  (implies (not (haltedp (step s))) (not (haltedp s)))
+  ((enable step)))
+
+(prove-lemma sm-preserves-haltedp (rewrite)
+  (implies (not (haltedp (sm s n))) (not (haltedp s)))
+  ((enable sm)))
+
+; And that only RET sets the halt flag, i.e., if it becomes halted,
+; then the current pc points to a RET.
+
+(prove-lemma only-ret-sets-haltedp (rewrite)
+  (implies (and (not (haltedp s))
+                (and (haltedp (step s)) (equal defs (defs s))))
+           (equal (car (get (cdr (pc s))
+                            (cdr (assoc (car (pc s)) defs))))
+                  'ret))
+  ((enable step)))
+
+; This function finds the k<n at which the balancing RET is
+; executed.  Imagine that s is the state immediately after the
+; CALL and that d is the depth of the stack in that state.
+; Then we count ticks until we are poised to execute a RET from
+; a state with stack depth d.
+
+(defn k (s d n)
+  (if (zerop n)
+      0
+      (if (and (equal (length (stk s)) d)
+               (equal (car (fetch (pc s) (defs s))) 'ret))
+          0
+          (add1 (k (step s) d (sub1 n))))))
+
+; Because we'll keep step disabled, we'll need the following to
+; analyze what it does to the stack depth.
+
+(prove-lemma length-stk-step (rewrite)
+  (equal (length (stk (step s)))
+         (if (haltedp s)
+             (length (stk s))
+             (if (equal (car (fetch (pc s) (defs s))) 'ret)
+                 (sub1 (length (stk s)))
+                 (if (equal (car (fetch (pc s) (defs s))) 'call)
+                     (add1 (length (stk s)))
+                     (length (stk s))))))
+  ((enable step)))
+
+; The following theorem establishes that if, within n, the
+; stack depth falls below d then the computed k is less than n.
+
+(prove-lemma exists-terminating-ret nil
+  (implies (and (numberp d)
+                (not (lessp (length (stk s0)) d))
+                (lessp (length (stk (sm s0 n))) d))
+           (lessp (k s0 d n) n))
+  ((enable sm) (induct (k s0 d n))))
+
+; We now want to prove that if the computed k is less than n, then
+; various things are true of the state at tick k.  We need the
+; obvious fact that the defs field never changes.
+
+(prove-lemma defs-step (rewrite)
+   (equal (defs (step s)) (defs s))
+   ((enable step)))
+
+; So here are some important properties of our k (when it is less than
+; n), namely, that the stack depth of the kth state is d and that it
+; is poised to execute a RET.
+
+(prove-lemma properties-of-k (rewrite)
+  (implies (lessp (k s0 d n) n)
+           (and (equal (length (stk (sm s0 (k s0 d n)))) d)
+                (equal (car (fetch (pc (sm s0 (k s0 d n)))
+                                   (defs s0)))
+                       'ret)))
+  ((disable length-stk-step) (enable sm)))
+
+; We also need that the kth state is still running, i.e., not itself halted.
+; This takes a bit of work.
+
+(prove-lemma haltedp-persists (rewrite)
+ (implies (haltedp s) (haltedp (sm s n)))
+ ((enable sm step)))
+
+(prove-lemma haltedp-k (rewrite)
+  (implies (haltedp s)
+           (equal (k s d n)
+                  (if (and (equal (length (stk s)) d)
+                           (equal (car (fetch (pc s) (defs s)))
+                                  'ret))
+                      0
+                      (fix n)))))
+
+(prove-lemma halting-preserves-stk (rewrite)
+  (implies (haltedp (step s0))
+           (equal (length (stk (step s0)))
+                  (length (stk s0))))
+  ((enable step)))
+
+; With that preamble, we can get that the kth state is still running.
+
+(prove-lemma another-property-of-k (rewrite)
+  (implies (and (not (haltedp s0)) (lessp (k s0 d n) n))
+           (not (haltedp (sm s0 (k s0 d n)))))
+  ((disable length-stk-step) (enable sm)))
+
+; We assemble the two lemmas establishing properties of k into one: if
+; s0 is not halted and within n ticks the stack is less than its
+; current size then (a) k exists, i.e., is less than n, (b) the kth
+; state has the same stack size as s0, (c) the kth state is poised to
+; execute a RET and (d) it is not halted.
+
+(prove-lemma decreasing-stk-means-ret-exists (rewrite)
+  (implies (and (not (haltedp s0))
+                (lessp (length (stk (sm s0 n))) (length (stk s0))))
+           (and (lessp (k s0 (length (stk s0)) n) n)
+                (equal (length (stk
+                                (sm s0
+                                    (k s0 (length (stk s0)) n))))
+                       (length (stk s0)))
+                (equal (car
+                        (fetch
+                         (pc
+                          (sm s0
+                              (k s0 (length (stk s0)) n)))
+                         (defs s0)))
+                       'ret)
+                (not (haltedp (sm s0
+                                  (k s0 (length (stk s0)) n))))))
+  ((disable fetch)
+   (use (exists-terminating-ret (d (length (stk s0)))))))
+
+; Now we'll disable the two independently proved lemmas about k.
+
+(disable properties-of-k)
+(disable another-property-of-k)
+
+; Next, we develop the idea that under some conditions we can mess around with
+; the stack of a computation without changing the outcome in some sense.  The only
+; way we'll mess around is by growing the stack at the deep end by adding some
+; arbitrary additional cells.  
+
+(defn grow-stk (s stk)
+  (st (pc s)
+      (append (stk s) stk)
+      (mem s)
+      (haltedp s)
+      (defs s)))
+
+; The lemma sm-grow-stk, just below, is the key result.  The intervening
+; lemmas are just helpers.
+
+(prove-lemma listp-append (rewrite)
+  (equal (listp (append a b)) (or (listp a) (listp b))))
+
+(prove-lemma step-grow-stk (rewrite)
+  (implies (not (haltedp (step s)))
+           (equal (step (grow-stk s stk)) (grow-stk (step s) stk)))
+  ((enable step)))
+
+(prove-lemma sm-grow-stk nil
+  (implies (not (haltedp (sm s n)))
+           (equal (sm (grow-stk s stk) n)
+                  (grow-stk (sm s n) stk)))
+  ((induct (sm s n))
+   (disable grow-stk)
+   (enable sm)))
+
+; The above lemma is really nice.  It says that if a computation
+; doesn't halt within n then growing the stack commutes with the
+; computation, i.e., you can grow the stack before you start or after
+; you finish.  This lets us consider a computation in either of two
+; states, one with a shallow stack or one with a deep stack.  If s has
+; a stack of nil then it is in top-level execution and thus (grow-stk
+; s stk) is some continuing execution of the same program.
+
+; A key fact we'll need is that if k is less than or equal to n and the
+; computation halts in k then it halts in n.  This explains why the
+; halt flag is set at the end of the long top-level computation, even if
+; it became set fairly early.
+
+(prove-lemma lessp-haltedp nil
+  (implies (and (not (lessp n k))
+                (haltedp (sm s k)))
+           (haltedp (sm s n)))
+  ((enable sm)))
+
+(prove-lemma equal-length-0 (rewrite)
+  (equal (equal (length x) 0) (nlistp x)))
+                                          
+; Again, because step will be disabled later, we need to expose the
+; behavior of a halting RET.
+
+(prove-lemma step-is-ret nil
+  (implies (and (not (haltedp s))
+                (equal (car (fetch (pc s) (defs s))) 'ret)
+                (nlistp (stk s)))
+            (haltedp (step s)))
+  ((enable step)))
+
+; Oddly enough, though we proved that defs is preserved by step, above,
+; we only now need that it is preserved by sm.
+
+(prove-lemma defs-sm (rewrite)
+  (equal (defs (sm s n)) (defs s))
+  ((enable sm)))
+
+; In a sense, the following theorem is the real key to our proof.  It
+; gives us a way to show that the halted flag is on in the nth step of
+; s, namely find some k less than n-1 such that the kth state is not
+; yet halted but has a stack of length 0 and is poised to execute a
+; RET.  If you imagine that s is the top-level run of our subroutine,
+; then this focusses our attention on the k at which the halt flag first
+; becomes set.
+
+(prove-lemma expand-sm-n (rewrite)
+  (implies (and (lessp k (sub1 n))
+                (not (haltedp (sm s k)))
+                (equal (car (fetch (pc (sm s k)) (defs s))) 'ret)
+                (equal (length (stk (sm s k))) 0))
+           (haltedp (sm s n)))
+  ((use (lessp-haltedp (n n) (k (plus k 1)))
+        (step-is-ret (s (sm s k))))))
+
+; Now there are various details to be worked out, and I never found a
+; really nice way to handle them except by brute force.  The basic
+; theme of these details is that from the hypothesis that the
+; ``continuing computation'' eventually returns to the same stack
+; depth we can get some information about the pc and stack depth in
+; the continuing computation.  But we have to convert that to
+; information about the pc and stack depth in the top-level
+; computation.  We can get these results from our sm-grow-stk lemma,
+; namely, we know that if a short stacked computation doesn't halt we
+; can grow its stack either before or after.  If the short stacked
+; computation is the top-level one, where the stack is nil, then we
+; can grow the stack to whatever stack we have in the continuing
+; computation.  From the equality of the two final states we can learn
+; that the pc of the top-level computation is the same as that of the
+; continuing one.  While I find this proof very neat, what with its
+; use of sm-grow-stk, I find the event below ugly because of the
+; explict hint and the explicit states involved.  But it just wasn't
+; worth my time to figure out an elegant rewrite rule that would
+; normalize the pc.
+
+(prove-lemma pc-equiv (rewrite)
+  (implies
+   (not (haltedp (sm (st (cons prog 0) nil (mem s) f (defs s))
+                     k))) 
+   (equal (pc (sm (st (cons prog 0) nil (mem s) f (defs s))
+                  k))
+          (pc (sm (st (cons prog 0)
+                      (cons (cons (car (pc s))
+                                  (add1 (cdr (pc s))))
+                            (stk s))
+                      (mem s)
+                      f
+                      (defs s))
+                  k))))
+  ((use (sm-grow-stk (s (st (cons prog 0) nil (mem s) f (defs s)))
+                     (stk (cons (cons (car (pc s))
+                                      (add1 (cdr (pc s))))
+                                (stk s)))
+                     (n k)))))
+
+; We need to know a similar fact about the stacks after k steps.  In particular,
+; we know from the continuing computation that at step k it is poised to RET on
+; a stack of a certain depth.  We need to convert that to a fact about the top-level
+; state at step k, namely that the stack there is nil -- so the RET will set the halt
+; flag.  At first sight, this is a problem very similar to that above and one is
+; tempted to try to solve it the same way.  But the problem above is insensitive to
+; the value of k, as long as the computation is still running, while the one we
+; are talking about now is our special k, the tick at which we execute the RET that
+; balances the initial CALL.  But that raises a problem.  That existential k
+; is computed with a given state.  Is that state from the continuing computation
+; or from the top-level one?  What we prove below is that it doesn't matter, they
+; are the same!  This is pretty subtle.  We need a few lemmas...
+
+(prove-lemma length-append (rewrite)
+  (equal (length (append a b)) (plus (length a) (length b))))
+
+(prove-lemma grow-stk-props (rewrite)
+  (and (equal (pc (grow-stk s stk)) (pc s))
+       (equal (stk (grow-stk s stk)) (append (stk s) stk))
+       (equal (mem (grow-stk s stk)) (mem s))
+       (equal (haltedp (grow-stk s stk)) (haltedp s))
+       (equal (defs (grow-stk s stk)) (defs s))))
+
+(prove-lemma step-grow-stk-revisited-1 (rewrite)
+  (implies (lessp 0 (length (stk s)))
+           (equal (step (grow-stk s stk))
+                  (grow-stk (step s) stk)))
+  ((enable step)))
+                  
+(prove-lemma step-grow-stk-revisited-2 (rewrite)
+  (implies (not (equal (car (fetch (pc s) (defs s))) 'ret))
+           (equal (step (grow-stk s stk))
+                  (grow-stk (step s) stk)))
+  ((enable step)))
+
+; So here is the key fact: k produces the same answer on the top-level
+; state (here, s) and the continuing state, provided you bump the d
+; appropriately.
+
+(prove-lemma k-grow-stk nil
+  (implies (and (numberp d)
+                (not (lessp (length (stk s)) d)))
+           (equal (k (grow-stk s stk) (plus d (length stk)) n)
+                  (k s d n)))
+  ((induct (k s d n))
+   (expand (k (grow-stk s stk)
+              (plus d (length stk))
+              n))
+   (disable grow-stk)))
+
+; Once again, I couldn't find a useful rewrite rule, since grow-stk isn't
+; really in our problem, and so I make this lemma of class nil and instantiate
+; it when I need to show that the two states produce the same k.  Given that,
+; we can now infer that the final, top-level stack is nil at step k,
+; just by using properties of k on the top-level state, but appealing to
+; the existence of k from the continuing state.  We then repeat the exercise
+; to extract the information that the halt flag is still off at step k in
+; the top-level state.
+
+(prove-lemma stk-is-nil (rewrite)
+  (implies (lessp (k (st (cons prog 0)
+                         (cons (cons (car (pc s))
+                                     (add1 (cdr (pc s))))
+                               (stk s))
+                         (mem s)
+                         f
+                         (defs s))
+                     (add1 (length (stk s)))
+                     (sub1 n))
+                  (sub1 n))
+           (equal (listp (stk (sm (st (cons prog 0)
+                                      nil
+                                      (mem s)
+                                      f
+                                      (defs s))
+                                  (k (st (cons prog 0)
+                                         (cons (cons (car (pc s))
+                                                     (add1 (cdr (pc s))))
+                                               (stk s))
+                                         (mem s)
+                                         f
+                                         (defs s))
+                                     (add1 (length (stk s)))
+                                     (sub1 n)))))
+                  f))
+  ((use (k-grow-stk (s (st (cons prog 0)
+                           nil
+                           (mem s)
+                           f
+                           (defs s)))
+                    (stk (cons (cons (car (pc s))
+                                     (add1 (cdr (pc s))))
+                               (stk s)))
+                    (d 0)
+                    (n (sub1 n)))
+        (properties-of-k (s0 (st (cons prog 0)
+                                 nil
+                                 (mem s)
+                                 f
+                                 (defs s)))
+                         (d 0)
+                         (n (sub1 n))))))
+
+(prove-lemma haltedp-is-off (rewrite)
+  (implies (lessp (k (st (cons prog 0)
+                         (cons (cons (car (pc s))
+                                     (add1 (cdr (pc s))))
+                               (stk s))
+                         (mem s)
+                         f
+                         (defs s))
+                     (add1 (length (stk s)))
+                     (sub1 n))
+                  (sub1 n))
+           (equal (haltedp (sm (st (cons prog 0)
+                                   nil
+                                   (mem s)
+                                   f
+                                   (defs s))
+                               (k (st (cons prog 0)
+                                      (cons (cons (car (pc s))
+                                                  (add1 (cdr (pc s))))
+                                            (stk s))
+                                      (mem s)
+                                      f
+                                      (defs s))
+                                  (add1 (length (stk s)))
+                                  (sub1 n))))
+                  f))
+  ((use (k-grow-stk (s (st (cons prog 0)
+                           nil
+                           (mem s)
+                           f
+                           (defs s)))
+                    (stk (cons (cons (car (pc s))
+                                     (add1 (cdr (pc s))))
+                               (stk s)))
+                    (d 0)
+                    (n (sub1 n)))
+        (another-property-of-k (s0 (st (cons prog 0)
+                                       nil
+                                       (mem s)
+                                       f
+                                       (defs s)))
+                               (d 0)
+                               (n (sub1 n))))))
+
+; So, if you've followed all that, you are ready to get the main theorem:
+
+(prove-lemma standard-correctness-implies-termination nil
+  (implies (and (not (haltedp s))
+                (equal (fetch (pc s) (defs s)) (list 'call prog))
+                (not (zerop n))
+                (equal (stk (sm s n)) (stk s)))
+           (haltedp (sm (st (cons prog 0) nil (mem s) f (defs s)) n)))
+  ((expand (sm s n))
+   (disable decreasing-stk-means-ret-exists step-preserves-haltedp)
+   (use (decreasing-stk-means-ret-exists (s0 (st (cons prog 0)
+                                                 (cons (cons (car (pc s))
+                                                             (add1 (cdr (pc s))))
+                                                       (stk s))
+                                                 (mem s)
+                                                 f
+                                                 (defs s)))
+                                         (n (sub1 n))))))
+
+; As I said, the proof is not at all easy to follow.  I invite
+; readers to find a better one!
+
+        
+; The next theorem establishes the effect of a one-instruction infinite loop.
+; It says that if you have a running state and when you fetch the current
+; instruction you get (JUMP i) where i is the location of the current program
+; counter, then the halt flag is never set. 
+
+(prove-lemma infinite-loop nil
+  (implies (and (not (haltedp s))
+                (equal (fetch (pc s) (defs s)) (list 'jump i))
+                (numberp i)
+                (equal (cdr (pc s)) i))
+           (not (haltedp (sm s n))))
+  ((enable sm)))

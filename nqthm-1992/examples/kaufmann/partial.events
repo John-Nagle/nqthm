@@ -1,0 +1,368 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+;; Here are some games with "partial functions".....
+
+(boot-strap nqthm)
+
+(defn s-plus (x y)
+  (if x
+      (if y
+          (plus x y)
+        f)
+    f))
+
+(dcl apply (x y))
+
+;; Example 1:  a simple total reflexive function that's actually
+;; the identity function on natural numbers.
+
+;; dcls, add-axioms, and rewrite rules for g-cost and g (6 events)
+
+(dcl g-cost (x))
+
+(dcl g (x))
+
+(add-axiom g-defn ()
+  (equal (g x)
+         (if (g-cost x)
+             (if (zerop x)
+                 0
+               (add1 (g (g (sub1 x)))))
+           (apply 'g (list x)))))
+
+(add-axiom g-cost-defn ()
+           (equal (g-cost x)
+                  (if (zerop x)
+                      1
+                    (s-plus 1
+                            (s-plus (g-cost (sub1 x))
+                                    (g-cost (g (sub1 x))))))))
+
+(prove-lemma g-cost-opener (rewrite)
+  (and (implies (zerop x)
+                (equal (g-cost x) 1))
+       (implies (not (zerop x))
+                (equal (g-cost x)
+                       (s-plus 1
+                               (s-plus (g-cost (sub1 x))
+                                       (g-cost (g (sub1 x))))))))
+  ((use (g-cost-defn))))
+
+(prove-lemma g-opener (rewrite)
+  (and (implies (zerop x)
+                (equal (g x)
+                       (if (g-cost x)
+                           0
+                         (apply 'g (list x)))))
+       (implies (not (zerop x))
+                (equal (g x)
+                       (if (g-cost x)
+                           (add1 (g (g (sub1 x))))
+                         (apply 'g (list x))))))
+  ((use (g-defn))))
+
+(prove-lemma g-theorem (rewrite)
+  (and (g-cost x)
+       (equal (g x) (fix x)))
+  ((induct (plus x y))))
+
+;; Example 2:  Silly factorial
+
+(defn isub1 (x)
+  ;; integer decrement
+  (if (negativep x)
+      (minus (add1 (negative-guts x)))
+    (sub1 x)))
+
+;; dcls, add-axioms, and rewrite rules for fact-cost and fact (5 events).
+;; Note that we don't try to make a rewrite rule for the nonterminating
+;; case.  Also, since our function isn't reflexive and we are only interested
+;; in termination, we only bother to prove a rewrite rule for opening up
+;; fact-cost, not one for opening up fact.
+
+(dcl fact-cost (x))
+
+(dcl fact (x))
+
+(add-axiom fact-defn ()
+  (equal (fact x)
+         (if (fact-cost x)
+             (if (equal x 0)
+                 1
+               (fact (isub1 x)))
+           (apply 'fact (list x)))))
+
+(add-axiom fact-cost-defn ()
+  (equal (fact-cost x)
+         (if (equal x 0)
+             1
+           (s-plus 1 (fact-cost (isub1 x))))))
+
+(prove-lemma fact-cost-opener-numberp (rewrite)
+  (and (implies (equal x 0)
+                (equal (fact-cost x)
+                       1))
+       (implies (not (zerop x))
+                (equal (fact-cost x)
+                       (s-plus 1 (fact-cost (sub1 x))))))
+  ((use (fact-cost-defn))))
+
+;; Now let's first note when fact IS defined.
+
+(prove-lemma fact-defined-numberp ()
+  (implies (numberp x)
+           (fact-cost x))
+  ((induct (plus x y))))
+
+(prove-lemma fact-defined-other ()
+  (implies (and (zerop x)
+                (not (negativep x)))
+           (fact-cost x))
+  ((use (fact-cost-defn))))
+
+;; Next, let's show that fact is undefined on the negatives by
+;; showing that the cost is arbitrarily high (the usual trick
+;; used for analogous v&c$ proofs).
+
+(defn fact-undefined-ind (x n)
+  (if (zerop n)
+      t
+    (fact-undefined-ind (add1 x) (sub1 n))))
+
+(prove-lemma fact-undefined-numberp-lemma-inductive-step (rewrite)
+  (implies (and (not (zerop n))
+                (fact-cost (minus x))
+                (implies (fact-cost (minus (add1 x)))
+                         (leq (sub1 n)
+                              (fact-cost (minus (add1 x))))))
+           (equal (lessp (fact-cost (minus x)) n)
+                  f))
+  ((use (fact-cost-defn (x (minus x))))))
+
+(prove-lemma fact-undefined-negativep-lemma ()
+  (implies (fact-cost (minus x))
+           (equal (lessp (fact-cost (minus x)) n)
+                  f))
+  ((induct (fact-undefined-ind x n))))
+
+(prove-lemma fact-undefined-negativep (rewrite)
+  (implies (negativep z)
+           (equal (fact-cost z) f))
+  ((use (fact-undefined-negativep-lemma
+         (x (negative-guts z))
+         (n (add1 (fact-cost z)))))))
+
+;; finally, we put this all together
+
+(prove-lemma fact-domain (rewrite)
+  (iff (fact-cost x)
+       (not (negativep x)))
+  ((use (fact-defined-numberp)
+        (fact-defined-other))))
+
+;; Example 3:  triple reverse
+
+;; First, ordinary reverse, and proper list recognizer
+
+(defn rev (x)
+  (if (listp x)
+      (append (rev (cdr x)) (list (car x)))
+    nil))
+
+(defn plistp (x)
+  (if (listp x)
+      (plistp (cdr x))
+    (equal x nil)))
+
+(defn length (x)
+  (if (listp x)
+      (add1 (length (cdr x)))
+    0))
+
+;; dcls, add-axioms, and rewrite rules for rev3-cost and rev (6 events)
+
+(dcl rev3-cost (x))
+
+(dcl rev3 (x))
+
+(add-axiom rev3-defn ()
+  (equal (rev3 x)
+         (if (rev3-cost x)
+             (if (listp (cdr x))
+                 (cons (car (rev3 (cdr x)))
+                       (rev3 (cons (car x)
+                                   (rev3 (cdr (rev3 (cdr x)))))))
+               x)
+           (apply 'rev3 (list x)))))
+
+(add-axiom rev3-cost-defn ()
+  (equal (rev3-cost x)
+         (if (listp (cdr x))
+             (s-plus 1
+                     (s-plus (rev3-cost (cdr x))
+                             (s-plus (rev3-cost (cdr (rev3 (cdr x))))
+                                     (rev3-cost (cons (car x)
+                                                      (rev3 (cdr (rev3 (cdr x)))))))))
+           1)))
+
+(prove-lemma rev3-cost-opener (rewrite)
+  (and (implies (listp (cdr x))
+                (equal (rev3-cost x)
+                       (s-plus 1
+                               (s-plus (rev3-cost (cdr x))
+                                       (s-plus (rev3-cost (cdr (rev3 (cdr x))))
+                                               (rev3-cost (cons (car x)
+                                                                (rev3 (cdr (rev3 (cdr x)))))))))))
+       (implies (nlistp (cdr x))
+                (equal (rev3-cost x)
+                       1)))
+  ((use (rev3-cost-defn))))
+
+(prove-lemma rev3-defn-opener (rewrite)
+  (and (implies (listp (cdr x))
+                (equal (rev3 x)
+                       (if (rev3-cost x)
+                           (if (listp (cdr x))
+                               (cons (car (rev3 (cdr x)))
+                                     (rev3 (cons (car x)
+                                                 (rev3 (cdr (rev3 (cdr x)))))))
+                             x)
+                         (apply 'rev3 (list x)))))
+       (implies (nlistp (cdr x))
+                (equal (rev3 x) x)))
+  ((use (rev3-defn))))
+
+(defn rev3-induction (x n)
+  (if (or (zerop n) (zerop (sub1 n)))
+      t
+    (and (rev3-induction (cdr x) (sub1 n))
+         (rev3-induction (cdr (rev3 (cdr x))) (sub1 (sub1 n)))
+         (rev3-induction (cons (car x)
+                               (rev3 (cdr (rev3 (cdr x)))))
+                         (sub1 n)))))
+
+(prove-lemma length-0 (rewrite)
+  (and (equal (equal (length x) 0)
+              (not (listp x)))
+       (equal (equal 0 (length x))
+              (not (listp x)))))
+
+(prove-lemma rev3-length-and-definedness-lemma ()
+  (implies (equal (length x) n)
+           (and (rev3-cost x)
+                (equal (length (rev3 x)) n)))
+  ((induct (rev3-induction x n))))
+
+(prove-lemma rev3-defined (rewrite)
+  (rev3-cost x)
+  ((use (rev3-length-and-definedness-lemma
+         (n (length x))))))
+
+;; Now, just for fun, we'll show in the rest of these "rev" events
+;; that rev3 is rev.  Note that we've already shown that rev3 is
+;; "total" in the event just above.
+
+(disable rev3-cost-opener)
+
+(prove-lemma app-assoc (rewrite)
+  (equal (append (append x y) z)
+         (append x (append y z))))
+
+(prove-lemma rev-rev (rewrite)
+  (implies (plistp x)
+           (equal (rev (rev x)) x)))
+
+(prove-lemma plistp-rev (rewrite)
+  (plistp (rev x)))
+
+(prove-lemma plistp-append (rewrite)
+  (equal (plistp (append x y))
+         (plistp y)))
+
+(prove-lemma plistp-cdr (rewrite)
+  (implies (and (plistp x) (listp x))
+           (plistp (cdr x))))
+
+(prove-lemma listp-append (rewrite)
+  (equal (listp (append x y))
+         (or (listp x) (listp y))))
+
+(prove-lemma rev-prop ()
+  (implies (plistp x)
+           (equal (rev x)
+                  (if (listp (cdr x))
+                      (cons (car (rev (cdr x)))
+                            (rev (cons (car x)
+                                       (rev (cdr (rev (cdr x)))))))
+                    x))))
+
+(prove-lemma rev-prop-rewrite (rewrite)
+  (implies (plistp x)
+           (and (implies (listp (cdr x))
+                         (equal (rev x)
+                                (cons (car (rev (cdr x)))
+                                      (rev (cons (car x)
+                                                 (rev (cdr (rev (cdr x)))))))))
+                (implies (nlistp (cdr x))
+                         (equal (rev x) x))))
+  ((use (rev-prop))))
+
+(disable rev)
+
+(prove-lemma listp-rev (rewrite)
+  (equal (listp (rev x))
+         (listp x))
+  ((expand (rev x))))
+
+(prove-lemma length-rev3 (rewrite)
+  (equal (length (rev3 x)) (length x))
+  ((use (rev3-length-and-definedness-lemma
+         (n (length x))))))
+
+(prove-lemma rev3-nil (rewrite)
+  (equal (equal (rev3 x) nil)
+         (equal x nil))
+  ((use (rev3-defn))))
+
+(prove-lemma length-cdr-rev3 (rewrite)
+  (implies (listp x)
+           (equal (length (cdr (rev3 x)))
+                  (sub1 (length x))))
+  ((use (rev3-length-and-definedness-lemma
+         (n (length x))))
+   (disable length-rev3)))
+
+(prove-lemma rev3-rev-lemma ()
+  (implies (and (plistp x)
+                (equal (length x) n))
+           (equal (rev3 x) (rev x)))
+  ((induct (rev3-induction x n))))
+
+(prove-lemma rev3-rev (rewrite)
+  (implies (plistp x)
+           (equal (rev3 x) (rev x)))
+  ((use (rev3-rev-lemma (n (length x))))))

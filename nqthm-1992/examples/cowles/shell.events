@@ -1,0 +1,319 @@
+#|
+
+ Copyright (C) 1994 by John Cowles.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ John Cowles PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS
+ IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT
+ NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL John Cowles BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+ PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+ LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+ BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+ DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(BOOT-STRAP NQTHM) 
+
+
+
+;                          A NOTE ON SHELLS
+;                                 by
+;                             John Cowles
+;                     Department of Computer Science
+;                         University of Wyoming
+
+; The following is intended to give the reader some insight into SHELLS.
+
+; Intuitively a nonempty SEQUENCE is an ordered list, possibly with
+;  duplicates, of objects, ( Obj1 Obj2 ... ObjN ).
+
+; There are two ways to recursively decompose sequences.
+; 
+;  1. A SEQUENCE is either the EMPTY-SEQUENCE or a pair < Obj,Seq >.
+;  
+;  2. A SEQUENCE is either the EMPTY-SEQUENCE or a pair [ Seq,Obj ].
+;
+;  Here Obj is an object, Seq is a sequence, and EMPTY-SEQUENCE is 
+;  the unique sequence which contains no objects.  Different pairing
+;  brackets, < > and [ ], are used to enphasize which of the 
+;  decompositions is being used.
+
+; Here the Shell Principle is used with decomposition 1 above to
+;  add sequences as a "new" data type. 
+
+(ADD-SHELL
+    CONS-SEQ-FIRST     ; constructor
+    EMPTY-SEQ          ; base
+    SEQ-P              ; recognizer
+    ((FIRST            ; accessor
+       (NONE-OF)       ; type restriction
+       EMPTY-SEQ )     ; default value
+     (FINAL            ; accessor
+       (ONE-OF SEQ-P)  ; type restriction
+       EMPTY-SEQ ) ) ) ; default value
+
+; ( CONS-SEQ-FIRST Obj Seq )     returns < Obj,Seq >.
+; ( CONS-SEQ-FIRST Obj Non-Seq ) returns < Obj,EMPTY-SEQUENCE >.
+
+; ( EMPTY-SEQ ) returns the EMPTY-SEQUENCE.
+
+; ( SEQ-P Seq )     returns T.
+; ( SEQ-P Non-Seq ) reTurns F.
+
+; ( FIRST < Obj,Seq > ) returns Obj.
+; ( FIRST (EMPTY-SEQ) ) returns (EMPTY-SEQ).
+; ( FIRST Non-Seq )     returns (EMPTY-SEQ).
+
+; ( FINAL < Obj,Seq > ) returns Seq.
+; ( FINAL (EMPTY-SEQ) ) returns (EMPTY-SEQ).
+; ( FINAL Non-Seq )     returns (EMPTY-SEQ).
+; ==================
+; The next two functions "coerce" non-sequences into
+;  behaving like the EMPTY-SEQUENCE.
+
+(DEFN EMPTY-SEQ-P ( S )
+      (OR (EQUAL S (EMPTY-SEQ))
+          (NOT (SEQ-P S)) ) )
+
+(DEFN COERCE-SEQ ( S )
+      (IF (SEQ-P S)
+          S
+          (EMPTY-SEQ) ) )
+
+; The next three functions implement sequence decomposion 2 above. 
+
+; ( CONS-SEQ-LAST Seq Obj )     returns [ Seq,Obj ].
+; ( CONS-SEQ-LAST Non-Seq Obj ) returns [ (EMPTY-SEQ),Obj ].
+;     Here [ (EMPTY-SEQ),Obj ] is identified with < Obj,(EMPTY-SEQ) >.
+
+; ( INITIAL [ Seq,Obj ] ) returns Seq.
+; ( INITIAL (EMPTY-SEQ) ) returns (EMPTY-SEQ).
+; ( INITIAL Non-Seq )     returns (EMPTY-SEQ).
+
+; ( LAST [ Seq,Obj ] ) returns Obj.
+; ( LAST (EMPTY-SEQ) ) returns (EMPTY-SEQ).
+; ( LAST Non-Seq )     returns (EMPTY-SEQ).
+
+(DEFN CONS-SEQ-LAST ( S C )
+   (IF (EMPTY-SEQ-P S)  
+           (CONS-SEQ-FIRST C S)
+           (CONS-SEQ-FIRST (FIRST S)
+                           (CONS-SEQ-LAST (FINAL S) C) ) ) )
+
+(DEFN INITIAL ( S )
+      (IF (EMPTY-SEQ-P S)
+          (EMPTY-SEQ)
+          (IF (EQUAL (FINAL S)
+                     (EMPTY-SEQ) )
+              (EMPTY-SEQ)
+              (CONS-SEQ-FIRST (FIRST S)
+                              (INITIAL (FINAL S)) ) ) ) )
+
+(DEFN LAST ( S )
+      (IF (EMPTY-SEQ-P S)
+          (EMPTY-SEQ)              
+          (IF (EQUAL (FINAL S)
+                     (EMPTY-SEQ) )
+              (FIRST S)
+              (LAST (FINAL S)) ) ) )
+
+; The next 12 rewrite rules and 1 elimination rule would have been
+;  explicitly added as axioms to the data base by the shell principle 
+;  if sequence decomposition 2 had been used, in place of decomposition 1,
+;  as the basis for the shell which added sequences as a new type.
+
+(PROVE-LEMMA INITIAL-CONS-SEQ-LAST
+             ( REWRITE )
+             (EQUAL (INITIAL (CONS-SEQ-LAST S C))
+                    (IF (SEQ-P S)
+                        S
+                        (EMPTY-SEQ) ) ) )
+
+(PROVE-LEMMA INITIAL-NSEQ-P
+             ( REWRITE )
+             (IMPLIES (NOT (SEQ-P S))
+                      (EQUAL (INITIAL S)
+                             (EMPTY-SEQ) ) ) )
+
+(PROVE-LEMMA INITIAL-TYPE-RESTRICTION
+             ( REWRITE )
+             (IMPLIES (NOT (SEQ-P S))
+                      (EQUAL (CONS-SEQ-LAST S C)
+                             (CONS-SEQ-LAST (EMPTY-SEQ) C) ) ) )
+
+(PROVE-LEMMA INITIAL-LESSP
+             ( REWRITE )
+             (IMPLIES (AND (SEQ-P S)
+                           (NOT (EQUAL S
+                                       (EMPTY-SEQ) )) )
+                      (LESSP (COUNT (INITIAL S))
+                             (COUNT S) ) ) )
+
+(PROVE-LEMMA INITIAL-LESSEQP
+             ( REWRITE )
+             (NOT (LESSP (COUNT S)
+                         (COUNT (INITIAL S)) )) )
+
+(PROVE-LEMMA LAST-CONS-SEQ-LAST
+             ( REWRITE )
+             (EQUAL (LAST (CONS-SEQ-LAST S C))
+                    C ) )
+
+(PROVE-LEMMA LAST-NSEQ-P
+             ( REWRITE )
+             (IMPLIES (NOT (SEQ-P S))
+                      (EQUAL (LAST S)
+                             (EMPTY-SEQ) ) ) )
+
+(PROVE-LEMMA LAST-LESSP 
+             ( REWRITE )
+             (IMPLIES (AND (SEQ-P S)
+                           (NOT (EQUAl S 
+                                       (EMPTY-SEQ) )) )
+                      (LESSP (COUNT (LAST S))
+                             (COUNT S) ) ) )
+
+(PROVE-LEMMA LAST-LESSEQP
+             ( REWRITE )
+             (NOT (LESSP (COUNT S)
+                         (COUNT (LAST S)) )) )
+
+; The next two lemmas are obvious facts used only as 
+; hints for the proof of the lemma CONS-SEQ-LAST-EQUAL.
+
+(PROVE-LEMMA INITIAL-APPLY-EQUALS
+             NIL
+             (IMPLIES (EQUAL X Y)
+                      (EQUAL (INITIAL X)
+                             (INITIAL Y) ) ) )
+
+(PROVE-LEMMA LAST-APPLY-EQUALS
+             NIL
+             (IMPLIES (EQUAL X Y)
+                      (EQUAL (LAST X)
+                             (LAST Y) ) ) )
+
+(PROVE-LEMMA CONS-SEQ-LAST-EQUAL
+             ( REWRITE )
+             (EQUAL (EQUAL (CONS-SEQ-LAST S1 C1)
+                           (CONS-SEQ-LAST S2 C2) )
+                    (AND (IF (SEQ-P S1)
+                             (IF (SEQ-P S2)
+                                 (EQUAL S1 S2)
+                                 (EQUAL S1 (EMPTY-SEQ)) )
+                             (IF (SEQ-P S2)
+                                 (EQUAL (EMPTY-SEQ) S2)
+                                 T ) )
+                         (EQUAL C1 C2) ) ) 
+             ; hint
+             ( (USE (INITIAL-APPLY-EQUALS
+                        (X (CONS-SEQ-LAST S1 C1))
+                        (Y (CONS-SEQ-LAST S2 C2)) )
+                    (LAST-APPLY-EQUALS
+                         (X (CONS-SEQ-LAST S1 C1))
+                         (Y (CONS-SEQ-LAST S2 C2)) ) ) ) )
+
+(PROVE-LEMMA CONS-SEQ-LAST-INITIAL-LAST
+             ( REWRITE )
+             (EQUAL (CONS-SEQ-LAST (INITIAL S) (LAST S))
+                    (IF (AND (SEQ-P S)
+                             (NOT (EQUAL S (EMPTY-SEQ))) )
+                        S
+                        (CONS-SEQ-LAST (EMPTY-SEQ)(EMPTY-SEQ)) ) ) )
+
+(PROVE-LEMMA INITIAL-LAST-ELIM
+             ( ELIM )
+             (IMPLIES (AND (SEQ-P S)
+                           (NOT (EQUAL S (EMPTY-SEQ))) )
+                      (EQUAL (CONS-SEQ-LAST (INITIAL S)
+                                            (LAST S) )
+                             S ) ) )
+
+(PROVE-LEMMA COUNT-CONS-SEQ-LAST
+             ( REWRITE )
+             (EQUAL (COUNT (CONS-SEQ-LAST S C))
+                    (ADD1 (PLUS (IF (SEQ-P S)
+                                    (COUNT S)
+                                    0 )
+                                (COUNT C) )) ) )
+
+; The next rewrite rule would, in effect, have been implicitly added
+;  as an axiom to the data base by the shell principle if sequence 
+;  decomposition 2 had been used, in place of decomposition 1, as the 
+;  basis for the shell which added sequences as a new type.   
+
+(PROVE-LEMMA CONS-SEQ-LAST-NOT-EMPTY-SEQ
+             ( REWRITE )
+             (NOT (EQUAL (CONS-SEQ-LAST S C)(EMPTY-SEQ))) )
+;====================================================================
+
+; The next two functions give different versions of REVERSE.
+
+(DEFN REVERSE1 ( S )
+      (IF (EMPTY-SEQ-P S)
+          S
+          (CONS-SEQ-LAST (REVERSE1 (FINAL S))
+                         (FIRST S) ) ) )
+
+(DEFN REVERSE2 ( S )
+      (IF (EMPTY-SEQ-P S)
+          S
+          (CONS-SEQ-FIRST (LAST S)
+                          (REVERSE2 (INITIAL S)) ) ) )
+
+; Use the Theorem Prover to verify the following proposed theorems.
+;
+; 1. For i=1 and i=2, ( EQUAL (REVERSEi (REVERSEi S)) S )
+;
+; 2. ( EQUAL (REVERSE1 S) (REVERSE2 S) )
+; ==================================================================
+
+; The next four functions give different versions of CONCATENATION.    
+
+(DEFN CONCAT1 ( S1 S2 )
+      (IF (EMPTY-SEQ-P S1)
+          (COERCE-SEQ S2)
+          (CONS-SEQ-FIRST (FIRST S1)
+                          (CONCAT1 (FINAL S1) S2) ) ) )
+
+(DEFN CONCAT2 ( S1 S2 )
+      (IF (EMPTY-SEQ-P S2)
+          (COERCE-SEQ S1)
+          (CONCAT2 (CONS-SEQ-LAST S1 (FIRST S2))
+                   (FINAL S2) ) ) )
+
+(DEFN CONCAT3 ( S1 S2 )
+      (IF (EMPTY-SEQ-P S2)
+          (COERCE-SEQ S1)
+          (CONS-SEQ-LAST (CONCAT3 S1 (INITIAL S2)) 
+                         (LAST S2) ) ) )
+
+(DEFN CONCAT4 ( S1 S2 )
+      (IF (EMPTY-SEQ-P S1)
+          (COERCE-SEQ S2)
+          (CONCAT4 (INITIAL S1)
+                   (CONS-SEQ-FIRST (LAST S1)
+                                   S2 ) ) ) )
+
+; Use the Theorem Prover to verify the following proposed theorems.
+;
+; 1. For i=1, i=2, i=3, and i=4, CONCATi is associative.
+;
+; 2. For i=1 and i=2; and for j=1, j=2, j=3, and j=4;
+;      ( EQUAL (REVERSEi (CONCATj S1 S2))
+;              (CONCATj (REVERSEi S2) (REVERSEi S1)) )
+;
+; 3. For i and j such that 1 <= i < j <= 4,
+;      ( EQUAL (CONCATi S1 S2) (CONCATj S1 S2) )
+

@@ -1,0 +1,412 @@
+#|
+
+ Copyright (C) 1994 by John Cowles.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ John Cowles PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS
+ IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT
+ NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL John Cowles BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+ PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+ LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+ BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+ DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.''
+
+|#
+
+(NOTE-LIB "proveall" T)
+
+;            Sums of the Fibonacci Numbers        
+
+;                 by John R. Cowles
+;                    Computer Science Department
+;                    University of Wyoming
+;                    Laramie, Wyoming 82071
+
+
+; This file naturally belongs over in the cowles subdirectory
+; rather than in the basic subdirectory, but we put it here because
+; it depends upon proveall, proveall is long, and we choose not
+; to put operating system/directory syntax information into these files.
+
+; This event list contains several interesting theorems
+; about the Fibonacci numbers such as
+
+; The SUM, from k=0 to k=n, of fib( k ) = fib( n+2 ) - 1.
+; 
+; The SUM, from k=0 to k=n, of fib( 2*k+1 ) = fib( 2*n+2 ).
+
+; Here fib( i ) is the ith Fibonacci number.
+ 
+(DEFN FIB ( N )
+    ; Compute the N'th Fibonacci number
+      (IF (ZEROP N)
+          0
+          (IF (EQUAL N 1)
+              1
+              (PLUS  (FIB (SUB1 N))
+                     (FIB (SUB1 (SUB1 N))) ))))
+
+(DEFN NBR-CALLS-FIB ( N )
+    ; Compute number of calls to FIB used to compute (FIB N)
+      (IF (ZEROP N)
+          1
+          (IF (EQUAL N 1)
+              1
+              (ADD1 (PLUS (NBR-CALLS-FIB (SUB1 N))
+                          (NBR-CALLS-FIB (SUB1 (SUB1 N))) )))))
+
+(DEFN NBR-PLUS-FIB ( N )
+    ; Compute number of additions used to compute (FIB N)
+      (IF (ZEROP N)
+          0
+          (IF (EQUAL N 1)
+              0
+              (ADD1 (PLUS (NBR-PLUS-FIB (SUB1 N))
+                          (NBR-PLUS-FIB (SUB1 (SUB1 N))) )))))
+
+(PROVE-LEMMA NBR-CALLS-FIB&FIB
+             NIL
+             (EQUAL (ADD1 (NBR-CALLS-FIB N))
+                    (TIMES 2 (FIB (ADD1 N))) ))
+
+(PROVE-LEMMA NBR-CALLS-FIB=FIB
+             NIL
+             (EQUAL (NBR-CALLS-FIB N)
+                    (SUB1 (TIMES 2 (FIB (ADD1 N)))) )
+             ; hint - The theorem prover can prove this
+             ;        lemma without the hint.  However
+             ;        without the hint, the proof requires
+             ;        about 10 times the time and 5 times 
+             ;        the space as the proofs of both the
+             ;        hint and this lemma using the hint.
+             ( (USE (NBR-CALLS-FIB&FIB (N N)) ) ))
+
+(PROVE-LEMMA NBR-PLUS-FIB&FIB
+             NIL
+             (EQUAL (ADD1 (NBR-PLUS-FIB N))
+                    (FIB (ADD1 N)) ))                
+
+(PROVE-LEMMA NBR-PLUS-FIB=FIB
+             ( REWRITE )
+             (EQUAL (NBR-PLUS-FIB N)
+                    (SUB1 (FIB (ADD1 N))) )
+             ; hint
+             ( (USE (NBR-PLUS-FIB&FIB (N N)) ) ))
+
+(DEFN SUM-FIB<K> ( N )
+    ; Compute the sum of the first N+1 Fibonacci nunbers
+      (IF (ZEROP N)
+          0
+          (PLUS (SUM-FIB<K> (SUB1 N))
+                (FIB N) )))
+
+(PROVE-LEMMA SUM-FIB<K>&FIB
+             NIL
+             (EQUAL (ADD1 (SUM-FIB<K> N))
+                    (FIB (ADD1 (ADD1 N))) ))
+
+(PROVE-LEMMA SUM-FIB<K>=FIB
+             ( REWRITE )
+             (EQUAL (SUM-FIB<K> N)
+                    (SUB1 (FIB (ADD1 (ADD1 N)))) )
+             ; hint
+             ( (USE (SUM-FIB<K>&FIB (N N)) ) )) 
+
+(PROVE-LEMMA SUM-FIB<K>=NBR-PLUS-FIB
+             NIL
+             (EQUAL (SUM-FIB<K> N)
+                    (NBR-PLUS-FIB (ADD1 N)) ))
+
+(DEFN SUM-FIB<2K> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have even indices.
+      (IF (ZEROP N)
+          0
+          (PLUS (SUM-FIB<2K> (SUB1 N))
+                (FIB (TIMES 2 N)) )))
+
+(PROVE-LEMMA SUM-FIB<2K>&FIB
+             NIL
+             (EQUAL (ADD1 (SUM-FIB<2K> N))
+                    (FIB (ADD1 (TIMES 2 N))) ))
+
+(PROVE-LEMMA SUM-FIB<2K>=FIB
+             NIL
+             (EQUAL (SUM-FIB<2K> N)
+                    (SUB1 (FIB (ADD1 (TIMES 2 N)))) )
+             ; hint
+             ((USE (SUM-FIB<2K>&FIB (N N)) ) ))
+
+(DEFN SUM-FIB<2K+1> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers      
+    ; which have odd indices
+      (IF (ZEROP N)
+          1
+          (PLUS (SUM-FIB<2K+1> (SUB1 N))
+                (FIB (ADD1 (TIMES 2 N))) )))
+
+(PROVE-LEMMA SUM-FIB<2K+1>=FIB
+             NIL
+             (EQUAL (SUM-FIB<2K+1> N)
+                    (FIB (ADD1 (ADD1 (TIMES 2 N)))) ))
+
+(DEFN SUM-FIB<3K> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices divisible by 3
+      (IF (ZEROP N)
+          0
+          (PLUS (SUM-FIB<3K> (SUB1 N))
+                (FIB (TIMES 3 N)) )))
+
+(PROVE-LEMMA SUM-FIB<3K>&FIB
+             NIL
+             (EQUAL (ADD1 (TIMES 2 (SUM-FIB<3K> N)))
+                    (FIB (ADD1 (ADD1 (TIMES 3 N)))) ))
+
+(PROVE-LEMMA SUM-FIB<3K>&FIB-1
+             NIL
+             (EQUAL (TIMES 2 (SUM-FIB<3K> N))
+                    (SUB1 (FIB (ADD1 (ADD1 (TIMES 3 N))))) )
+             ; hint
+             ((USE (SUM-FIB<3K>&FIB (N N)) )) )
+
+(PROVE-LEMMA SUM-FIB<3K>=FIB
+             NIL
+             (EQUAL (SUM-FIB<3K> N)
+                    (QUOTIENT (SUB1 (FIB (ADD1 
+                                          (ADD1 (TIMES 3 N)))))
+                              2 ))
+             ; hint
+             ((USE (SUM-FIB<3K>&FIB-1 (N N)) )) )
+
+(DEFN SUM-FIB<3K+1> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices congruent to 1 mod 3
+      (IF (ZEROP N)
+          1
+          (PLUS (SUM-FIB<3K+1> (SUB1 N))
+                (FIB (ADD1 (TIMES 3 N))) )))
+
+(PROVE-LEMMA SUM-FIB<3K+1>&FIB
+             NIL
+             (EQUAL (TIMES 2 (SUM-FIB<3K+1> N))
+                    (FIB (ADD1 (ADD1 (ADD1 (TIMES 3 N))))) ))
+
+(PROVE-LEMMA SUM-FIB<3K+1>=FIB
+             NIL
+             (EQUAL (SUM-FIB<3K+1> N)
+                    (QUOTIENT (FIB (ADD1 
+                                    (ADD1 (ADD1 (TIMES 3 N)))))
+                              2 ))
+             ; hint
+             ((USE (SUM-FIB<3K+1>&FIB (N N)))) )
+
+(DEFN SUM-FIB<3K+2> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices conguent to 2 mod 3
+      (IF (ZEROP N)
+          1
+          (PLUS (SUM-FIB<3K+2> (SUB1 N))
+                (FIB (ADD1 (ADD1 (TIMES 3 N)))) )))
+
+(PROVE-LEMMA SUM-FIB<3K+2>&FIB
+             NIL
+             (EQUAL (ADD1 (TIMES 2 (SUM-FIB<3K+2> N)))
+                    (FIB (ADD1 
+                          (ADD1 (ADD1 (ADD1 (TIMES 3 N)))))) ))
+
+(PROVE-LEMMA SUM-FIB<3K+2>&FIB-1
+             NIL
+             (EQUAL (TIMES 2 (SUM-FIB<3K+2> N))
+                    (SUB1 (FIB (ADD1 (ADD1 (ADD1 (ADD1 
+                                                     (TIMES 3 
+                                                            N)
+                                                     )))))) )
+             ; hint
+             ((USE (SUM-FIB<3K+2>&FIB (N N)))) )
+
+(PROVE-LEMMA SUM-FIB<3K+2>=FIB
+             NIL
+             (EQUAL (SUM-FIB<3K+2> N)
+                    (QUOTIENT
+                        (SUB1 (FIB (ADD1 (ADD1 (ADD1 (ADD1 
+                                                         (TIMES 3 
+                                                                N)
+                                                         ))))))
+                        2 ))
+             ; hint
+             ((USE (SUM-FIB<3K+2>&FIB-1 (N N)))) )
+
+(PROVE-LEMMA FIB<2N+1>=FIB<N>&FIB<2N+2>=FIB<N>
+             NIL
+             (AND (EQUAL (FIB (ADD1 (TIMES 2 N)))
+                         (PLUS (TIMES (FIB N) 
+                                      (FIB N) )
+                               (TIMES (FIB (ADD1 N))
+                                      (FIB (ADD1 N)) )))
+                  (EQUAL (FIB (ADD1 (ADD1 (TIMES 2 N))))
+                         (PLUS (TIMES (FIB N)
+                                      (FIB (ADD1 N)) )
+                               (TIMES (FIB (ADD1 N))
+                                      (FIB (ADD1 (ADD1 N))) ))))
+             ; hint - The theorem prover can prove this lemma 
+             ;        without the hint.  The time for the proof
+             ;        without the hint is about 5 times the time
+             ;        required using the hint.
+             ((INDUCT (SUM-FIB<K> N))) )
+
+(PROVE-LEMMA FIB<2N+1>=FIB<N>
+             NIL
+             (EQUAL (FIB (ADD1 (TIMES 2 N)))
+                    (PLUS (TIMES (FIB N)
+                                 (FIB N) )
+                          (TIMES (FIB (ADD1 N))
+                                 (FIB (ADD1 N)) )))
+             ; hint
+             ((USE (FIB<2N+1>=FIB<N>&FIB<2N+2>=FIB<N> (N N)))) )
+
+(PROVE-LEMMA FIB<2N+2>=FIB<N>
+             NIL
+             (EQUAL (FIB (ADD1 (ADD1 (TIMES 2 N))))
+                    (PLUS (TIMES (FIB N)
+                                 (FIB (ADD1 N)) )
+                          (TIMES (FIB (ADD1 N))
+                                 (FIB (ADD1 (ADD1 N))) )))
+             ; hint
+             ((USE (FIB<2N+1>=FIB<N>&FIB<2N+2>=FIB<N> (N N)))) )
+
+(DEFN SUM-FIB<4K> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices divisible by 4
+      (IF (ZEROP N)
+          0
+          (PLUS (SUM-FIB<4K> (SUB1 N))
+                (FIB (TIMES 4 N)) )))
+
+(DEFN SUM-FIB<4K+1> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices congruent to 1 mod 4
+      (IF (ZEROP N)
+          1
+          (PLUS (SUM-FIB<4K+1> (SUB1 N))
+                (FIB (ADD1 (TIMES 4 N))) )))
+
+(DEFN SUM-FIB<4K+2> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices congruent to 2 mod 4
+      (IF (ZEROP N)
+          1
+          (PLUS (SUM-FIB<4K+2> (SUB1 N))
+                (FIB (ADD1 (ADD1 (TIMES 4 N)))) )))
+
+(DEFN SUM-FIB<4K+3> ( N )
+    ; Compute the sum of the first N+1 Fibonacci numbers
+    ; which have indices congruent to 3 mod 4  
+      (IF (ZEROP N)
+          2
+          (PLUS (SUM-FIB<4K+3> (SUB1 N))
+                (FIB (ADD1 (ADD1 (ADD1 (TIMES 4 N))))) )))
+
+(PROVE-LEMMA TIMES-4=TIMES-2-2
+             ( REWRITE )
+             (EQUAL (TIMES 4 N)
+                    (TIMES 2 2 N) ))
+
+(PROVE-LEMMA FIB<4N+1>=FIB<2N>
+             ( REWRITE )
+             (EQUAL (FIB (ADD1 (TIMES 4 N)))
+                    (PLUS (TIMES (FIB (TIMES 2 N))
+                                 (FIB (TIMES 2 N)) )
+                          (TIMES (FIB (ADD1 (TIMES 2 N)))
+                                 (FIB (ADD1 (TIMES 2 N))) )))
+             ; hint
+             ((USE (FIB<2N+1>=FIB<N> (N (TIMES 2 N))))) )
+
+(PROVE-LEMMA SUM-FIB<4K+1>=FIB<2N>
+             NIL
+             (EQUAL (SUM-FIB<4K+1> N)
+                    (TIMES (FIB (ADD1 (TIMES 2 N)))
+                           (FIB (ADD1 (ADD1 (TIMES 2 N)))) ))
+             ; hint
+             ((DISABLE TIMES-4=TIMES-2-2)) )
+
+(PROVE-LEMMA FIB<4N+2>=FIB<2N>
+             ( REWRITE )
+             (EQUAL (FIB (ADD1 (ADD1 (TIMES 4 N))))
+                    (PLUS (TIMES (FIB (TIMES 2 N))
+                                 (FIB (ADD1 (TIMES 2 N))) )
+                          (TIMES (FIB (ADD1 (TIMES 2 N)))
+                                 (FIB (ADD1 
+                                       (ADD1 (TIMES 2 N)))) )))
+             ; hint
+             ((USE (FIB<2N+2>=FIB<N> (N (TIMES 2 N))))) )
+
+(PROVE-LEMMA SUM-FIB<4K+2>=FIB<2N>
+             NIL
+             (EQUAL (SUM-FIB<4K+2> N)
+                    (TIMES (FIB (ADD1 (ADD1 (TIMES 2 N))))
+                           (FIB (ADD1 (ADD1 (TIMES 2 N)))) ))
+             ; hint
+             ((DISABLE TIMES-4=TIMES-2-2)) )
+
+(PROVE-LEMMA FIB<4N+3>=FIB<2N>
+             ( REWRITE )
+             (EQUAL (FIB (ADD1 (ADD1 (ADD1 (TIMES 4 N)))))
+                    (PLUS (TIMES (FIB (ADD1 (TIMES 2 N)))
+                                 (FIB (ADD1 (TIMES 2 N))) )
+                          (TIMES (FIB (ADD1 (ADD1 (TIMES 2 N))))
+                                 (FIB (ADD1 (ADD1 (TIMES 2 N)))))))
+             ; hint
+             ((USE (FIB<2N+1>=FIB<N> (N (ADD1 (TIMES 2 N)))))) )
+
+(PROVE-LEMMA SUM-FIB<4K+3>=FIB<2N>
+             NIL
+             (EQUAL (SUM-FIB<4K+3> N)
+                    (TIMES (FIB (ADD1 (ADD1 (ADD1 (TIMES 2 N)))))
+                           (FIB (ADD1 (ADD1 (TIMES 2 N)))) ))
+             ; hint
+             ((DISABLE TIMES-4=TIMES-2-2)) )
+
+(PROVE-LEMMA FIB<2N>=FIB<N>
+             NIL
+             (IMPLIES (LESSP 0 N)
+                      (EQUAL (FIB (TIMES 2 N))
+                             (PLUS (TIMES (FIB (SUB1 N))
+                                          (FIB N) )
+                                   (TIMES (FIB N)
+                                          (FIB (ADD1 N)) ))))
+             ; hint
+             ((USE (FIB<2N+2>=FIB<N> (N (SUB1 N))))) )
+
+(PROVE-LEMMA FIB<4N>=FIB<2N>
+             ( REWRITE )
+             (IMPLIES (LESSP 0 N)
+                      (EQUAL (FIB (TIMES 4 N))
+                             (PLUS (TIMES (FIB (SUB1 (TIMES 2 N)))
+                                          (FIB (TIMES 2 N)) )
+                                   (TIMES (FIB (TIMES 2 N))
+                                          (FIB (ADD1 (TIMES 2 N)))
+                                          ))))
+             ; hint
+             ((USE (FIB<2N>=FIB<N> (N (TIMES 2 N))))) )
+
+(PROVE-LEMMA SUM-FIB<4K>=FIB<2N>
+             NIL
+             (EQUAL (SUM-FIB<4K> N)
+                    (TIMES (FIB (TIMES 2 N))
+                           (FIB (ADD1 (ADD1 (TIMES 2 N)))) ))
+             ; hint
+             ((DISABLE TIMES-4=TIMES-2-2)) )
+            
+
+

@@ -1,0 +1,559 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc. and Paolo Pecchiari.  All
+ Rights Reserved. 
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. AND Paolo Pecchiari PROVIDE ABSOLUTELY NO WARRANTY.
+ THE EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER
+ EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.  IN NO EVENT WILL Computational Logic, Inc. OR Paolo Pecchiari BE
+ LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER
+ SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
+ INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR
+ DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF
+ YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY
+ ANY OTHER PARTY.
+|#
+
+; Events from CLI Technical Report 100, ``Interaction with the Boyer-Moore
+; Theorem Prover: A Tutorial Study Using the Arithmetic-Geometric Mean
+; Theorem,'' by Matt Kaufmann and Paolo Pecchiari.
+
+(note-lib "naturals" t)
+
+(defn prodlist (lst)
+  (if (listp lst)
+      (times (car lst)
+             (prodlist (cdr lst)))
+    1))
+
+(defn sumlist (lst)
+  (if (listp lst)
+      (plus (car lst)
+            (sumlist (cdr lst)))
+    0))
+
+(defn length (x)
+  (if (listp x)
+      (add1 (length (cdr x)))
+    0))
+
+(defn maxlist (x)
+  (if (listp x)
+      (if (listp (cdr x))
+          (max (car x) (maxlist (cdr x)))
+        (fix (car x)))
+    0))
+
+(defn min (x y)
+  (if (lessp x y) (fix x) (fix y)))
+
+(defn minlist (x)
+  (if (listp x)
+      (if (listp (cdr x))
+          (min (car x)
+               (minlist (cdr x)))
+        (fix (car x)))
+    0))
+
+(defn delete1 (elt x)
+  (if (listp x)
+      (if (equal elt (car x))
+          (cdr x)
+        (cons (car x) (delete1 elt (cdr x))))
+    x))
+
+(prove-lemma maxlist-delete1-rearrange (rewrite)
+             (implies (member b x)
+                      (equal (maxlist (cons b (delete1 b x)))
+                             (maxlist x))))
+
+(deftheory induction-fn-disables
+  (sumlist times length minlist maxlist delete1 occurrences))
+
+(prove-lemma max-greater-than-average (rewrite)
+             (implies (and (listp x)
+                           (geq (sumlist x)
+                                (times k (length x)))
+                           (not (equal (fix k) (maxlist x))))
+                      (lessp k (maxlist x))))
+
+(prove-lemma min-less-than-average (rewrite)
+             (implies (and (listp x)
+                           (leq (sumlist x)
+                                (times k (length x)))
+                           (not (equal (fix k) (minlist x))))
+                      (lessp (minlist x) k)))
+
+(prove-lemma times-monotone-1 (rewrite)
+             (implies (not (lessp u v))
+                      (not (lessp (times u y)
+                                  (times v y)))))
+
+(prove-lemma lessp-times-preserved-in-first-arg (rewrite)
+             (implies (and (not (lessp a (times u y)))
+                           (not (lessp u v)))
+                      (not (lessp a (times v y)))))
+
+(prove-lemma minlist-main-property (rewrite)
+             (not (lessp (sumlist x)
+                         (times (length x) (minlist x)))))
+
+(prove-lemma minlist-not-maxlist-implies-minlist-lessp-average-lemma
+             ()
+             (implies (not (equal (minlist x) (maxlist x)))
+                      (lessp (times (minlist x) (length x))
+                             (sumlist x))))
+
+(prove-lemma minlist-not-maxlist-implies-minlist-lessp-average (rewrite)
+             (implies (and (listp x)
+                           (equal (sumlist x)
+                                  (times k (length x)))
+                           (not (equal (minlist x) (maxlist x))))
+                      (lessp (minlist x) (fix k)))
+             ((use (minlist-not-maxlist-implies-minlist-lessp-average-lemma))))
+
+(prove-lemma maxlist-main-property (rewrite)
+             (not (lessp (times (length x) (maxlist x))
+                         (sumlist x))))
+
+(prove-lemma minlist-not-maxlist-implies-maxlist-greaterp-average-lemma ()
+             (implies (not (equal (minlist x) (maxlist x)))
+                      (lessp (sumlist x)
+                             (times (maxlist x) (length x)))))
+
+(prove-lemma 
+ minlist-not-maxlist-implies-maxlist-greaterp-average 
+ (rewrite)
+ (implies (and (listp x)
+               (equal (sumlist x)
+                      (times k (length x)))
+               (not (equal (minlist x) (maxlist x))))
+          (lessp (fix k) (maxlist x)))
+ ((use (minlist-not-maxlist-implies-maxlist-greaterp-average-lemma))))
+
+(prove-lemma minlist-less-than-maxlist-minus-1 (rewrite)
+             (implies (and (listp x)
+                           (equal (sumlist x)
+                                  (times k (length x)))
+                           (not (equal (minlist x) (maxlist x))))
+                      (lessp (minlist x) (sub1 (maxlist x))))
+             ((use
+               (minlist-not-maxlist-implies-minlist-lessp-average)
+               (minlist-not-maxlist-implies-maxlist-greaterp-average))))
+
+(prove-lemma maxlist-delete1-leq (rewrite)
+             (not (lessp (maxlist lst)
+                         (maxlist (delete1 a lst)))))
+
+(prove-lemma member-implies-maxlist-geq (rewrite)
+             (implies (member a x)
+                      (not (lessp (maxlist x) a))))
+
+(prove-lemma
+ delete1-preserves-maxlist-when-maxlist-occurs-more-than-once
+ (rewrite)
+ (implies (lessp 1 (occurrences (maxlist x) x))
+          (equal (maxlist (delete1 any-element x))
+                 (maxlist x))))
+
+(prove-lemma delete1-occurrences (rewrite)
+             (equal (occurrences a (delete1 b x))
+                    (if (and (equal a b)
+                             (member b x))
+                        (sub1 (occurrences a x))
+                      (occurrences a x))))
+
+(prove-lemma occurrence-implies-listp (rewrite)
+             (implies (lessp 1 (occurrences a x))
+                      (equal (listp (delete1 a x)) t)))
+
+(prove-lemma maxlist-geq-minlist (rewrite)
+             (not (lessp (maxlist x) (minlist x))))
+
+(prove-lemma induction-fn-help-2-max-occurs-twice-lemma-1 (rewrite)
+             (implies
+              (and (equal (sumlist x)
+                          (times k (length x)))
+                   (not (equal (minlist x) (maxlist x)))
+                   (lessp 1 (occurrences (maxlist x) x)))
+              (equal (maxlist (cons (sub1 (maxlist x))
+                                    (cons (add1 (minlist x))
+                                          (delete1 (maxlist x)
+                                                   (delete1
+                                                    (minlist x)
+                                                    x)))))
+                     (maxlist x))))
+
+(prove-lemma member-delete1 (rewrite)
+             (equal (member a (delete1 b c))
+                    (if (equal a b)
+                        (lessp 1 (occurrences b c))
+                      (member a c))))
+
+(prove-lemma member-implies-listp (rewrite)
+             (implies (member a x)
+                      (listp x)))
+
+(prove-lemma 
+ induction-fn-help-2-max-occurs-twice-lemma-2 
+ (rewrite)
+ (implies
+  (and (equal (sumlist x)
+              (times k (length x)))
+       (not (equal (minlist x) (maxlist x)))
+       (lessp 1 (occurrences (maxlist x) x)))
+  (equal (lessp (occurrences (maxlist x)
+                             (cons (sub1 (maxlist x))
+                                   (cons (add1 (minlist x))
+                                         (delete1 (maxlist x)
+                                                  (delete1 (minlist x) x)))))
+                (occurrences (maxlist x) x))
+         t)))
+
+(disable member-implies-listp)
+
+(prove-lemma induction-fn-help-2-max-occurs-twice ()
+  (let ((x0 (cons (sub1 (maxlist x))
+                  (cons (add1 (minlist x))
+                        (delete1 (maxlist x)
+                                 (delete1 (minlist x) x))))))
+    (implies
+     (and (equal (sumlist x) (times k (length x)))
+          (not (equal (minlist x) (maxlist x)))
+          (lessp 1 (occurrences (maxlist x) x)))
+     (ord-lessp
+      (cons (add1 (maxlist x0)) (occurrences (maxlist x0) x0))
+      (cons (add1 (maxlist x)) (occurrences (maxlist x) x)))))
+ ((disable-theory induction-fn-disables)))
+
+(prove-lemma maxlist-not-minlist-implies-listp ()
+             (implies (not (equal (minlist x) (maxlist x)))
+                      (listp x)))
+
+(prove-lemma minlist-less-than-maxlist-minus-1-better (rewrite)
+             (implies (and (equal (sumlist x)
+                                  (times k (length x)))
+                           (not (equal (minlist x) (maxlist x))))
+                      (lessp (minlist x) (sub1 (maxlist x))))
+             ((use (maxlist-not-minlist-implies-listp))))
+
+(disable minlist-less-than-maxlist-minus-1)
+
+(prove-lemma maxlist-delete1-delete1 (rewrite)
+             (not (lessp (maxlist (delete1 b x))
+                         (maxlist (delete1 b (delete1 a x))))))
+
+(prove-lemma member-maxlist (rewrite)
+             (implies (not (equal (maxlist z) 0))
+                      (member (maxlist z) z)))
+
+(prove-lemma lessp-maxlist-delete1-maxlist (rewrite)
+             (implies (and (lessp 0 (maxlist x))
+                           (not (lessp 1 (occurrences (maxlist x) x))))
+                      (lessp (maxlist (delete1 (maxlist x) x))
+                             (maxlist x))))
+
+(prove-lemma 
+ induction-fn-help-2-max-occurs-once-main-lemma 
+ (rewrite)
+ (implies
+  (and
+   (equal (sumlist x)
+          (times k (length x)))
+   (not (equal (minlist x) (maxlist x)))
+   (not (lessp 1 (occurrences (maxlist x) x))))
+  (equal (lessp (maxlist (cons (sub1 (maxlist x))
+                               (cons (add1 (minlist x))
+                                     (delete1 (maxlist x)
+                                              (delete1 (minlist x) x)))))
+                (maxlist x))
+         t)))
+
+(prove-lemma induction-fn-help-2-max-occurs-once ()
+   (let ((x0 (cons (sub1 (maxlist x))
+                  (cons (add1 (minlist x))
+                        (delete1 (maxlist x)
+                                 (delete1 (minlist x) x))))))
+    (implies
+     (and (equal (sumlist x) (times k (length x)))
+          (not (equal (minlist x) (maxlist x)))
+          (not (lessp 1 (occurrences (maxlist x) x))))
+     (ord-lessp
+      (cons (add1 (maxlist x0)) (occurrences (maxlist x0) x0))
+      (cons (add1 (maxlist x)) (occurrences (maxlist x) x)))))
+ ((disable occurrences minlist maxlist delete1)))
+
+(prove-lemma induction-fn-help-2 (rewrite)
+  (let ((x0 (cons (sub1 (maxlist x))
+                  (cons (add1 (minlist x))
+                        (delete1 (maxlist x)
+                                 (delete1 (minlist x) x))))))
+    (implies
+     (and (equal (sumlist x) (times k (length x)))
+          (not (equal (minlist x) (maxlist x))))
+     (ord-lessp
+      (cons (add1 (maxlist x0)) (occurrences (maxlist x0) x0))
+      (cons (add1 (maxlist x)) (occurrences (maxlist x) x)))))
+ ((use (induction-fn-help-2-max-occurs-twice)
+       (induction-fn-help-2-max-occurs-once))
+  (disable-theory t)
+  (enable-theory ground-zero)))
+
+(disable-theory induction-fn-disables)
+
+(defn induction-fn (x k)
+  (if (not (equal (sumlist x) (times k (length x))))
+      t
+    (if (equal (minlist x) (maxlist x))
+        t
+      (induction-fn (cons (sub1 (maxlist x))
+                          (cons (add1 (minlist x))
+                                (delete1 (maxlist x)
+                                         (delete1 (minlist x) x))))
+                    k)))
+  ((ord-lessp
+    (cons (add1 (maxlist x))
+          (occurrences (maxlist x) x)))))
+
+(enable-theory induction-fn-disables)
+
+(prove-lemma sumlist-delete1-plus-version ()
+             (equal (plus a (sumlist (delete1 a x)))
+                    (if (member a x)
+                        (sumlist x)
+                      (plus a (sumlist x)))))
+
+(prove-lemma sumlist-delete1 (rewrite)
+             (equal (sumlist (delete1 a x))
+                    (if (member a x)
+                        (difference (sumlist x) a)
+                      (sumlist x)))
+             ((use (sumlist-delete1-plus-version))))
+
+(prove-lemma maxlist-0-is-sumlist-0 (rewrite)
+             (equal (equal (maxlist x) 0)
+                    (equal (sumlist x) 0)))
+
+(prove-lemma main-lemma-base-case-lemma-1 ()
+             (implies (equal (minlist x) (maxlist x))
+                      (equal (exp (minlist x) (length x))
+                             (prodlist x))))
+
+(prove-lemma main-lemma-base-case-lemma-2-lemma ()
+             (implies (equal (minlist x) (maxlist x))
+                      (equal (sumlist x)
+                             (times (minlist x) (length x)))))
+
+(prove-lemma main-lemma-base-case-lemma-2-hack ()
+             (implies (and (equal (times k n)
+                                  sumlist)
+                           (not (zerop n))
+                           (equal (times n maxlist)
+                                  sumlist))
+                      (equal (fix k) (fix maxlist))))
+
+(prove-lemma equal-length-0 (rewrite)
+             (equal (equal (length x)
+                           0)
+                    (not (listp x))))
+
+(prove-lemma main-lemma-base-case-lemma-2 ()
+             (implies (and (listp x)
+                           (equal (sumlist x)
+                                  (times k (length x)))
+                           (equal (minlist x) (maxlist x)))
+                      (equal (minlist x) (fix k)))
+             ((use (main-lemma-base-case-lemma-2-lemma)
+                   (main-lemma-base-case-lemma-2-hack
+                    (sumlist (sumlist x))
+                    (maxlist (maxlist x))
+                    (n (length x))
+                    (k k)))))
+
+(prove-lemma main-lemma-base-case (rewrite)
+             (implies (and (equal (sumlist x)
+                                  (times k (length x)))
+                           (equal (minlist x) (maxlist x)))
+                      (equal (exp k (length x))
+                             (prodlist x)))
+             ((use (main-lemma-base-case-lemma-1)
+                   (main-lemma-base-case-lemma-2))))
+
+(prove-lemma length-delete1 (rewrite)
+             (equal (length (delete1 a x))
+                    (if (member a x)
+                        (sub1 (length x))
+                      (length x))))
+
+(defn numberp-listp (x)
+  (if (listp x)
+      (and (numberp (car x))
+           (numberp-listp (cdr x)))
+    (equal x nil)))
+
+(prove-lemma member-minlist (rewrite)
+             (implies (and (listp x)
+                           (numberp-listp x))
+                      (member (minlist x) x)))
+
+(prove-lemma numberp-listp-delete1 (rewrite)
+             (implies (numberp-listp x)
+                      (numberp-listp (delete1 a x))))
+
+(prove-lemma add1-plus-sub1-second (rewrite)
+             (implies (not (zerop y))
+                      (equal (add1 (plus x (sub1 y)))
+                             (plus x y))))
+
+(prove-lemma sumlist-geq-maxlist (rewrite)
+             (not (lessp (sumlist x)
+                         (maxlist x))))
+
+(prove-lemma sumlist-geq-minlist (rewrite)
+             (not (lessp (sumlist x)
+                         (minlist x))))
+
+(prove-lemma sumlist-geq-minlist-plus-maxlist (rewrite)
+             (implies (not (equal (minlist x) (maxlist x)))
+                      (not (lessp (sumlist x)
+                                  (plus (minlist x) (maxlist x))))))
+
+(disable plus)
+
+(prove-lemma plus-times-sub1-second (rewrite)
+             (implies (not (zerop y))
+                      (equal (plus x (times x (sub1 y)))
+                             (times x y))))
+
+(disable times)
+
+(prove-lemma minlist-not-maxlist-implies-length-at-least-2 (rewrite)
+             (implies (not (equal (minlist x) (maxlist x)))
+                      (lessp 1 (length x))))
+
+(disable plus-add1-arg1)
+(disable plus-add1-arg2)
+
+(disable times-add1)
+
+(disable maxlist-0-is-sumlist-0)
+
+(prove-lemma times-prodlist-delete1 (rewrite)
+             (implies (member a x)
+                      (equal (times a (prodlist (delete1 a x)))
+                             (prodlist x))))
+
+(prove-lemma product-of-modified-list-lemma (rewrite)
+             (implies (and (not (equal min max))
+                           (member min x)
+                           (member max x))
+                      (equal (times max
+                                    min
+                                    (prodlist (delete1 max
+                                                       (delete1
+                                                        min
+                                                        x))))
+                             (prodlist x))))
+
+(disable times-prodlist-delete1)
+
+(prove-lemma product-of-modified-list-lemma-2 (rewrite)
+             (implies (and (lessp min max)
+                           (not (zerop max)))
+                      (equal (times (add1 min)
+                                    (sub1 max)
+                                    rest)
+                             (plus (times min max rest)
+                                   (times (difference max (add1 min))
+                                          rest))))
+             ((enable times-add1 times
+                      plus-add1-arg1 plus-add1-arg2 plus)
+              (disable plus-times-sub1-second
+                       add1-plus-sub1-second)))
+
+(prove-lemma positive-implies-numberp ()
+             (implies (lessp min max)
+                      (numberp max)))
+
+(prove-lemma product-of-modified-list (rewrite)
+             (implies (and (lessp min max)
+                           (member min x)
+                           (member max x))
+                      (let ((rest (prodlist (delete1 max
+                                                     (delete1
+                                                      min
+                                                      x)))))
+                           (equal (times (add1 min)
+                                         (sub1 max)
+                                         rest)
+                                  (plus (prodlist x)
+                                        (times (difference max (add1 min))
+                                               rest)))))
+             ((use (positive-implies-numberp))))
+
+(prove-lemma main-lemma ()
+             (let ((n (length x)))
+               (implies (and (numberp-listp x)
+                             (equal (sumlist x)
+                                    (times k n)))
+                        (not (lessp (exp k n)
+                                    (prodlist x)))))
+             ((induct (induction-fn x k))
+              (do-not-induct t)))
+
+(defn scalar-product (scalar lst)
+  (if (listp lst)
+      (cons (times scalar (car lst))
+            (scalar-product scalar (cdr lst)))
+    nil))
+
+(prove-lemma sumlist-scalar-product (rewrite)
+             (equal (sumlist (scalar-product scalar lst))
+                    (times scalar (sumlist lst))))
+
+(prove-lemma prodlist-scalar-product (rewrite)
+             (equal (prodlist (scalar-product scalar lst))
+                    (times (exp scalar (length lst))
+                           (prodlist lst))))
+
+(prove-lemma length-scalar-product (rewrite)
+             (equal (length (scalar-product n a))
+                    (length a)))
+
+(prove-lemma numberp-listp-scalar-product (rewrite)
+             (implies (numberp-listp a)
+                      (numberp-listp (scalar-product n a))))
+
+(prove-lemma main ()
+             (implies (numberp-listp a)
+                      (let ((n (length a)))
+                        (geq (exp (sumlist a) n)
+                             (times (exp n n)
+                                    (prodlist a)))))
+             ((use (main-lemma (k (sumlist a))
+                               (x (scalar-product (length a) a))))))
+
+(prove-lemma sumlist-for (rewrite)
+             (equal (sumlist a)
+                    (for x in a sum x)))
+
+(prove-lemma prodlist-for (rewrite)
+             (equal (prodlist a)
+                    (for x in a multiply x)))
+
+(prove-lemma main-again ()
+             (implies (and (numberp-listp a)
+                           (equal n (length a)))
+                      (geq (exp (for x in a sum x) n)
+                           (times (exp n n)
+                                  (for x in a multiply x))))
+             ((use (main))))

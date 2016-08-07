@@ -1,0 +1,225 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Here is a proof of correctness of mergesort.  The
+;; main events are marked with ``!!!''.
+
+(boot-strap nqthm)
+
+(defn length (x)
+  (if (listp x)
+      (add1 (length (cdr x)))
+    0))
+
+;; [in r-loop, try:]
+#|
+*(cons 3 (cons 4 (cons 7 nil)))
+ '(3 4 7)
+*(length '(3 4 7))
+|#
+
+#|
+;;[try without hint]
+(defn merge (l m)
+  (if (not (listp l))
+      m
+    (if (not (listp m))
+        l
+      (if (lessp (car l) (car m))
+          (cons (car l) (merge (cdr l) m))
+        (cons (car m) (merge l (cdr m))))))
+  ((lessp (plus (length l) (length m)))))
+|#
+
+(defn merge (l m)
+  (if (not (listp l))
+      m
+    (if (not (listp m))
+        l
+      (if (lessp (car l) (car m))
+          (cons (car l) (merge (cdr l) m))
+        (cons (car m) (merge l (cdr m))))))
+  ((lessp (plus (length l) (length m)))))
+
+(defn odds (l)
+  (if (not (listp l))
+      nil
+    (cons (car l) (odds (cddr l)))))
+
+#|
+(defn mergesort (l)
+  (if (not (listp l))
+      nil
+    (if (not (listp (cdr l)))
+        l
+      (merge (mergesort (odds (cdr l)))
+             (mergesort (odds l))))))
+|#
+
+#|
+(defn mergesort (l)
+  (if (not (listp l))
+      nil
+    (if (not (listp (cdr l)))
+        l
+      (merge (mergesort (odds (cdr l)))
+             (mergesort (odds l)))))
+  ((lessp (length l))))
+|#
+
+#|
+(prove-lemma mergesort-helper (rewrite)
+  (implies (and (listp l)
+                (listp (cdr l)))
+           (equal (lessp (sub1 (length (odds l)))
+                         (length (cdr l)))
+                  t)))
+|#
+
+;; still wasn't enough, so we prove:
+(prove-lemma mergesort-helper (rewrite)
+  (implies (and (listp l)
+                (listp (cdr l)))
+           (and (equal (lessp (sub1 (length (odds l)))
+                              (length (cdr l)))
+                       t)
+                (equal (lessp (sub1 (length (odds (cdr l))))
+                              (length (cdr l)))
+                       t))))
+
+(defn mergesort (l)
+  (if (not (listp l))
+      nil
+    (if (not (listp (cdr l)))
+        l
+      (merge (mergesort (odds (cdr l)))
+             (mergesort (odds l)))))
+  ((lessp (length l))))
+
+;;[try (mergesort '(3 7 8 2 9 4 7)) in r-loop]
+
+(defn sortedp (x)
+  (if (listp x)
+      (if (listp (cdr x))
+          (and (not (lessp (car (cdr x)) (car x)))
+               (sortedp (cdr x)))
+        t)
+    t))
+
+;; !!! FIRST MAIN THEOREM -- note that the subgoal
+;; (IMPLIES (AND (SORTEDP B) (SORTEDP U))
+;;               (SORTEDP (MERGE U B)))
+;; is generated automatically!
+(prove-lemma sortedp-mergesort (rewrite)
+  (sortedp (mergesort x)))
+
+(defn occur (a x)
+  (if (listp x)
+      (if (equal a (car x))
+          (add1 (occur a (cdr x)))
+        (occur a (cdr x)))
+    0))
+
+#|
+;; Want to prove the following, but need lemmas.
+;; Use the proof-checker to try to find them.  Suggests
+;; OCCUR-MERGE pretty quickly
+(prove-lemma occur-mergesort (rewrite)
+  (equal (occur a (mergesort x))
+         (occur a x)))
+|#
+
+(prove-lemma occur-merge (rewrite)
+  (equal (occur a (merge x y))
+         (plus (occur a x) (occur a y))))
+
+;; Now back into VERIFY.... prover goes into an induction in PROVE
+;; call, so we abort.  Use
+#|
+(INSTRUCTIONS INDUCT PROVE PROVE PROMOTE
+                            (DIVE 1 2)
+                            X TOP
+                            (S LEMMAS)
+                            (DIVE 1 1)
+                            = NX = TOP
+                            (DROP 3 4))
+|#
+;; in proof-checker.
+
+(prove-lemma plus-occur-odds (rewrite)
+  (implies (and (listp x) (listp (cdr x)))
+           (equal (plus (occur a (odds (cdr x)))
+                        (occur a (odds x)))
+                  (occur a x))))
+
+;; !!! SECOND MAIN THEOREM; see last event for permutationp version
+(prove-lemma occur-mergesort (rewrite)
+  (equal (occur a (mergesort x))
+         (occur a x)))
+
+;; Events to show facts about permutationp:
+
+(defn remove1 (a x)
+  (if (listp x)
+      (if (equal (car x) a)
+          (cdr x)
+        (cons (car x)
+              (remove1 a (cdr x))))
+    x))
+
+(defn badguy (x y)
+  (if (listp x)
+      (if (member (car x) y)
+          (badguy (cdr x) (remove1 (car x) y))
+        (car x))
+    0))
+
+(defn subbagp (x y)
+  (if (listp x)
+      (and (member (car x) y)
+           (subbagp (cdr x) (remove1 (car x) y)))
+    t))
+
+(prove-lemma member-occur (rewrite)
+  (equal (member a x)
+         (lessp 0 (occur a x))))
+
+(prove-lemma occur-remove1 (rewrite)
+  (equal (occur a (remove1 b x))
+         (if (equal a b)
+             (sub1 (occur a x))
+           (occur a x))))
+
+(prove-lemma subbagp-wit-lemma (rewrite)
+  (equal (subbagp x y)
+         (not (lessp (occur (badguy x y) y)
+                     (occur (badguy x y) x)))))
+
+(defn permutationp (x y)
+  (and (subbagp x y)
+       (subbagp y x)))
+
+;; !!! REVISED VERSION OF SECOND MAIN THEOREM
+(prove-lemma permutationp-mergesort (rewrite)
+             (permutationp (mergesort x) x))

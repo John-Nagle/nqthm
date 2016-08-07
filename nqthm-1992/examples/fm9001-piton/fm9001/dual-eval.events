@@ -1,0 +1,500 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    DUAL-EVAL.EVENTS
+;;;
+;;;  The definition of the simulator for our HDL.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  The primitive database is created as the Common Lisp object
+;;;  COMMON-LISP-PRIMP-DATABASE (see file "primp-database.lisp").  Here, that
+;;;  object is used to define the Nqthm constant PRIMP-DATABASE.
+
+(defn primp-database ()
+  #.(list 'quote common-lisp-primp-database))
+
+;;;   LOOKUP-MODULE and DELETE-MODULE
+
+(defn lookup-module (name netlist)
+  (if (nlistp netlist)
+      f
+    (if (and (listp (car netlist))
+             (equal (caar netlist) name))
+        (car netlist)
+      (lookup-module name (cdr netlist)))))
+
+(disable lookup-module)
+
+(defn delete-module (name netlist)
+  (if (nlistp netlist)
+      netlist
+    (if (and (listp (car netlist))
+             (equal (caar netlist) name))
+        (cdr netlist)
+      (cons (car netlist) (delete-module name (cdr netlist))))))
+
+(disable delete-module)
+
+;;;  Needed to prove admissibility of DUAL-EVAL.
+
+(prove-lemma delete-module-lookup-module-count (rewrite)
+  (implies
+   (lookup-module name netlist)
+   (lessp (count (delete-module name netlist))
+          (count netlist)))
+  ;;Hint
+  ((enable lookup-module delete-module)))
+
+;;;   PAIRSTATES and COLLECT-STATES -- PAIRSTATES and COLLECT-STATES are
+;;;   written in such a way that if the STATENAMES component of a module
+;;;   definition is a single occurrence name, then the new state associated
+;;;   with that occurrence is returned as the new state of the module during
+;;;   DUAL-EVAL simulation.
+
+(defn pairstates (statenames state)
+  (if (or (listp statenames)
+          (equal statenames nil))
+      (pairlist statenames state)
+    (list (cons statenames state))))
+
+(defn collect-states (statenames state-bindings)
+  (if (or (listp statenames)
+          (equal statenames nil))
+      (collect-value statenames state-bindings)
+    (value statenames state-bindings)))
+
+
+;;;   Netlist destructors
+
+(defn module-name        (module) (car module))
+(defn module-inputs      (module) (cadr module))
+(defn module-outputs     (module) (caddr module))
+(defn module-occurrences (module) (cadddr module))
+(defn module-statenames  (module) (caddddr module))
+(defn module-annotation  (module) (cadddddr module))
+
+
+(defn occ-name       (occurrence) (car occurrence))
+(defn occ-outputs    (occurrence) (cadr occurrence))
+(defn occ-function   (occurrence) (caddr occurrence))
+(defn occ-inputs     (occurrence) (cadddr occurrence))
+(defn occ-annotation (occurrence) (caddddr occurrence))
+
+
+
+(defn primp (fn)
+  (lookup-module fn (primp-database)))
+
+(disable primp)
+
+;;;   This lemma avoids having to open up PRIMP when doing proofs 
+;;;   about modules whose names are not LITATOMs.
+
+(prove-lemma not-litatom==>not-primp (rewrite)
+  (implies
+   (not (litatom fn))
+   (not (primp fn)))
+  ;;Hint
+  ((enable lookup-module primp)))
+
+(defn primp-lookup (fn name)
+  (lookup-module name (cdr (primp fn))))
+
+(defn primp2 (fn name)
+  (cdr (primp-lookup fn name)))
+
+(defn dual-apply-value (fn args state)
+  (let ((input-names (primp2 fn 'inputs))
+        (state-names (primp2 fn 'states))
+        (module-outs (primp2 fn 'results)))
+    (let ((alist (append (pairlist input-names args)
+                         (pairstates state-names state))))
+      (eval$ t module-outs alist))))
+
+(disable dual-apply-value)
+
+(defn dual-apply-state (fn args state)
+  (let ((input-names (primp2 fn 'inputs))
+        (state-names (primp2 fn 'states))
+        (new-states  (primp2 fn 'new-states)))
+    (let ((alist (append (pairlist input-names args)
+                         (pairstates state-names state))))
+      (eval$ t new-states alist))))
+
+(disable dual-apply-state)
+
+
+(defn dual-eval (flag x0 x1 x2 netlist)
+  (case flag
+
+    ;;  New value of a form.
+
+    (0 (let ((fn x0)
+             (args x1)
+             (state x2))
+         (if (primp fn)
+             (dual-apply-value fn args state)
+        
+           (let ((module (lookup-module fn netlist)))
+             (if (listp module)
+                 (let ((inputs  (module-inputs module))
+                       (outputs (module-outputs module))
+                       (occurrences (module-occurrences module))
+                       (statenames (module-statenames module)))
+                   (collect-value
+                    outputs
+                    (dual-eval 1
+                               occurrences
+                               (pairlist inputs args)
+                               (pairstates statenames state)
+                               (delete-module fn netlist))))
+               f)))))
+
+    ;;  Create the new bindings of a body.
+
+    (1 (let ((body x0)
+             (bindings x1)
+             (state-bindings x2))
+         
+         (if (listp body)
+             (let ((occurrence (car body)))
+               (let ((occ-name (occ-name occurrence))
+                     (outputs (occ-outputs occurrence))
+                     (fn (occ-function occurrence))
+                     (inputs (occ-inputs occurrence)))
+                 (dual-eval
+                  1
+                  (cdr body)
+                  (append
+                   (pairlist outputs
+                             (dual-eval 0
+                                        fn
+                                        (collect-value inputs bindings)
+                                        (value occ-name state-bindings)
+                                        netlist))
+                   bindings)
+                  state-bindings
+                  netlist)))
+           bindings)))
+
+    ;;  New state of a form.
+
+    (2 (let ((fn x0)
+             (args x1)
+             (state x2))
+         (if (primp fn)
+             (dual-apply-state fn args state)
+        
+           (let ((module (lookup-module fn netlist)))
+             (if (listp module)
+                 (let ((inputs  (module-inputs module))
+                       (outputs (module-outputs module))
+                       (occurrences (module-occurrences module))
+                       (statenames (module-statenames module)))
+                   (collect-states
+                    statenames
+                    (dual-eval 3
+                               occurrences
+                               (dual-eval 1
+                                          occurrences
+                                          (pairlist inputs args)
+                                          (pairstates statenames state)
+                                          (delete-module fn netlist))
+                               (pairstates statenames state)
+                               (delete-module fn netlist))))
+               f)))))
+    
+    ;;  New state of a body.
+
+    (3 (let ((body x0)
+             (bindings x1)
+             (state-bindings x2))
+         
+         (if (listp body)
+             (let ((occurrence (car body)))
+               (let ((occ-name (occ-name occurrence))
+                     (outputs (occ-outputs occurrence))
+                     (fn (occ-function occurrence))
+                     (inputs (occ-inputs occurrence)))
+                 (cons
+                  (cons occ-name
+                        (dual-eval 2
+                                   fn
+                                   (collect-value inputs bindings)
+                                   (value occ-name state-bindings)
+                                   netlist))
+                  (dual-eval 3
+                             (cdr body)
+                             bindings
+                             state-bindings
+                             netlist))))
+           nil)))
+
+    (otherwise f))
+
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(disable dual-eval)
+
+
+;;;  This lemma forces DUAL-EVAL with flag 0 to open when we are exploring the
+;;;  top-level hierarchical module.
+
+(prove-lemma expand-top-level-dual-eval-0-calls (rewrite)
+  (let ((module (lookup-module fn netlist)))
+    (implies
+     (and (not (primp fn))
+          (listp module))
+     (equal (dual-eval 0 fn args state netlist)
+            (let ((inputs  (module-inputs module))
+                  (outputs (module-outputs module))
+                  (occurrences (module-occurrences module))
+                  (statenames (module-statenames module)))
+              (collect-value
+               outputs
+               (dual-eval 1
+                          occurrences
+                          (pairlist inputs args)
+                          (pairstates statenames state)
+                          (delete-module fn netlist)))))))
+  ;;Hint
+  ((expand (dual-eval 0 fn args state netlist))))
+
+;;;  This lemma forces DUAL-EVAL with flag 2 to open when we are exploring the
+;;;  top-level hierarchical module.
+
+(prove-lemma expand-top-level-dual-eval-2-calls (rewrite)
+  (let ((module (lookup-module fn netlist)))
+    (implies
+     (and (not (primp fn))
+          (listp module))
+     (equal (dual-eval 2 fn args state netlist)
+            (let ((inputs  (module-inputs module))
+                  (outputs (module-outputs module))
+                  (occurrences (module-occurrences module))
+                  (statenames (module-statenames module)))
+              (collect-states
+               statenames
+               (dual-eval 3
+                          occurrences
+                          (dual-eval 1
+                                     occurrences
+                                     (pairlist inputs args)
+                                     (pairstates statenames state)
+                                     (delete-module fn netlist))
+                          (pairstates statenames state)
+                          (delete-module fn netlist)))))))
+  ;;Hint
+  ((expand (dual-eval 2 fn args state netlist))))
+
+;;;  Open DUAL-EVAL to evaluate a body for value.
+
+(prove-lemma open-dual-eval-with-flag-1 (rewrite)
+  (and
+
+   (implies
+    (nlistp body)
+    (equal (dual-eval 1 body bindings state-bindings netlist)
+           bindings))
+
+   (implies
+    (listp body)
+    (equal (dual-eval 1 body bindings state-bindings netlist)
+           (let ((occurrence (car body)))
+             (let ((occ-name (occ-name occurrence))
+                   (outputs (occ-outputs occurrence))
+                   (fn (occ-function occurrence))
+                   (inputs (occ-inputs occurrence)))
+               (dual-eval
+                1
+                (cdr body)
+                (append
+                 (pairlist outputs
+                           (dual-eval 0
+                                      fn
+                                      (collect-value inputs bindings)
+                                      (value occ-name state-bindings)
+                                      netlist))
+                 bindings)
+                state-bindings
+                netlist))))))
+  ;;Hint
+  ((enable dual-eval)))
+
+;;;  Open DUAL-EVAL to evaluate a body for state.
+
+(prove-lemma open-dual-eval-with-flag-3 (rewrite)
+  (and
+
+   (implies
+    (nlistp body)
+    (equal (dual-eval 3 body bindings state-bindings netlist)
+           nil))
+
+   (implies
+    (listp body)
+    (equal (dual-eval 3 body bindings state-bindings netlist)
+           (let ((occurrence (car body)))
+             (let ((occ-name (occ-name occurrence))
+                   (outputs (occ-outputs occurrence))
+                   (fn (occ-function occurrence))
+                   (inputs (occ-inputs occurrence)))
+               (cons
+                (cons occ-name
+                      (dual-eval 2
+                                 fn
+                                 (collect-value inputs bindings)
+                                 (value occ-name state-bindings)
+                                 netlist))
+                (dual-eval 3
+                           (cdr body)
+                           bindings
+                           state-bindings
+                           netlist)))))))
+  ;;Hint
+  ((enable dual-eval)))
+
+;;;   Some basic properties of DUAL-EVAL.
+
+(prove-lemma properp-dual-eval-0 (rewrite)
+  (implies
+   (and (not (primp fn))
+        (listp (lookup-module fn netlist)))
+   (properp (dual-eval 0 fn args state netlist)))
+  ;;Hint
+  ((expand (dual-eval 0 fn args state netlist))))
+
+(prove-lemma length-dual-eval-0 (rewrite)
+  (implies
+   (and (not (primp fn))
+        (listp (lookup-module fn netlist)))
+   (equal (length (dual-eval 0 fn args state netlist))
+          (length (module-outputs (lookup-module fn netlist)))))
+  ;;Hint
+  ((expand (dual-eval 0 fn args state netlist))))
+
+(prove-lemma properp-dual-eval-2 (rewrite)
+  (implies
+   (and (not (primp fn))
+        (listp (lookup-module fn netlist))
+        (properp (module-statenames (lookup-module fn netlist))))
+   (properp (dual-eval 2 fn args state netlist)))
+  ;;Hint
+  ((expand (dual-eval 2 fn args state netlist))))
+
+(prove-lemma length-dual-eval-2 (rewrite)
+  (implies
+   (and (not (primp fn))
+        (listp (lookup-module fn netlist))
+        (properp (module-statenames (lookup-module fn netlist))))
+   (equal (length (dual-eval 2 fn args state netlist))
+          (length (module-statenames (lookup-module fn netlist)))))
+  ;;Hint
+  ((expand (dual-eval 2 fn args state netlist))))
+
+
+;;;  DUAL-EVAL-BODY-BINDINGS is a shorthand way of generating the binding
+;;;  lists when doing proofs about the bodies of modules.
+
+(defn dual-eval-body-bindings (n body bindings state-bindings netlist)
+  (if (zerop n)
+      bindings
+    (let ((occurrence (car body)))
+      (let ((occ-name (occ-name occurrence))
+            (outputs (occ-outputs occurrence))
+            (fn (occ-function occurrence))
+            (inputs (occ-inputs occurrence)))
+        (dual-eval-body-bindings
+         (sub1 n)
+         (cdr body)
+         (append (pairlist outputs
+                           (dual-eval 0
+                                      fn
+                                      (collect-value inputs bindings)
+                                      (value occ-name state-bindings)
+                                      netlist))
+                 bindings)
+         state-bindings
+         netlist)))))
+
+(disable dual-eval-body-bindings)
+
+(prove-lemma open-dual-eval-body-bindings (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (dual-eval-body-bindings n body bindings state-bindings netlist)
+           bindings))
+   (implies
+    (not (zerop n))
+    (equal (dual-eval-body-bindings n body bindings state-bindings netlist)
+           (let ((occurrence (car body)))
+      (let ((occ-name (occ-name occurrence))
+            (outputs (occ-outputs occurrence))
+            (fn (occ-function occurrence))
+            (inputs (occ-inputs occurrence)))
+        (dual-eval-body-bindings
+         (sub1 n)
+         (cdr body)
+         (append (pairlist outputs
+                           (dual-eval 0
+                                      fn
+                                      (collect-value inputs bindings)
+                                      (value occ-name state-bindings)
+                                      netlist))
+                 bindings)
+         state-bindings
+         netlist))))))
+  ;;Hint
+  ((enable dual-eval-body-bindings)))
+
+
+;;;   SIMULATE 
+;;;
+;;;   Runs DUAL-EVAL over time.
+
+(defn simulate (fn inputs state netlist)
+  (if (nlistp inputs)
+      nil
+    (let ((value (dual-eval 0 fn (car inputs) state netlist))
+          (new-state (dual-eval 2 fn (car inputs) state netlist)))
+      (cons (list value new-state)
+            (simulate fn (cdr inputs) new-state netlist)))))
+
+;;;  SIMULATE-DUAL-EVAL-2
+;;;
+;;;  Returns the final state after a number of simulation steps.
+
+(defn simulate-dual-eval-2 (module inputs state netlist n)
+  (if (zerop n)
+      state
+    (simulate-dual-eval-2
+     module
+     (cdr inputs)
+     (dual-eval 2 module (car inputs) state netlist)
+     netlist
+     (sub1 n))))
+
+(disable simulate-dual-eval-2)
+
+(prove-lemma open-simulate-dual-eval-2 (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (simulate-dual-eval-2 module inputs state netlist n)
+           state))
+   (implies
+    (not (zerop n))
+    (equal (simulate-dual-eval-2 module inputs state netlist n)
+           (simulate-dual-eval-2
+            module
+            (cdr inputs)
+            (dual-eval 2 module (car inputs) state netlist)
+            netlist
+            (sub1 n)))))
+  ;;Hint
+  ((enable simulate-dual-eval-2)))

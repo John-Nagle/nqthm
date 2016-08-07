@@ -1,0 +1,107 @@
+#|
+ Copyright (C) 1994 by Ken Kunen.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Ken Kunen PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS
+ IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT
+ NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Ken Kunen BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+ PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+ LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+ BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+ DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+(boot-strap nqthm) ; load basic definitions and lemmas
+
+;  From kunen@cs.wisc.edu Mon Oct 21 08:56:34 1991
+;  Date: Fri, 18 Oct 91 13:20:25 -0500
+;  From: kunen@cs.wisc.edu (Ken Kunen)
+;  To: boyer@CLI.COM, kaufmann@CLI.COM
+;  Subject: nqthm
+;  Cc: kunen@cs.wisc.edu
+;  
+;  The following is one of the examples I'm using in my course here
+;  to illustrate nqthm.  In particular, note that the representation
+;  of a pair of numbers by an ordinal, as described on p. 42, is more
+;  complicated than it has to be.
+;                                                        Ken
+;
+;  -------------------------------------------------------------------------
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                CS761  --  SEMESTER I, 1991-92                       ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; nqthm contains induction on epsilon_0, so it's stronger than pure primitive
+; recursive arithmetic.  Presumably, it can prove Con(PA).
+;         LONG project -- do this
+
+; This file -- a simple example -- use recursion on pairs to define the
+; Ackermann function, which grows faster than any primitive recursive function
+; see Aho-Hopcroft-Ullman, "Data Structures and Algorithms", p. 189
+
+
+
+; Representation of a pair of numbers, (i,j), as the ordinal omega^(i+1) + j;
+; This is a little simpler than the one described on Boyer-Moore p. 42.
+
+(defn rep (i j)  (cons (add1 i) j))
+(defn lex2 (i1 j1 i2 j2)
+    (or
+        (lessp i1 i2)
+        (and (equal i1 i2) (lessp j1 j2))))
+(prove-lemma rep-respects-lex (rewrite) (implies
+    (and (numberp i1) (numberp i2) (numberp j1) (numberp j2))
+    (equal
+        (lex2 i1 j1 i2 j2)
+        (ord-lessp (rep i1 j1) (rep i2 j2)))))
+
+(defn ack (x y)    
+    (if (zerop x) 1
+        (if (zerop y) (if (equal x 1) 2 (plus x 2))
+            (ack (ack (sub1 x) y) (sub1 y))  ))
+    ( (ord-lessp  (rep (fix y) (fix x)))   ))  ; hint
+; "fix"  = "cast to numberp" 
+
+(prove-lemma ack-is-positive (rewrite) (equal (zerop (ack x y)) F))
+
+(prove-lemma ack-of-1 (rewrite)   ; ack(x,1) = 2x  if  x > 0
+    (implies 
+        (not (zerop x))
+        (equal (ack x 1) (times x 2))))
+
+(defn expt2 (x) (if (zerop x) 1 (times (expt2 (sub1 x)) 2)))
+
+(prove-lemma ack-of-2-aux1 (rewrite)  (implies    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    (not (zerop x))                               ;   Table  of values of ack
+    (equal (ack x 2) (ack (ack (sub1 x) 2) 1))))  ;
+                                                  ;    ---------------------
+(prove-lemma ack-of-2-aux2 (rewrite)  (implies    ;  3| 1   2   4  16  2^16
+    (not (zerop x))                               ;   |---------------------
+    (equal (ack x 2) (times (ack (sub1 x) 2) 2))) ;  2| 1   2   4   8   16
+    (                                             ;   |---------------------
+    (do-not-induct T)                             ;  1| 1   2   4   6   8
+    (use                                          ;   |---------------------
+        (ack-of-2-aux1 (x x))                     ;  0| 1   2   4   5   6
+        (ack-of-1 (x (ack (sub1 x) 2)))  )        ;   |_____________________
+    (disable ack-of-2-aux1 ack-of-1)              ;     0   1   2   3   4
+))                                                ;
+                                                  ;;;;;;;;;;;;;;;;;;;;;;;;;;
+(prove-lemma ack-of-2 (rewrite)         ; ack(x,2) = 2^x
+    (equal (ack x 2) (expt2 x)))
+
+; ack(x,3) = 2^2^2^ ...^2  (stack of x 2's, ^ assoc to right)
+
+
+

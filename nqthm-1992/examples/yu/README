@@ -1,0 +1,123 @@
+The files in this directory are the work of Yuan Yu.
+
+In the following, the notation "requires DEFN-SK" means that it is necessary to
+load the file defn-sk.lisp, Matt Kaufmann's skolemizer, into Nqthm, e.g., with
+the command (load "defn-sk.lisp"), before processing a particular file.  The
+file defn-sk.lisp is distributed with Nqthm-1992, but it is not loaded via the
+standard load command (load-nqthm).
+
+group.events        Theorems in group theory (requires DEFN-SK)
+                    A Journal of Automated Reasoning article about this work
+                    is cited in file.
+
+
+                Everything below concerns mc68020 verification
+
+
+                           THE MC68020 SPECIFICATION
+
+mc20-0.events       Prelude for the MC68020 specification
+mc20-1.events       The MC68020 specification itself
+mc20-1.tex, .dvi    The above, in Tex form
+                    (A slightly earlier version, in paper form, is
+                     available as TR 92-04 from the Computer Sciences Dept.,
+                     University of Texas at Austin.)
+
+
+                               THE LEMMA LIBRARY
+
+mc20-2.events
+
+                                   EXAMPLES
+
+amax.events         (C) array maximum
+asm.events          (C) embedded assembler
+bsearch.events      (C) binary search
+switch.events       (C) case statement with computed goto
+fixnum-gcd          (Lisp) Euclid's gcd
+fmax.events         (C) A function with a functional parameter
+gcd.events          (C) Euclid's gcd
+gcd3.events         (C) calling a proved subroutine 
+isqrt-ada.events    (Ada) integer square root, Newton's method
+isqrt.events        (C) integer square root, Newton's method
+log2.events         (C) integer log
+mjrty.events        (C) majority vote algorithm
+qsort.events        (C) quick sort, after K & R (requires DEFN-SK)
+zero.events         (C) zero out an array
+
+
+                           BSD UNIX C STRING LIBRARY
+
+Verification of MC68020 machine code of 21 of the 22 C String Library functions
+from the Berkeley Unix C String Library, namely all the functions except
+strerror, which is specified to "return pointer to implementation-defined
+string corresponding to error n"; left out of Yu's work because of this
+implementation dependence.
+
+memchr.events       
+memcmp.events       
+memcpy.events
+memmove.events      
+memset.events       
+strcat.events
+strchr.events
+strcmp.events
+strcoll.events
+strcpy.events
+strcspn.events
+strlen.events
+strncat.events
+strncmp.events
+strncpy.events
+strpbrk.events
+strrchr.events
+strspn.events
+strstr.events 
+strtok.events
+strxfrm.events
+
+cstring.events      The proof of the second phase for all of the
+                    C string functions above (requires DEFN-SK).
+
+
+All of the C code in the above C string library files is covered by this
+copyright notice:
+
+/*-
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * Some of the code was derived from software contributed to Berkeley by
+ * Chris Torek and Jeffrey Mogul.
+ #
+ * Redistribution and use in source and binary forms are permitted
+ * provided that: (1) source distributions retain this entire copyright
+ * notice and comment, and (2) distributions including binaries display
+ * the following acknowledgement:  ``This product includes software
+ * developed by the University of California, Berkeley and its contributors''
+ * in the documentation or other materials provided with the distribution
+ * and in all advertising materials mentioning features or use of this
+ * software. Neither the name of the University nor the names of its
+ * contributors may be used to endorse or promote products derived
+ * from this software without specific prior written permission.
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ */
+
+
+Permission from Yuan:
+
+From: yuan@cs.utexas.edu (Yuan Yu)
+Date: Thu, 29 Oct 92 21:03:01 -0600
+To: boyer@cli.com
+Subject: events files
+
+
+I have created a directory ~yuan/mc20/ on cs that contains all the events
+files in my dissertation.  They have been successfully replayed.  You
+may choose any of them to include in the nqthm-1992 release.
+
+Thanks,
+-Yuan
+

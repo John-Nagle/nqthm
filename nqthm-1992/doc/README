@@ -1,0 +1,18 @@
+The documentation for Nqthm-1992 consists of the book `A Computational Logic
+Handbook' by Robert S. Boyer and J Strother Moore, second edition, Academic
+Press, 1998, ISBN 0-12-122955-6.
+
+Permission from Academic Press to distribute Chapters 4 and 12, the formal
+logic and the reference guide, in electronic form may be found in the file
+`ap-copyright-permission.text'.
+
+The file `logic-reference.doc' contains a text version of chapters 4 and 12.
+In principle, these two chapters explain all that one needs to know to use
+Nqthm-1992 -- both the details of logic in which theorems are being proved
+and the commands one can use.  In practice, however, a reading of the
+entirety of `A Computational Logic Handbook,' second edition, is strongly
+recommended because of the many examples of and hints for effective use of
+Nqthm that are provided.
+
+In the file nq.el is a Gnu Emacs utility for searching the file
+logic-reference.doc.

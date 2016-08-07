@@ -1,0 +1,401 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    REGFILE.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Boolean specifications of register file access.
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn read-regs (address regs)
+  (let ((regfile      (car regs))
+        (last-we      (cadr regs))
+        (last-data    (caddr regs))
+        (last-address (cadddr regs)))
+    (if (and last-we (v-iff address last-address))
+        last-data
+      (read-mem address regfile))))
+
+(disable read-regs)
+
+(defn write-regs (we address regs data)
+  (let ((regfile      (car regs))
+        (last-we      (cadr regs))
+        (last-data    (caddr regs))
+        (last-address (cadddr regs)))
+    (list (if last-we (write-mem last-address regfile last-data) regfile)
+          we
+          (if we data last-data)
+          (if we address last-address))))
+
+(disable write-regs)
+
+(prove-lemma write-regs-f-write-regs-f (rewrite)
+  (equal (write-regs f addr1 (write-regs f addr2 regs data2) data1)
+         (write-regs f addr1 regs data1))
+  ;;Hint
+  ((enable write-regs)))
+
+(prove-lemma write-regs-f-bv-crock (rewrite)
+  (equal (write-regs f addr regs (bv x))
+         (write-regs f 0 regs 0))
+  ;;Hint
+  ((enable write-regs)))
+
+(prove-lemma properp-length-write-regs (rewrite)
+  (and (properp (write-regs we address regs data))
+       (equal (length (write-regs we address regs data)) 4))
+  ;;Hint
+  ((enable write-regs)))
+
+(prove-lemma write-regs-if (rewrite)
+  (equal (write-regs (if c a b) address regs data)
+         (if c
+             (write-regs a address regs data)
+           (write-regs b address regs data))))
+
+(prove-lemma write-regs-ok (rewrite)
+  (and
+   (equal (memory-okp n m (car (write-regs we address regs data)))
+          (if (cadr regs) 
+              (memory-okp n m (write-mem (cadddr regs) 
+                                         (car regs) 
+                                         (caddr regs)))
+            (memory-okp n m (car regs))))
+   (equal (boolp (cadr (write-regs we address regs data)))
+          (boolp we))
+   (equal (bvp (caddr (write-regs we address regs data)))
+          (if we
+              (bvp data)
+            (bvp (caddr regs))))
+   (equal (length (caddr (write-regs we address regs data)))
+          (if we
+              (length data)
+            (length (caddr regs))))
+   (equal (bvp (cadddr (write-regs we address regs data)))
+          (if we
+              (bvp address)
+            (bvp (cadddr regs))))
+   (equal (length (cadddr (write-regs we address regs data)))
+          (if we
+              (length address)
+            (length (cadddr regs)))))
+  ;;Hint
+  ((enable write-regs)))
+
+(prove-lemma read-regs-write-regs-f (rewrite)
+  (implies
+   (and (all-ramp-mem (length addr) (car regs))
+        (equal (length addr) (length (cadddr regs)))
+        (bvp addr))
+   (equal (read-regs addr (write-regs f address regs value))
+          (read-regs addr regs)))
+   ;;hint
+   ((enable read-regs write-regs)
+    (use (read-mem-write-mem (v-addr1 addr)
+                             (v-addr2 (cadddr regs))
+                             (value (caddr regs))
+                             (mem (car regs))))))
+
+(prove-lemma all-ramp-mem-after-write-regs (rewrite)
+  (implies
+   (and (all-ramp-mem n (car regs))
+        (equal (length (cadddr regs)) n))
+   (all-ramp-mem n (car (write-regs we address regs data))))
+  ;;Hint
+  ((enable write-regs)))
+
+(prove-lemma read-regs=read-mem (rewrite)
+  (implies
+   (not (cadr regs))
+   (equal (read-regs v-addr regs)
+          (read-mem v-addr (car regs))))
+  ;;Hint
+  ((enable read-regs)))
+
+(prove-lemma read-regs=read-mem-write-mem (rewrite)
+  (implies
+   (and (all-ramp-mem (length v-addr1) (car regs))
+        (equal (length v-addr1) (length (cadddr regs)))
+        (cadr regs))
+   (equal (read-regs v-addr1 regs)
+          (read-mem v-addr1
+                    (write-mem (cadddr regs) (car regs) (caddr regs)))))
+  ;;Hint
+  ((use (read-mem-write-mem (mem (car regs))
+                            (v-addr2 (cadddr regs))
+                            (value (caddr regs))))
+   (enable read-regs)))
+
+(prove-lemma bvp-length-read-regs-32 (rewrite)
+  (implies
+   (and (memory-okp (length v-addr) 32 (car regs))
+        (bvp (caddr regs))
+        (equal (length (caddr regs)) 32))
+   (and (bvp (read-regs v-addr regs))
+        (equal (length (read-regs v-addr regs))
+               32)))
+  ;;Hint
+  ((enable read-regs)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Hardware Implementation of the Register File
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(module-generator
+ (regfile*)
+ 'REGFILE
+ (list* 'clk 'te 'ti 'we 'disable-regfile- 'test-regfile-
+        (append #i(address 0 4) #i(data 0 32)))
+ (cons 'to #i(out 0 32))
+ (list
+  ;;  WE-LATCH. Scan TI to WE-DP-RAM
+  (list 'we-latch
+        '(we-dp-ram we-dp-ram-)
+        'fd1s
+        '(we clk ti te))
+  ;;  ADDRESS-LATCH.  Scan WE-DP-RAM to #i(address-dp-ram 3)
+  (list 'address-latch
+        #i(address-dp-ram 0 4)
+        #i(we-reg 4)
+        (list* 'clk 'we 'te 'we-dp-ram #i(address 0 4)))
+  ;;  DATA-LATCH.  Scan #i(address-dp-ram 3) to #i(data-dp-ram 31)
+  (list 'data-latch
+        #i(data-dp-ram 0 32)
+        #i(we-reg 32)
+        (list* 'clk 'we 'te #i(address-dp-ram 3) #i(data 0 32)))
+
+  ;; Register File Enable Circuit
+  '(reg-en-circuit (we-) ram-enable-circuit
+                   (clk test-regfile- disable-regfile- we-dp-ram))
+  ;;  The RAM.  This is a level-sensitive device.  The surrounding circuitry
+  ;;  makes the entire register file work as if it were an edge-triggered
+  ;;  device. 
+  (list 'ram
+        #i(ramout 0 32)
+        'dp-ram-16x32
+        (append #i(address 0 4)                        ;Read address
+                (append #i(address-dp-ram 0 4)         ;Write address
+                        (cons 'we-                     ;Write enable
+                              #i(data-dp-ram 0 32))))) ;Data
+  ;;  Address comparator.
+  (list 'compare
+        '(read-equal-write)
+        #i(v-equal 4)
+        (append #i(address 0 4) #i(address-dp-ram 0 4)))
+  ;;  Mux control
+  (list 'mux-control
+        '(s)
+        'b-and3
+        '(we-dp-ram read-equal-write test-regfile-))
+  ;;  Mux
+  (list 'mux
+        #i(out 0 32)
+        #i(tv-if (tree-number (make-tree 32)))
+        (cons 's (append #i(data-dp-ram 0 32) #i(ramout 0 32))))
+  ;;  Rename the scan out
+  (list 'scanout
+        '(to)
+        'id
+        (list #i(data-dp-ram 31))))
+ '(ram we-latch data-latch address-latch))
+        
+(disable *1*regfile*)
+
+(defn regfile& (netlist)
+  (and (equal (lookup-module 'regfile netlist) (regfile*))
+       (let ((netlist (delete-module 'regfile netlist)))
+         (and (fd1s& netlist)
+              (we-reg& netlist 4)
+              (we-reg& netlist 32)
+              (ram-enable-circuit& netlist)
+              (dp-ram-16x32& netlist)
+              (v-equal& netlist 4)
+              (b-and3& netlist)
+              (tv-if& netlist (make-tree 32))
+              (id& netlist)))))
+
+(disable regfile&)
+
+(defn regfile$netlist ()
+  (cons (regfile*)
+        (union (union (union (union (fd1s$netlist)
+                                    (we-reg$netlist 4))
+                             (union (we-reg$netlist 32)
+                                    (ram-enable-circuit$netlist)))
+                      (union (dp-ram-16x32$netlist)
+                             (union (v-equal$netlist 4)
+                                    (b-and3$netlist))))
+               (union (tv-if$netlist (make-tree 32))
+                      (id$netlist)))))
+
+(prove-lemma check-regfile$netlist ()
+  (regfile& (regfile$netlist))
+  ;;Hint
+  ((expand (regfile*))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    4-Valued Register File Specifications
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;   F$READ-REGS
+
+(defn f$read-regs (address regs)
+  (let ((regfile      (car regs))
+        (last-we      (cadr regs))
+        (last-data    (caddr regs))
+        (last-address (cadddr regs)))
+    (fv-if
+     (f-and3 (f-buf last-we)
+             (f$v-equal address (v-threefix last-address))
+             t)
+     (v-threefix last-data)
+     (dual-port-ram-value
+      32 4
+      (append address
+              (append (v-threefix last-address)
+                      (cons (f-nand t (f-buf last-we))
+                            (v-threefix last-data))))
+      regfile))))
+
+(disable f$read-regs)
+
+(prove-lemma properp-length-f$read-regs (rewrite)
+  (and (properp (f$read-regs address mem))
+       (implies
+        (equal (length (caddr mem)) 32)
+        (equal (length (f$read-regs address mem)) 32)))
+  ;;Hint
+  ((enable f$read-regs)))
+
+(prove-lemma f$read-regs=read-regs (rewrite)
+  (implies
+   (and (memory-okp 4 32 (car regs))
+        (boolp (cadr regs))
+        (bvp (caddr regs)) (equal (length (caddr regs)) 32)
+        (bvp (cadddr regs)) (equal (length (cadddr regs)) 4)
+        (bvp address) (equal (length address) 4))
+   (equal (f$read-regs address regs)
+          (read-regs address regs)))
+  ;;Hint
+  ((enable read-regs f$read-regs boolp-b-gates open-nth)
+   (disable *1*make-list)
+   (disable-theory f-gates)))
+
+;;  The $VALUE lemma is a little more general than the $STATE lemma.
+
+(prove-lemma regfile$value (rewrite)
+  (implies
+   (and (regfile& netlist)
+        (equal test-regfile- t)
+        (equal disable-regfile- t)
+        (memory-properp 4 32 mem)
+        (properp last-data) (equal (length last-data) 32)
+        (properp address) (equal (length address) 4)
+        (properp last-address) (equal (length last-address) 4))
+   (equal (cdr (dual-eval 0 'regfile
+                          (list* clk te ti we disable-regfile- test-regfile-
+                                 (append address data))
+                          (list mem last-we last-data last-address)
+                          netlist))
+          (f$read-regs address (list mem last-we last-data last-address))))
+  ;;Hint
+  ((enable regfile& f$read-regs regfile*$destructure open-nth
+           fd1s$value we-reg$value ram-enable-circuit$value
+           dp-ram-16x32$structured-value
+           v-equal$value b-and3$value tv-if$value id$value)
+   (disable indices *1*indices open-indices open-v-threefix
+            make-tree *1*make-tree make-list *1*make-list
+            threefix dual-port-ram-value)
+   (disable-theory f-gates)))
+
+(disable regfile$value)
+
+(defn f$write-regs (we address regs data)
+  (let ((regfile      (car regs))
+        (last-we      (cadr regs))
+        (last-data    (caddr regs))
+        (last-address (cadddr regs)))
+    (list 
+     (dual-port-ram-state
+      32 4
+      (append address
+              (append (v-threefix last-address)
+                      (cons (f-nand t (f-buf last-we))
+                            (v-threefix last-data))))
+      regfile)
+     (threefix we)
+     (fv-if we
+            data
+            last-data)
+     (fv-if we
+            address
+            last-address))))
+
+(disable f$write-regs)
+
+(prove-lemma properp-length-f$write-regs (rewrite)
+  (and (properp (f$write-regs we address regs data))
+       (equal (length (f$write-regs we address regs data))
+              4))
+  ;;Hint
+  ((enable f$write-regs)
+   (disable dual-port-ram-state threefix)))
+
+(prove-lemma f$write-regs=write-regs (rewrite)
+  (implies
+   (and                                 
+    (boolp we)
+    (boolp (cadr regs))
+    (bvp (caddr regs)) (equal (length (caddr regs)) 32)
+    (bvp (cadddr regs)) (equal (length (cadddr regs)) 4)
+    (bvp address) (equal (length address) 4)
+    (bvp data) (equal (length data) 32))
+   (equal (f$write-regs we address regs data)
+          (write-regs we address regs data)))
+  ;;Hint
+  ((enable f$write-regs write-regs boolp-b-gates open-nth subrange-cons)
+   (disable-theory f-gates)))
+
+(prove-lemma regfile$state (rewrite)
+  (implies
+   (and (regfile& netlist)
+        (not te)
+        (equal test-regfile- t)
+        (equal disable-regfile- t)
+        (properp data) (equal (length data) 32)
+        (properp last-data) (equal (length last-data) 32)
+        (properp address) (equal (length address) 4)
+        (properp last-address) (equal (length last-address) 4))
+   (equal (dual-eval 2 'regfile
+                     (list* clk te ti we disable-regfile- test-regfile-
+                            (append address data))
+                     (list regfile last-we last-data last-address)
+                     netlist)
+          (f$write-regs we address
+                        (list regfile last-we last-data last-address)
+                        data)))
+  ;;Hint
+  ((enable regfile& f$write-regs regfile*$destructure open-nth
+           fd1s$state fd1s$value we-reg$state we-reg$value
+           ram-enable-circuit$value
+           dp-ram-16x32$structured-state
+           v-equal$value b-and3$value tv-if$value id$value)
+   (disable indices *1*indices open-indices open-v-threefix
+            make-tree *1*make-tree make-list *1*make-list
+            threefix dual-port-ram-state)
+   (expand (f-if f ti we) (f-buf we))
+   (disable-theory f-gates))) 
+
+(disable regfile$state)

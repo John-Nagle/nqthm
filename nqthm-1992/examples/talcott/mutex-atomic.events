@@ -1,0 +1,3991 @@
+#|
+
+ Copyright (C) 1994 by Misao Nagayama and Carolyn Talcott.  All Rights Reserved.
+
+ You may copy and distribute verbatim copies of this Nqthm-1992 event script as
+ you receive it, in any medium, including embedding it verbatim in derivative
+ works, provided that you conspicuously and appropriately publish on each copy
+ a valid copyright notice "Copyright (C) 1994 by Misao Nagayama and Carolyn
+ Talcott.  All Rights Reserved."
+
+ NO WARRANTY
+
+ Misao Nagayama and Carolyn Talcott PROVIDE ABSOLUTELY NO WARRANTY.  THE EVENT
+ SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR
+ IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Misao Nagayama or Carolyn Talcott BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+
+(boot-strap nqthm)
+
+;;;;;;;;;;;;;;;;;;;;;;   mutex-atomic.ev    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  com.ev  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;*sequence and finite set utilities
+
+;;;The ith entry in l.
+(defn nth (l i)
+      (if (listp l)
+          (if (equal i 1) (car l) (nth (cdr l) (sub1 i)))
+          (if (numberp l) 
+              (if (equal i 1) l F) F)))
+(disable nth)
+
+;;;update ith entry of l to be k
+(defn move (l i k)
+       (if (equal i 0) l
+           (if (nlistp l)
+               (if (equal i 1) k l)
+               (if (equal i 1)
+                   (cons k (cdr l))
+                   (cons (car l) 
+                         (move (cdr l) (sub1 i) k))))))
+(disable move)
+
+(defn at (l i k)
+     (equal (nth l i) k))
+(disable at)
+
+(defn length (l)
+      (if (listp l) (add1 (length (cdr l))) (zero)))
+(disable length)
+
+;;;The nth entry in l is in the list i.
+(defn union-at-n (l n i)
+     (member (nth l n) i))
+(disable union-at-n)
+
+;;;Any entry in l is in the list i.
+(defn all-union (l n i)
+     (if (zerop n) T
+         (and (union-at-n l n i)
+              (all-union l (sub1 n) i))))
+(disable all-union)
+
+;;;There exists an entry in l which belongs to 
+;;;the list i, moreover when exists, some such
+;;;j is returned.
+(defn exist-union (l n i)                         
+      (if (zerop n) F
+          (if (union-at-n l n i) n
+              (exist-union l (sub1 n) i))))
+(disable exist-union)
+
+;;;n is in the intersection of l8-12 and g34.
+(defn intersect-8-12-3-4-at-n (n l g)
+    (and (union-at-n l n '(8 9 10 11 12))
+         (union-at-n g n '(3 4))))
+
+(disable intersect-8-12-3-4-at-n)
+
+;;;There exists n in the intersection of l8-12 and g34.
+(defn exist-intersect-8-12-3-4 (n l g)
+   (if (zerop n) F
+       (if (intersect-8-12-3-4-at-n n l g) n
+           (exist-intersect-8-12-3-4 (sub1 n) l g))))
+(disable  exist-intersect-8-12-3-4)
+
+;*Flag invariant.
+
+(defn lg-1-at-n (n l g)
+   (or (and (at l n 0) (at g n 0))
+       (and (at l n 1) (at g n 0))
+       (and (at l n 2) (at g n 0))
+       (and (at l n 3) (at g n 1))
+       (and (at l n 4) (at g n 1))))
+
+(disable lg-1-at-n)
+
+(defn lg-2-at-n (n l g)
+   (or (and (at l n 5) (at g n 3))
+       (and (at l n 6) (at g n 3))
+       (and (at l n 7) (at g n 2))
+       (and (at l n 8) (at g n 3))
+       (and (at l n 8) (at g n 2))))     
+(disable lg-2-at-n)       
+
+(defn lg-3-at-n (n l g)
+   (or (and (at l n 9) (at g n 4))
+       (and (at l n 10) (at g n 4))
+       (and (at l n 11) (at g n 4))
+       (and (at l n 12) (at g n 4))))
+(disable lg-3-at-n)
+
+(defn lg-at-n (n l g)      
+    (and (lg-1-at-n n l g)
+         (lg-2-at-n n l g)
+         (lg-3-at-n n l g)))
+(disable lg-at-n)
+
+(defn lg (n l g)
+     (if (zerop n) T
+         (and (lg-at-n n l g)
+              (lg (sub1 n) l g))))
+(disable lg)
+
+
+;*The set {1...n}.
+(defn nset (n)                                                    
+     (if (zerop n) NIL
+         (cons n (nset (sub1 n)))))
+(disable nset)
+
+;;;n belongs to nset.
+(prove-lemma n-in-nset (rewrite)
+   (implies (not (zerop n))
+            (member n (nset n)))
+   ((enable nset)))
+
+;;;Any element in nset is a number.
+(prove-lemma nset-number (rewrite)
+   (implies (member k (nset n))
+            (numberp k))
+   ((enable nset)))
+
+;;;If a nonzero number plus one belongs to nset, 
+;;;then so does the nonzero number itself.
+(prove-lemma add1-nset (rewrite)
+   (implies (and (not (zerop k))
+                 (member (add1 k) (nset n)))
+            (member k (nset n)))
+   ((enable nset)))                 
+
+;;;Any list has its length at least nonzero.
+(prove-lemma list-ln (rewrite)   
+   (implies (listp l)
+            (not (equal (length l) 0)))
+   ((enable length)))
+
+;;;(move l k i) is again a list if l is a list.
+(prove-lemma move-is-list (rewrite)
+   (implies (listp l)
+            (listp (move l k i)))
+   ((enable move)))
+
+(enable length)
+
+;;;(move l k i) has i as its kth entry.
+;;;(enable length) is critical to prove this lemma.
+(prove-lemma move-nth (rewrite)
+   (implies (and (listp l)
+                 (member k (nset (length l))))
+            (equal (nth (move l k i) k) i))
+   ((enable nth move nset)))
+
+(prove-lemma zero-not-member-nset (rewrite)
+   (not (member 0 (nset n)))
+   ((enable nset)))
+
+;;;Lists l and (move l k i) have the same length.
+(prove-lemma move-unchange-length (rewrite)
+   (implies (and (listp l)
+                 (member k (nset (length l))))
+            (equal (length (move l k i)) (length l)))
+   ((enable move nset)))
+
+;;;Lists l and (move l k i) have the same entries 
+;;;except kth one.
+(prove-lemma move-unchange-other-than-nth (rewrite)
+   (implies (and (listp l)
+                 (member k (nset (length l)))
+                 (not (equal j k)))
+            (equal (nth (move l k i) j) (nth l j)))
+  ((enable move nth nset)))
+
+(prove-lemma member-ex-union (rewrite)
+   (implies (exist-union l n i)
+            (member (exist-union l n i) (nset n)))
+   ((enable nset exist-union)))
+
+;;;(exist-union l n i) is a number.
+(prove-lemma number-ex-union (rewrite)
+   (implies (exist-union l n i)
+        (numberp (exist-union l n i)))
+   ((enable exist-union)))
+
+;;;(exist-intersect-8-12-3-4 n l g) belongs to nset.
+(prove-lemma member-intersect (rewrite)
+   (implies (exist-intersect-8-12-3-4 n l g)
+            (member (exist-intersect-8-12-3-4 n l g) (nset n)))
+   ((enable nset exist-intersect-8-12-3-4 
+            intersect-8-12-3-4-at-n )))
+
+;;;(exist-intersect-8-12-3-4 n l g) is a number.
+(prove-lemma number-intersect (rewrite)
+   (implies (exist-intersect-8-12-3-4 n l g)
+            (numberp (exist-intersect-8-12-3-4 n l g)))
+   ((enable exist-intersect-8-12-3-4)))
+
+;;;any member of nset is nonzero.
+(prove-lemma k-not-0 (rewrite)
+   (implies (member k (nset n))
+            (not (zerop  k)))
+   ((enable nset)))
+
+;*lemmas for a0 
+
+;;;If j's entry in l is between 8..12 then  
+;;;(exist-union l n '(8 9 10 11 12)) holds.
+(prove-lemma j-ex-l8-12 (rewrite)
+   (implies (and (member j (nset n))
+                 (union-at-n l j '(8 9 10 11 12)))
+            (exist-union l n '(8 9 10 11 12)))
+   ((enable nset exist-union union-at-n at)))
+
+;;;Witness of (exist-union lp n '(8 9 10 11 12)) 
+;;;has in lp its entry between 8...12.
+(prove-lemma ex-lp8-12-in-lp8-12 (rewrite)
+   (implies (exist-union lp n '(8 9 10 11 12))
+            (union-at-n lp (exist-union lp n 
+             '(8 9 10 11 12)) '(8 9 10 11 12)))
+   ((enable exist-union union-at-n at)))
+
+;;;If (not (exist-union l n '(8 9 10 11 12))) 
+;;;holds, then (not (exist-union g n '(4))) by lg.
+(prove-lemma ex-if4 (rewrite)
+   (implies (and (not (exist-union l n '(8 9 10 11 12)))
+                 (lg n l g))
+            (not (exist-union g n '(4))))
+   ((enable exist-union union-at-n lg 
+            lg-at-n lg-2-at-n at)))
+
+;;;If (not (exist-union g n '(1))) holds,
+;;; then there is no entry either 3 or 4.
+(prove-lemma l34-empty (rewrite)
+   (implies (and (member j (nset n))
+                 (lg n l g)
+                 (not (exist-union g n '(1))))
+            (not (union-at-n l j '(3 4))))
+   ((enable at nset exist-union union-at-n lg 
+            lg-at-n lg-1-at-n)))
+
+;;;If j's entry in lp is 4, then (certainly)
+;;;it is either 3 or 4.
+(prove-lemma lp4-then-un34 (rewrite)
+   (implies  (at lp j 4)
+             (union-at-n lp j '(3 4)))
+   ((enable union-at-n at)))
+
+;;;If (exist-intersect-8-12-3-4 n l g) holds, 
+;;;then so does (exist-union g n '(3 4)).
+(prove-lemma int-8-12-3-4-then-un34 (rewrite)
+   (implies (exist-intersect-8-12-3-4 n l g) 
+            (exist-union g n '(3 4)))
+   ((enable exist-intersect-8-12-3-4 
+            intersect-8-12-3-4-at-n  
+            union-at-n exist-union at)))
+
+;*lemmas for a1
+
+;;;i is the witness of 
+;;;(exist-intersect-8-12-3-4 n lp gp).
+(prove-lemma int-wtn (rewrite)  
+   (implies (and (member j (nset n))
+                 (intersect-8-12-3-4-at-n j lp gp))
+            (exist-intersect-8-12-3-4 n lp gp))
+   ((enable nset exist-intersect-8-12-3-4)))
+
+;;;If there exists j such that j's entry in lp 
+;;;is between 8..12 and entry in gp is either 3 or 4
+;;;then (intersect-8-12-3-4-at-n j lp gp) holds.
+(prove-lemma un8-12-and-un34-then-int (rewrite)
+   (implies (and (union-at-n lp j '(8 9 10 11 12))
+                 (union-at-n gp j '(3 4)))
+            (intersect-8-12-3-4-at-n j lp gp))
+   ((enable intersect-8-12-3-4-at-n)))
+
+;;;By the two lemmas above, 
+;;;(exist-intersect-8-12-3-4 n lp gp) holds provided 
+;;;that there exists j such that j's entry in lp is
+;;;between 8..12 and entry in gp is either 3 or 4.
+
+;* ep-l8-12
+
+;;;If the k's entry in l is 5, then the k's entry 
+;;;in g is 3 by lg.
+(prove-lemma lg-l5-g3 (rewrite)
+   (implies (and (member k (nset n))
+                 (lg n l g)
+                 (at l k 5))
+             (at g k 3))
+   ((enable lg lg-at-n lg-2-at-n nset at)))
+
+;;;If the k's entry in gp is 3 then certainly 
+;;;it is either 3 or 4.
+(prove-lemma gp3-then-un34 (rewrite)
+   (implies (at gp k 3)
+            (union-at-n gp k '(3 4)))
+   ((enable union-at-n at)))
+
+;;;nep-l8-12
+
+;;;If the k's entry in l is between 8..12 then 
+;;;it is either between 8..11 or equal to 12.
+(prove-lemma case-k (rewrite)
+   (implies (and (union-at-n l k '(8 9 10 11 12))
+                 (not (union-at-n l k '(8 9 10 11))))
+            (at l k 12))
+   ((enable union-at-n at)))
+
+;;;;;k-not-l8-12
+
+;;;If (exist-intersect-8-12-3-4 n l g) holds
+;;;then the witness has its entry in g either equal 
+;;;to 3 or 4.
+(prove-lemma intersect-8-12-3-4-then-3-4 (rewrite)
+   (implies (exist-intersect-8-12-3-4 n l g)
+            (union-at-n g 
+             (exist-intersect-8-12-3-4 n l g) '(3 4)))
+   ((enable exist-intersect-8-12-3-4 
+            intersect-8-12-3-4-at-n
+            union-at-n at)))
+
+;;;If (exist-intersect-8-12-3-4 n l g) holds,
+;;; then the witness has its entry in g between 8 and 12.
+(prove-lemma intersect-8-12-3-4-then-8-12 (rewrite)
+   (implies (exist-intersect-8-12-3-4 n l g)
+            (union-at-n l (exist-intersect-8-12-3-4 n l g)
+             '(8 9 10 11 12)))
+   ((enable exist-intersect-8-12-3-4
+            intersect-8-12-3-4-at-n
+            union-at-n at)))
+
+;;;k-in-l8-11
+
+;;;If k's entry in lp is between 9 and 12,
+;;;then it is certainly between 8 and 12.
+(prove-lemma un9-12-then-un8-12 (rewrite)    
+   (implies (union-at-n lp k '(9 10 11 12))
+            (union-at-n lp k '(8 9 10 11 12)))
+  ((enable union-at-n at)))
+
+;;;If the i's entry in l is between 9 and 12,
+;;;then the k's entry in g is 4.
+(prove-lemma if4 (rewrite)
+   (implies (and (member j (nset n))
+                 (lg n l g)
+                 (union-at-n l j '(9 10 11 12)))
+            (at g j 4))
+   ((enable nset union-at-n at lg lg-at-n lg-3-at-n)))
+
+;;;k-in-l12
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds then
+;;;its witness does not have its entry in lp equal to 1.
+(prove-lemma ex-lp8-12-not-in-lp0 (rewrite)
+   (implies (exist-union lp n '(8 9 10 11 12))
+            (not (at lp (exist-union lp n '(8 9 10 11 12)) 0)))
+   ((enable exist-union union-at-n at)))
+
+;;;If k's entry in lp is between 8 and 12,
+;;; then it is either between 8 and 11 or 12.
+(prove-lemma k-in-lp9-12-or-lp8 (rewrite)
+   (implies (and (union-at-n lp k '(8 9 10 11 12))
+                 (not (union-at-n lp k '(9 10 11 12))))
+            (at lp k 8))
+   ((enable union-at-n at)))
+
+;;;If the k's entry is either 5 or 7,
+;;;then it is between 5 and 7.
+(prove-lemma un57-then-un5-12 (rewrite)
+   (implies (union-at-n l k '(5 7))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in l is between 8 and 11,
+;;;then it is between 5 and 12.
+(prove-lemma un8-11-then-un5-12 (rewrite)
+   (implies (union-at-n l k '(8 9 10 11))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in l is between 8 and 12,
+;;;then it is between 5 and 12.
+(prove-lemma un8-12-then-un5-12 (rewrite)
+   (implies (union-at-n l k '(8 9 10 11 12))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+   ((enable union-at-n at)))
+
+
+;*lemmas for a2
+
+;;;i-eq-k-j-neq-k
+
+;;;If the k's entry in l is either 10 or 11, 
+;;;then the k's entry in l is between 10 and 12.
+(prove-lemma un10-11-then-un10-12 (rewrite)
+   (implies (union-at-n l k '(10 11))
+            (union-at-n l k '(10 11 12)))
+   ((enable union-at-n at)))
+
+;;;If the j's entry in g is either 0 or 1 then
+;;;the j's entry in l is not between 5 and 12.
+(prove-lemma if1 (rewrite)
+   (implies (and (member j (nset n))
+                 (lg n l g)
+                 (union-at-n g j '(0 1)))
+             (not (union-at-n l j 
+                   '(5 6 7 8 9 10 11 12))))
+   ((enable nset union-at-n at lg lg-at-n 
+            lg-1-at-n)))
+
+;;;j-eq-k-i-neq-k
+
+;;;If the k's entry in l is between 5 and 7,
+;;;then it is certainly between 5 and 12.
+(prove-lemma un5-7-then-un5-11 (rewrite)
+   (implies (union-at-n l k '(5 6 7))
+            (union-at-n l k '(5 6 7 8 9 10 11)))
+   ((enable union-at-n at nset)))
+
+;;;If the k's entry in lp is between 5 and 7 then 
+;;;it is certain between 5 and 11.
+(prove-lemma un57-then-un5-11 (rewrite)
+   (implies (union-at-n l k '(5 7))
+            (union-at-n l k '(5 6 7 8 9 10 11)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in l is between 8 and 11,
+;;;then it is certainly between 5 and 11.
+(prove-lemma un8-11-then-un5-11 (rewrite)
+   (implies (union-at-n l k '(8 9 10 11))
+            (union-at-n l k '(5 6 7 8 9 10 11)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in lp is between 5 and 12 and
+;;;the k's entry in lp is between 5 and 7, then
+;;;the k's entry in lp in fact is between 9 and 12.
+(prove-lemma k-in-lp5-7-or-lp8-or-lp9-12 (rewrite)
+   (implies (and (union-at-n lp k '(5 6 7 8 9 10 11 12))
+                 (not (union-at-n lp k '(5 6 7)))
+                 (not (at lp k 8)))
+           (union-at-n lp k '(9 10 11 12)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in l is between 5 and 11,
+;;; then it is certainly between 5 and 12.
+(prove-lemma un5-11-then-un5-12 (rewrite)
+   (implies (union-at-n l k '(5 6 7 8 9 10 11))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in l is between 10 and 12,
+;;; then it is certainly between 8 and 12.
+(prove-lemma un10-12-then-un8-12 (rewrite)
+   (implies (union-at-n l i '(10 11 12))
+            (union-at-n l i '(8 9 10 11 12)))
+   ((enable union-at-n at)))
+
+;;;j-eq-k-i-neq-k
+
+;;;If (exist-union l n '(8 9 10 11 12)) does not hold,
+;;;then the i's entry in l is not between 10 and 12.
+(prove-lemma i-not-l10-12 (rewrite)
+   (implies (and (member i (nset n))
+                 (not (exist-union l n '(8 9 10 11 12))))
+            (not (union-at-n l i '(10 11 12))))
+   ((enable exist-union union-at-n at nset)))
+
+
+;*lemmas for a3
+
+;;;j-eq-k-i-neq-k
+
+;;;If the k's entry in l is between 5 and 11,
+;;;then the k's entry in l is between 9 and 11.
+(prove-lemma un5-11-eq-un58-or-un8-11 (rewrite)
+   (implies (and (union-at-n l k '(5 6 7 8 9 10 11))
+                 (not (union-at-n l k '(5 6 7 8))))
+            (union-at-n l k '(9 10 11)))
+   ((enable union-at-n at)))
+
+;;;If the k's entry in g is 4,
+;;;then the k's entry in l is between 5 and 8.
+(prove-lemma a3-if4 (rewrite)
+   (implies (and (member k (nset n))
+                 (lg n l g)
+                 (at g k 4))
+            (not (union-at-n l k '(5 6 7 8))))
+   ((enable nset union-at-n at lg lg-at-n lg-3-at-n)))
+
+;;;If the k's entry in l is between 5 and 11,
+;;;and the k's entry in l is between 5 and 12,
+;;;then the k's entry in l is 9 and 11.
+(prove-lemma k-in-l5-11-g4-then-l9-11 (rewrite)
+   (implies (and (member k (nset n))
+                 (lg n l g)
+                 (union-at-n l k '(5 6 7 8 9 10 11))
+                 (at g k 4))
+            (union-at-n l k '(9 10 11)))
+   ((use (a3-if4))))  ; dropped second use hint -- rsb
+
+;;;If the i's entry in l is 12, 
+;;;then the i's entry in l is between 8 and 12.
+(prove-lemma l12-then-un8-12 (rewrite)
+   (implies (at l i 12)
+            (union-at-n l i '(8 9 10 11 12)))
+   ((enable at union-at-n)))
+
+;;;If (exist-union l n '(8 9 10 11 12)) does not hold,
+;;;then the i's entry in l is 12.
+(prove-lemma i-not-in-l12 (rewrite)
+   (implies (and (member i (nset n))
+                 (not (exist-union l n '(8 9 10 11 12))))
+             (not (at l i 12)))
+   ((enable exist-union nset at union-at-n)))
+
+;;;j-neq-k-i-eq-k
+
+;;;If the k's entry in l is 11,
+;;; then the k's entry in l is between 10 and 12.
+(prove-lemma l11-then-un10-12 (rewrite)
+   (implies (at l k 11)
+            (union-at-n l k '(10 11 12)))
+   ((enable union-at-n at)))
+
+;;;If the j's entry in g is either 2 or 3,
+;;;then the j's entry in l is between 5 and 8 by lg.
+(prove-lemma if3 (rewrite)
+   (implies (and (member j (nset n))
+                 (lg n l g)
+                 (not (union-at-n g j '(2 3))))
+            (not (union-at-n l j '(5 6 7 8))))
+   ((enable union-at-n at nset lg lg-at-n lg-2-at-n)))
+
+
+;;;If the j's entry in l is between 5 and 12 and
+;;;the j's entry in l is between 5 and 8, then
+;;;the j's entry in l is 9 and 12.
+(prove-lemma l5-12-eq-l5-8-or-l9-12 (rewrite)
+   (implies (and (union-at-n l j '(5 6 7 8 9 10 11 12))
+                 (not (union-at-n l j '(5 6 7 8))))
+            (union-at-n l j '(9 10 11 12)))
+   ((enable union-at-n at)))
+
+;;;i-j-eq-k
+
+;;;If the k's entry in lp is 12,
+;;;then it is certainly between 5 and 12.
+(prove-lemma l12-then-un9-12 (rewrite)
+   (implies (at lp k 12)
+            (union-at-n lp k '(9 10 11 12)))
+   ((enable union-at-n at)))
+
+;*lemmas for b1a
+
+;;;If the u's entry in g is 4,
+;;;then the u's entry in l is between 8 and 12 by lg.
+(prove-lemma b1a-if4 (rewrite)
+   (implies (and (member u (nset n))
+                 (lg n l g)
+                 (at g u 4))
+            (union-at-n l u '(8 9 10 11 12)))
+   ((enable nset union-at-n at lg lg-at-n 
+            lg-3-at-n)))
+
+;*lemmas for b1b
+
+;;;If the k's entry in lp is between 9 and 12,
+;;;then the k's entry in gp is iether 3 or 4 by lg.
+(prove-lemma lp9-12-then-k-in-g34 (rewrite)
+   (implies (and (member k (nset n))
+                 (union-at-n lp k '(9 10 11 12))
+                 (lg n lp gp))
+            (union-at-n gp k '(3 4)))
+   ((enable nset at union-at-n lg lg-at-n 
+            lg-3-at-n)))
+
+;;;If the k's entry in lp is between 8 and 12, and
+;;;it is not 8, then it is certainly between 9 and 12.
+(prove-lemma un8-12-then-l8-or-l9-12 (rewrite)
+   (implies (and (union-at-n lp k '(8 9 10 11 12))
+                 (not (at lp k 8)))
+            (union-at-n lp k '(9 10 11 12)))
+   ((enable at union-at-n)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;; defn.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;Well-formed-state.
+(defn ws (n l g)                                                  
+      (and (numberp n)
+           (listp l)
+           (listp g)
+           (equal (length l) n)
+           (equal (length g) n)
+           (all-union l n 
+                      '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+           (all-union g n '(0 1 2 3 4))))
+(disable ws)
+
+;;;Transitions.
+
+(defn rhoi0 (n i l g lp gp)                
+      (and (at l i 0)
+           (equal gp g) (equal lp (move l i 1))))
+
+(defn rhoi1a (n i l g lp gp)
+      (and (at l i 1)
+           (equal gp g)
+           (equal lp (move l i 2))))
+
+(defn rhoi1b (n i l g lp gp)
+      (and (at l i 1)
+           (equal g gp)
+           (equal lp l)))
+
+(defn rhoi2 (n i l g lp gp)
+      (and (at l i 2)
+           (equal lp (move l i  3))
+           (equal gp (move g i 1))))
+
+(defn rhoi3a (n i l g lp gp)
+       (and (at l i 3)
+            (equal gp g)
+            (equal lp (move l i 4))
+            (not (exist-union g n '(3 4)))))
+
+(defn rhoi3b (n i l g lp gp)
+       (and (at l i 3)
+            (equal gp g)
+            (equal lp l)
+            (exist-union g n '(3 4))))
+
+(defn rhoi4 (n i l g lp gp)
+      (and (at l i 4)
+           (equal gp (move g i 3))
+           (equal lp (move l i 5))))
+
+(defn rhoi5a (n i l g lp gp)
+      (and (at l i 5)
+           (equal gp g)  
+           (exist-union g n '(1))
+           (equal lp (move l i 6))))
+
+(defn rhoi5b (n i l g lp gp)
+      (and (at l i 5)
+           (equal gp g)  
+           (not (exist-union g n '(1)))
+           (equal lp (move l i 8))))
+
+(defn rhoi6 (n i l g lp gp)
+      (and (at l i 6)
+           (equal gp (move g i 2))
+           (equal lp (move l i  7))))
+
+(defn rhoi7a (n i l g lp gp) 
+      (and (at l i 7)
+           (exist-union g n '(4))
+           (equal lp (move l i 8))
+           (equal gp g)))
+
+(defn rhoi7b (n i l g lp gp) 
+      (and (at l i 7)
+           (not (exist-union g n '(4)))
+           (equal lp l)
+           (equal gp g)))
+
+(defn rhoi8 (n i l g lp gp)
+      (and (at l i 8)
+           (equal gp (move g i 4))
+           (equal lp (move l i 9))))
+
+(defn phi9 (i n g)
+      (if (or (nlistp g)
+              (not (numberp i)) 
+              (not (numberp n))) F
+          (if (equal n 0) T
+              (or (and (not (lessp n i)) 
+                       (phi9 i (sub1 n) g))
+                  (and (union-at-n g n '(0 1))
+                       (phi9 i (sub1 n) g))))))
+
+(disable phi9)
+
+(defn rhoi9a (n i l g lp gp)
+      (and (at l i 9)
+           (equal gp g)
+           (phi9 i n g)
+           (equal lp (move l i 10))))
+
+(defn rhoi9b (n i l g lp gp)
+      (and (at l i 9)
+           (equal gp g)
+           (not (phi9 i n g))
+           (equal lp l)))
+
+(defn rhoi10 (n i l g lp gp)
+      (and (at l i 10)
+           (equal lp (move l i 11))
+           (equal gp g)))
+
+(defn phi11 (i n g)
+      (if (or (nlistp g)
+              (not (numberp i)) 
+              (not (numberp n))) F
+          (if (equal n 0) T
+              (or (and (not (lessp i n)) 
+                       (phi11 i (sub1 n) g))
+                  (and (not (union-at-n g n '(2 3)))
+                       (phi11 i (sub1 n) g))))))
+
+(disable phi11)
+
+(defn rhoi11a (n i l g lp gp)
+      (and (at l i 11)
+           (equal gp g)
+           (phi11 i n g)
+           (equal lp (move l i 12))))
+
+(defn rhoi11b (n i l g lp gp)
+      (and (at l i 11)
+           (equal gp g)
+           (not (phi11 i n g))
+           (equal lp l)))
+
+(defn rhoi12 (n i l g lp gp)    
+      (and (at l i 12)
+           (equal gp (move g i 0))
+           (equal lp (move l i 0))))
+
+;;;The transition operates on i'th.
+(defn rhoi (n i l g lp gp)                                       
+   (or (rhoi0 n i l g lp gp)
+       (rhoi1a n i l g lp gp)
+       (rhoi1b n i l g lp gp)
+       (rhoi2 n i l g lp gp)
+       (rhoi3a n i l g lp gp)
+       (rhoi3b n i l g lp gp)
+       (rhoi4 n i l g lp gp)
+       (rhoi5a n i l g lp gp)
+       (rhoi5b n i l g lp gp)
+       (rhoi6 n i l g lp gp)
+       (rhoi7a n i l g lp gp)
+       (rhoi7b n i l g lp gp)
+       (rhoi8 n i l g lp gp)
+       (rhoi9a n i l g lp gp)
+       (rhoi9b n i l g lp gp)
+       (rhoi10 n i l g lp gp)
+       (rhoi11a n i l g lp gp)
+       (rhoi11b n i l g lp gp)
+       (rhoi12 n i l g lp gp)))
+(disable rhoi)
+
+;;;  Propositions
+;;;a0
+
+(defn a0 (n l k)                                            
+   (implies (and (member k (nset n))
+                 (exist-union l n '(8 9 10 11 12)))
+            (not (at l k 4))))
+(disable a0)
+
+;;;a1
+
+(defn a1 (n l g)                                          
+   (implies (exist-union l n '(8 9 10 11 12))
+            (exist-intersect-8-12-3-4 n l g)))
+(disable a1)
+
+;;;; a2
+
+(defn a2-at-n1-n2 (n1 n2 l)
+     (if (union-at-n l n1 '(10 11 12))
+         (not (union-at-n l n2 
+                          '(5 6 7 8 9 10 11 12))) T))
+
+(disable a2-at-n1-n2)
+
+(defn a2-at-n2 (n1 n2 l)
+    (if (zerop n2) T
+        (if (not (lessp n2 n1))
+            (a2-at-n2 n1 (sub1 n2) l)
+            (and (a2-at-n1-n2 n1 n2 l)
+                 (a2-at-n2 n1 (sub1 n2) l)))))
+
+(disable a2-at-n2)
+
+(defn a2 (n1 n2 l)
+    (if (zerop n1) T
+        (and (a2-at-n2 n1 n2 l)
+             (a2 (sub1 n1) n2 l))))
+(disable a2)
+
+;;;a3
+
+(defn a3-at-n1-n2 (n1 n2 l g)
+    (if (and (at l n1 12)
+             (union-at-n l n2 
+                         '(5 6 7 8 9 10 11 12)))
+        (at g n2 4) T))
+
+(disable a3-at-n1-n2)
+
+(defn a3-at-n2 (n1 n2 l g)
+     (if (zerop n2) T
+         (and (a3-at-n1-n2 n1 n2 l g)
+              (a3-at-n2 n1 (sub1 n2) l g))))
+
+(disable a3-at-n2)
+
+(defn a3 (n1 n2 l g)
+     (if (zerop n1) T
+         (and (a3-at-n2 n1 n2 l g)
+              (a3 (sub1 n1) n2 l g))))
+(disable a3)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;; basic.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;ws implies that n is a number.
+(prove-lemma ws-num-n (rewrite)
+   (implies (ws n l g)
+            (numberp n))
+   ((enable ws)))
+
+;;;ws implies that l is a list.
+(prove-lemma ws-list-l (rewrite)
+   (implies (ws n l g)
+            (listp l))
+   ((enable ws)))
+
+;;;ws implies that g is a list.
+(prove-lemma ws-list-g(rewrite)
+   (implies (ws n l g)
+            (listp g))
+   ((enable ws)))
+
+;;;ws implies that length of l is n.
+(prove-lemma ws-ln-l(rewrite)
+   (implies (ws n l g)
+            (equal (length l) n))
+   ((enable ws)))
+
+;;;ws implies that length of g is n.
+(prove-lemma ws-ln-g(rewrite)
+   (implies (ws n l g)
+            (equal (length g) n))
+   ((enable ws)))
+
+;;;ws and rho imply that lp is a list.
+(prove-lemma ws-ln-lp (rewrite)
+   (implies (and (ws n l g)
+                 (member  k (nset n))
+                 (rhoi n k l g lp gp))
+            (listp lp))
+   ((enable ws rhoi)))
+
+;;;ws and rho imply that gp is a list.
+(prove-lemma ws-ln-gp (rewrite)
+   (implies (and (ws n l g)
+                 (member  k (nset n))
+                 (rhoi n k l g lp gp))
+            (listp gp))
+   ((enable ws rhoi)))
+
+;;;ws implies that n is nonzero.
+(prove-lemma ws-n-not-0 (rewrite)
+   (implies (ws n l g)
+            (not (zerop n)))
+   ((enable ws)))
+
+(prove-lemma n-not-0 (rewrite)
+   (implies (ws n l g)
+            (member n (nset n)))
+   ((use (n-in-nset))))
+
+;*the rho! lemmas
+
+;;;Auxiliary lemma.
+(prove-lemma lm-l-rholemma (rewrite)
+   (implies (and (listp l)
+                 (member j (nset (length l)))
+                 (member k (nset (length l)))
+                 (rhoi n k l g lp gp)
+                 (not (equal k j)))
+            (equal (nth l j) (nth lp j)))
+   ((enable rhoi)))
+
+(disable lm-l-rholemma)
+
+;;;Rholemma for list l.
+(prove-lemma l-rholemma (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal k j)))
+            (equal (nth l j) (nth lp j)))
+   ((enable lm-l-rholemma)
+    (use (lm-l-rholemma))))
+
+;;;Auxiliary lemma.
+(prove-lemma lm-g-rholemma (rewrite)
+   (implies (and (listp g)
+                 (member j (nset (length g)))
+                 (member k (nset (length g)))
+                 (rhoi n k l g lp gp)
+                 (not (equal k j)))
+            (equal (nth g j) (nth gp j)))
+   ((enable rhoi)))
+ 
+(disable lm-g-rholemma)
+
+;;;Rholemma for list g.
+(prove-lemma g-rholemma (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal k j)))
+            (equal (nth g j) (nth gp j)))
+   ((enable lm-g-rholemma)
+    (use (lm-g-rholemma))))
+
+;;; lp-gp-same-l-g
+
+;;;Another version of Rholemma for l.
+;;;It applies to (union-at-n l j m) in stead of 
+;;;(nth l j).
+(prove-lemma lp-same-l (rewrite)
+   (implies  (and (ws n l g)                  
+                  (listp m)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (union-at-n l j m))
+             (union-at-n lp j m))
+   ((enable union-at-n at)
+    (use (l-rholemma))))
+
+;;;Contrast to the one above, 
+;;;the order of l and lp is reversed.
+(prove-lemma l-same-lp (rewrite)
+   (implies  (and (ws n l g)                  
+                  (listp m)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (union-at-n lp j m))
+             (union-at-n l j m))
+   ((enable union-at-n at)
+    (use (l-rholemma))))
+
+(prove-lemma lp-same-l-not (rewrite)
+   (implies  (and (ws n l g)                  
+                  (listp m)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (not (union-at-n l j m)))
+             (not (union-at-n lp j m)))
+   ((use (l-same-lp))))
+
+;;;Another version of Rholemma for g.
+(prove-lemma gp-same-g (rewrite)
+   (implies  (and (ws n l g)                  
+                  (listp m)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (union-at-n g j m))
+             (union-at-n gp j m))
+   ((enable union-at-n at)
+    (use (g-rholemma))))
+
+;;;Contrast to the one above, 
+;;;the order of g and gp is reversed.
+(prove-lemma g-same-gp (rewrite)
+   (implies  (and (ws n l g)                  
+                  (listp m)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (union-at-n gp j m))
+             (union-at-n g j m))
+   ((enable union-at-n at)
+    (use (g-rholemma))))
+
+
+;;;It applies to (at l j m) in stead of 
+;;;(nth l j).
+(prove-lemma l-same-lp-at (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (numberp m)
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (at lp j m))
+            (at l j m))
+   ((enable at)
+    (use (l-rholemma))))
+
+(prove-lemma gp-same-g-at (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (numberp m)
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (at g j m))
+            (at gp j m))
+   ((enable at)
+    (use (g-rholemma))))
+
+(prove-lemma l-same-lp-at-not  (rewrite)
+   (implies  (and (ws n l g)                  
+                  (numberp m)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (not (at l j m)))
+             (not (at lp j m)))
+   ((use (l-same-lp-at))))
+
+;*basic properties of a2
+
+;;;Auxiliary lemma.
+(prove-lemma lm-a2-at-n2-a2-at-n1-n2 (rewrite)
+   (implies (and (numberp n)
+                 (numberp k)
+                 (member j (nset n))
+                 (lessp j k)
+                 (a2-at-n2 k n l))
+            (a2-at-n1-n2 k j l))
+   ((enable nset a2-at-n2 a2-at-n1-n2)))
+
+(disable lm-a2-at-n2-a2-at-n1-n2)
+
+(prove-lemma a2-at-n2-a2-at-n1-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (member j (nset n))
+                 (lessp j k)
+                 (a2-at-n2 k n l))
+            (a2-at-n1-n2 k j l))
+   ((enable lm-a2-at-n2-a2-at-n1-n2)
+    (use (lm-a2-at-n2-a2-at-n1-n2))))
+
+(prove-lemma lm-a2-a2-at-n2 (rewrite)
+   (implies (and (numberp n)
+                 (numberp i)
+                 (member k (nset n))
+                 (a2 n i l))
+            (a2-at-n2 k i l))
+   ((enable nset a2)))
+
+(prove-lemma a2-a2-at-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))
+                 (a2 n i l))
+            (a2-at-n2 k i l))
+   ((use (lm-a2-a2-at-n2))))
+
+;*basic properties of a3
+
+(prove-lemma lm-a3-at-n2-a3-at-n1-n2 (rewrite)
+   (implies (and (numberp n)
+                 (numberp u)
+                 (member j (nset n))
+                 (a3-at-n2 u n l g))
+            (a3-at-n1-n2 u j l g))
+   ((enable nset a3-at-n2 a3-at-n1-n2)))
+
+(disable lm-a3-at-n2-a3-at-n1-n2)
+
+(prove-lemma a3-at-n2-a3-at-n1-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member u (nset n))
+                 (member j (nset n))
+                 (a3-at-n2 u n l g))
+            (a3-at-n1-n2 u j l g))
+   ((enable lm-a3-at-n2-a3-at-n1-n2)
+    (use (lm-a3-at-n2-a3-at-n1-n2))))
+
+(prove-lemma lm-a3-a3-at-n2 (rewrite)
+   (implies (and (numberp n)
+                 (numberp i)
+                 (member u (nset n))
+                 (a3 n i l g))
+            (a3-at-n2 u i l g))
+   ((enable nset a3)))
+
+(disable lm-a3-a3-at-n2)
+
+(prove-lemma a3-a3-at-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member u (nset n))
+                 (a3 n i l g))
+            (a3-at-n2 u i l g))
+   ((enable lm-a3-a3-at-n2)
+    (use (lm-a3-a3-at-n2))))
+
+;;;;;;;Instances used in the proofs of 
+;;;;;;;a1 a2 and a3.
+
+;;;(a2 n n l) and (a3 n n l g) are involved 
+;;;in double bounded quantifiers 
+;;;\forall i \leq n \forall j \leq n, 
+;;;with their quantifier-free formulas 
+;;;(a3-at-n1-n2 i j l g) and (a2-at-n1-n2 i j l) 
+;;;respectively. What follows are all instances of 
+;;;the following type: If (a3 n n l g) holds, then 
+;;;in particular, so its instance 
+;;;(a3-at-n1-n2 i j l g) does.
+
+;;;The instances are i and j.
+(prove-lemma a3-i-j-a3-at-n1-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member j (nset n))
+                 (a3 n n l g))
+            (a3-at-n1-n2 i j l g))
+   ((use (a3-a3-at-n2 (u i) (i n )))))
+
+;;;The instances are k and 
+;;;(exist-union lp n '(8 9 10 11 12)).
+(prove-lemma a3-ex-a3-at-n1-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (a3 n n l g)
+                 (exist-union lp n '(8 9 10 11 12)))
+            (a3-at-n1-n2 k 
+             (exist-union lp n '(8 9 10 11 12)) l g))
+   ((use (a3-a3-at-n2 (u k) (i n)))))
+
+(prove-lemma a2-n-a2-at-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (a2 n n l))
+            (a2-at-n2 k n l))
+   ((use (a2-a2-at-n2 (i n)))))
+
+;;;The instances are i and j.
+(prove-lemma a2-i-j-a2-at-n1-n2 (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member j (nset n))                  
+                 (a2 n n l)
+                 (lessp j i))
+            (a2-at-n1-n2 i j l))
+   ((use (a2-a2-at-n2 (i n)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;; ws.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(prove-lemma j-eq-k-move-member-g (rewrite)
+   (implies (and (listp g)
+                 (listp m)
+                 (member i m)
+                 (member k (nset (length g))))
+            (member (nth (move g k i) k) m)))
+
+(prove-lemma j-neq-k-move-member-g (rewrite)
+   (implies (and (listp g)
+                 (listp m)
+                 (member k (nset (length g)))
+                 (not (equal j k))
+                 (member i m)
+                 (member (nth g j) m))
+            (member (nth (move g k i) j) m)))
+
+(prove-lemma move-member-g (rewrite)
+   (implies (and (listp g)
+                 (listp m)
+                 (member i m)
+                 (member k (nset (length g)))
+                 (member (nth g j) m))
+            (member (nth (move g k i) j) m))
+   ((use (j-neq-k-move-member-g) (j-eq-k-move-member-g))))
+
+(prove-lemma move-member-l (rewrite)
+   (implies (and (listp l)
+                 (listp m)
+                 (numberp j)
+                 (member i m)
+                 (member k (nset (length l)))
+                 (member (nth l j) m))
+            (member (nth (move l k i) j) m)))
+
+(prove-lemma ws-union-g (rewrite)
+   (implies (ws n l g)
+            (all-union g n '(0 1 2 3 4)))
+   ((enable ws)))
+
+(prove-lemma ws-union-l (rewrite)
+   (implies (ws n l g)
+            (all-union l n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable ws)))
+
+(prove-lemma rho0-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi0 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho1a-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi1a n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho1b-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi1b n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma lm-rho2-preserves-union-g (rewrite)
+   (implies (and (listp g)
+                 (equal (length g) n)
+                 (member k (nset n))
+                 (all-union g j '(0 1 2 3 4))
+                 (rhoi2 n k l g lp gp))
+            (all-union gp j '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho2-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi2 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))
+   ((disable rhoi2)
+    (use (lm-rho2-preserves-union-g (j n)))))
+
+(prove-lemma rho3a-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi3a n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho3b-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi3b n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma lm-rho4-preserves-union-g (rewrite)
+   (implies (and (listp g)
+                 (equal (length g) n)
+                 (member k (nset n))
+                 (all-union g j '(0 1 2 3 4))
+                 (rhoi4 n k l g lp gp))
+            (all-union gp j '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho4-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi4 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))
+   ((disable rhoi4)
+    (use (lm-rho4-preserves-union-g (j n)))))
+
+(prove-lemma rho5a-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi5a n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho5b-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi5b n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma lm-rho6-preserves-union-g (rewrite)
+   (implies (and (listp g)
+                 (equal (length g) n)
+                 (member k (nset n))
+                 (all-union g j '(0 1 2 3 4))
+                 (rhoi6 n k l g lp gp))
+            (all-union gp j '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho6-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi6 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))
+   ((disable rhoi6)
+    (use (lm-rho6-preserves-union-g (j n)))))
+
+(prove-lemma rho7a-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi7a n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho7b-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi7b n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma lm-rho8-preserves-union-g (rewrite)
+   (implies (and (listp g)
+                 (equal (length g) n)
+                 (member k (nset n))
+                 (all-union g j '(0 1 2 3 4))
+                 (rhoi8 n k l g lp gp))
+            (all-union gp j '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho8-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi8 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))
+   ((disable rhoi8)
+    (use (lm-rho8-preserves-union-g (j n)))))
+
+(prove-lemma rho9a-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi9a n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho9b-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi9b n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma lm-rho10-preserves-union-g (rewrite)
+   (implies (and (listp g)
+                 (equal (length g) n)
+                 (member k (nset n))
+                 (all-union g j '(0 1 2 3 4))
+                 (rhoi10 n k l g lp gp))
+            (all-union gp j '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho10-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi10 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho11a-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi11a n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma rho11b-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi11b n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4))))
+
+(prove-lemma lm-rho12-preserves-union-g (rewrite)
+   (implies (and (listp g)
+                 (equal (length g) n)
+                 (member k (nset n))
+                 (all-union g j '(0 1 2 3 4))
+                 (rhoi12 n k l g lp gp))
+            (all-union gp j '(0 1 2 3 4)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho12-preserves-union-g (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi12 n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))
+   ((disable rhoi12)
+    (use (lm-rho12-preserves-union-g (j n)))))
+
+(prove-lemma rho-preserves-union-g (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (all-union gp n '(0 1 2 3 4)))                  
+   ((disable rhoi0 rhoi1a rhoi1b rhoi2 rhoi3a 
+             rhoi3b rhoi4 rhoi5a rhoi5b rhoi6 
+             rhoi7a rhoi7b rhoi8 rhoi9a rhoi9b 
+             rhoi10 rhoi11a rhoi11b rhoi12)
+    (enable rhoi)))
+
+(prove-lemma lm-rho0-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi0 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho0-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi0 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi0)
+    (use (lm-rho0-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho1a-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi1a n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho1a-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi1a n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi1a)
+    (use (lm-rho1a-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho1b-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi1b n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho1b-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi1b n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi1b)
+    (use (lm-rho1b-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho2-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi2 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho2-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi2 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi2)
+    (use (lm-rho2-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho3a-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi3a n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho3a-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi3a n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi3a)
+    (use (lm-rho3a-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho3b-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi3b n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho3b-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi3b n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi3b)
+    (use (lm-rho3b-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho4-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi4 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho4-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi4 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi4)
+    (use (lm-rho4-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho5a-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi5a n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho5a-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi5a n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi5a)
+    (use (lm-rho5a-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho5b-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi5b n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho5b-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi5b n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi5b)
+    (use (lm-rho5b-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho6-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi6 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho6-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi6 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi6)
+    (use (lm-rho6-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho7a-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi7a n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho7a-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi7a n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi7a)
+    (use (lm-rho7a-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho7b-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi7b n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho7b-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi7b n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi7b)
+    (use (lm-rho7b-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho8-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi8 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho8-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi8 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi8)
+    (use (lm-rho8-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho9a-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi9a n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho9a-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi9a n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi9a)
+    (use (lm-rho9a-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho9b-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi9b n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho9b-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi9b n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi9b)
+    (use (lm-rho9b-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho10-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi10 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho10-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi10 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi10)
+    (use (lm-rho10-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho11a-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi11a n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho11a-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi11a n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi11a)
+    (use (lm-rho11a-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho11b-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi11b n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho11b-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi11b n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi11b)
+    (use (lm-rho11b-preserves-union-l (j n)))))
+
+(prove-lemma lm-rho12-preserves-union-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (all-union l j '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                  (rhoi12 n k l g lp gp))
+            (all-union lp j '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((enable nset all-union union-at-n at)))
+
+(prove-lemma rho12-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi12 n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+   ((disable rhoi12)
+    (use (lm-rho12-preserves-union-l (j n)))))
+
+(prove-lemma rho-preserves-union-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12)))
+  ((disable rhoi0 rhoi1a rhoi1b rhoi2 rhoi3a 
+            rhoi3b rhoi4 rhoi5a rhoi5b rhoi6 
+            rhoi7a rhoi7b rhoi8 rhoi9a rhoi9b 
+            rhoi10 rhoi11a rhoi11b rhoi12)
+    (enable rhoi)))
+
+(prove-lemma lm-rho-preserves-ln-l (rewrite)
+   (implies (and  (listp l)
+                  (equal (length l) n)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (equal (length lp) n))
+   ((enable rhoi)))
+
+(prove-lemma rho-preserves-ln-l (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (equal (length lp) n))
+   ((use (lm-rho-preserves-ln-l))))
+
+(prove-lemma lm-rho-preserves-ln-g (rewrite)
+   (implies (and  (listp g)
+                  (equal (length g) n)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (equal (length gp) n))
+   ((enable rhoi)))
+
+(prove-lemma rho-preserves-ln-g (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (equal (length gp) n))
+   ((use (lm-rho-preserves-ln-g))))
+
+(prove-lemma lm-rho-preserves-ws (rewrite)
+   (implies (and (numberp n)
+                 (listp lp)
+                 (listp gp)
+                 (equal (length lp) n)
+                 (equal (length gp) n)
+                 (all-union lp n '(0 1 2 3 4 5 6 7 8 9 10 11 12))
+                 (all-union gp n '(0 1 2 3 4)))
+            (ws n lp gp))
+   ((enable ws)))
+
+(prove-lemma rho-preserves-ws (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp))
+            (ws n lp gp))
+   ((use (lm-rho-preserves-ws))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;; lg.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;rhoi0
+(prove-lemma n-neq-k-rhoi0 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 0)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 1) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi0)
+
+(prove-lemma n-eq-k-rhoi0 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 0)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 1) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi0)
+
+(prove-lemma lg-at-rhoi0 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 0)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 1) g))
+   ((enable n-neq-k-rhoi0 n-eq-k-rhoi0)
+    (use (n-neq-k-rhoi0))))
+
+(disable lg-at-rhoi0)
+
+(prove-lemma lg-rhoi0 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 0)
+                  (lg n l g))
+            (lg n (move l k 1) g))
+   ((enable lg-at-rhoi0 lg at)))
+
+(disable lg-rhoi0)
+
+(prove-lemma rhoi0-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi0 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi0)))
+
+;;;rhoi1a
+(prove-lemma n-neq-k-rhoi1a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 1)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 2) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi1a)
+
+(prove-lemma n-eq-k-rhoi1a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 1)
+                  (lg-at-n k l g))
+            (lg-at-n n (move l k 2) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi1a)
+
+(prove-lemma lg-at-rhoi1a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 1)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 2) g))
+   ((enable n-neq-k-rhoi1a n-eq-k-rhoi1a)
+    (use (n-neq-k-rhoi1a))))
+
+(disable lg-at-rhoi1a)
+
+(prove-lemma lg-rhoi1a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 1)
+                  (lg n l g))
+            (lg n (move l k 2) g))
+   ((enable lg-at-rhoi1a lg at)))
+
+(disable lg-rhoi1a)
+
+(prove-lemma rhoi1a-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi1a n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi1a)))
+
+;;;rhoi1b
+(prove-lemma rhoi1b-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi1b n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable rhoi1b)))
+
+;;;rhoi2
+(prove-lemma n-neq-k-rhoi2 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 2)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 3) (move g k 1)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi2)
+
+(prove-lemma n-eq-k-rhoi2 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 2)
+                  (lg-at-n k l g))
+            (lg-at-n n (move l k 3) (move g k 1)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi2)
+
+(prove-lemma lg-at-rhoi2 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 2)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 3) (move g k 1)))
+   ((enable n-neq-k-rhoi2 n-eq-k-rhoi2)
+    (use (n-neq-k-rhoi2))))
+
+(disable lg-at-rhoi2)
+
+(prove-lemma lg-rhoi2 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 2)
+                  (lg n l g))
+            (lg n (move l k 3) (move g k 1)))
+   ((enable lg-at-rhoi2 lg at)))
+
+(disable lg-rhoi2)
+
+(prove-lemma rhoi2-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi2 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi2)))
+
+;;;rhoi3a
+(prove-lemma n-neq-k-rhoi3a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                   (at l k 3)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 4) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi3a)
+
+(prove-lemma n-eq-k-rhoi3a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                   (at l k 3)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 4) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi3a)
+
+(prove-lemma lg-at-rhoi3a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                   (at l k 3)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 4) g))
+   ((enable n-neq-k-rhoi3a n-eq-k-rhoi3a)
+    (use (n-neq-k-rhoi3a))))
+
+(disable lg-at-rhoi3a)
+
+(prove-lemma lg-rhoi3a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                   (at l k 3)
+                  (lg n l g))
+            (lg n (move l k 4) g))
+   ((enable lg-at-rhoi3a lg at)))
+
+(disable lg-rhoi3a)
+
+(prove-lemma rhoi3a-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi3a n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi3a)))
+
+;;;rhoi3b
+(prove-lemma rhoi3b-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi3b n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable rhoi3b)))
+
+;;;rhoi4
+(prove-lemma n-neq-k-rhoi4 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 4)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 5) (move g k 3)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi4)
+
+(prove-lemma n-eq-k-rhoi4 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 4)
+                  (lg-at-n k l g))
+            (lg-at-n n (move l k 5) (move g k 3)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi4)
+
+(prove-lemma lg-at-rhoi4 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 4)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 5) (move g k 3)))
+   ((enable n-neq-k-rhoi4 n-eq-k-rhoi4)
+    (use (n-neq-k-rhoi4))))
+
+(disable lg-at-rhoi4)
+
+(prove-lemma lg-rhoi4 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 4)
+                  (lg n l g))
+            (lg n (move l k 5) (move g k 3)))
+   ((enable lg-at-rhoi4 lg at)))
+
+(disable lg-rhoi4)
+
+(prove-lemma rhoi4-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi4 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi4)))
+
+;;;rhoi5a
+(prove-lemma n-neq-k-rhoi5a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 5)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 6) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi5a)
+
+(prove-lemma n-eq-k-rhoi5a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 5)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 6) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi5a)
+
+(prove-lemma lg-at-rhoi5a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 5)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 6) g))
+   ((enable n-neq-k-rhoi5a n-eq-k-rhoi5a)
+    (use (n-neq-k-rhoi5a))))
+
+(disable lg-at-rhoi5a)
+
+(prove-lemma lg-rhoi5a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 5)
+                  (lg n l g))
+            (lg n (move l k 6) g))
+   ((enable lg-at-rhoi5a lg at)))
+
+(disable lg-rhoi5a)
+
+(prove-lemma rhoi5a-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi5a n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi5a)))
+
+;;;rhoi5b
+(prove-lemma n-neq-k-rhoi5b (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 5)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 8) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi5b)
+
+(prove-lemma n-eq-k-rhoi5b (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 5)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 8) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi5b)
+
+(prove-lemma lg-at-rhoi5b (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 5)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 8) g))
+   ((enable n-neq-k-rhoi5b n-eq-k-rhoi5b)
+    (use (n-neq-k-rhoi5b))))
+
+(disable lg-at-rhoi5b)
+
+(prove-lemma lg-rhoi5b (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 5)
+                  (lg n l g))
+            (lg n (move l k 8) g))
+   ((enable lg-at-rhoi5b lg at)))
+
+(disable lg-rhoi5b)
+
+(prove-lemma rhoi5b-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi5b n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi5b)))
+
+;;;rhoi6
+(prove-lemma n-neq-k-rhoi6 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 6)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 7) (move g k 2)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi6)
+
+(prove-lemma n-eq-k-rhoi6 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 6)
+                  (lg-at-n k l g))
+            (lg-at-n n (move l k 7) (move g k 2)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi6)
+
+(prove-lemma lg-at-rhoi6 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 6)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 7) (move g k 2)))
+   ((enable n-neq-k-rhoi6 n-eq-k-rhoi6)
+    (use (n-neq-k-rhoi6))))
+
+(disable lg-at-rhoi6)
+
+(prove-lemma lg-rhoi6 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 6)
+                  (lg n l g))
+            (lg n (move l k 7) (move g k 2)))
+   ((enable lg-at-rhoi6 lg at)))
+
+(disable lg-rhoi6)
+
+(prove-lemma rhoi6-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi6 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi6)))
+
+;;;rhoi7a
+(prove-lemma n-neq-k-rhoi7a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 7)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 8) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi7a)
+
+(prove-lemma n-eq-k-rhoi7a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 7)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 8) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi7a)
+
+(prove-lemma lg-at-rhoi7a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 7)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 8) g))
+   ((enable n-neq-k-rhoi7a n-eq-k-rhoi7a)
+    (use (n-neq-k-rhoi7a))))
+
+(disable lg-at-rhoi7a)
+
+(prove-lemma lg-rhoi7a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 7)
+                  (lg n l g))
+            (lg n (move l k 8) g))
+   ((enable lg-at-rhoi7a lg at)))
+
+(disable lg-rhoi7a)
+
+(prove-lemma rhoi7a-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi7a n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi7a)))
+
+;;;rhoi7b
+(prove-lemma rhoi7b-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi7b n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable rhoi7b)))
+
+;;;rhoi8
+(prove-lemma n-neq-k-rhoi8 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 8)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 9) (move g k 4)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi8)
+
+(prove-lemma n-eq-k-rhoi8 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 8)
+                  (lg-at-n k l g))
+            (lg-at-n n (move l k 9) (move g k 4)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi8)
+
+(prove-lemma lg-at-rhoi8 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 8)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 9) (move g k 4)))
+   ((enable n-neq-k-rhoi8 n-eq-k-rhoi8)
+    (use (n-neq-k-rhoi8))))
+
+(disable lg-at-rhoi8)
+
+(prove-lemma lg-rhoi8 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 8)
+                  (lg n l g))
+            (lg n (move l k 9) (move g k 4)))
+   ((enable lg-at-rhoi8 lg at)))
+
+(disable lg-rhoi8)
+
+(prove-lemma rhoi8-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi8 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi8)))
+
+;;;rhoi9a
+(prove-lemma n-neq-k-rhoi9a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 9)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 10) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi9a)
+
+(prove-lemma n-eq-k-rhoi9a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 9)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 10) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi9a)
+
+(prove-lemma lg-at-rhoi9a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 9)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 10) g))
+   ((enable n-neq-k-rhoi9a n-eq-k-rhoi9a)
+    (use (n-neq-k-rhoi9a))))
+
+(disable lg-at-rhoi9a)
+
+(prove-lemma lg-rhoi9a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 9)
+                  (lg n l g))
+            (lg n (move l k 10) g))
+   ((enable lg-at-rhoi9a lg at)))
+
+(disable lg-rhoi9a)
+
+(prove-lemma rhoi9a-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi9a n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi9a)))
+
+;;;rhoi9b
+(prove-lemma rhoi9b-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi9b n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable rhoi9b)))
+
+;;;rhoi10
+(prove-lemma n-neq-k-rhoi10 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 10)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 11) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi10)
+
+(prove-lemma n-eq-k-rhoi10 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 10)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 11) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi10)
+
+(prove-lemma lg-at-rhoi10 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 10)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 11) g))
+   ((enable n-neq-k-rhoi10 n-eq-k-rhoi10)
+    (use (n-neq-k-rhoi10))))
+
+(disable lg-at-rhoi10)
+
+(prove-lemma lg-rhoi10 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 10)
+                  (lg n l g))
+            (lg n (move l k 11) g))
+   ((enable lg-at-rhoi10 lg at)))
+
+(disable lg-rhoi10)
+
+(prove-lemma rhoi10-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi10 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi10)))
+
+;;;rhoi11a
+(prove-lemma n-neq-k-rhoi11a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 11)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 12) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-neq-k-rhoi11a)
+
+(prove-lemma n-eq-k-rhoi11a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 11)
+                  (lg-at-n k l g))
+            (lg-at-n k (move l k 12) g))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi11a)
+
+(prove-lemma lg-at-rhoi11a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 11)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 12) g))
+   ((enable n-neq-k-rhoi11a n-eq-k-rhoi11a)
+    (use (n-neq-k-rhoi11a))))
+
+(disable lg-at-rhoi11a)
+
+(prove-lemma lg-rhoi11a (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 11)
+                  (lg n l g))
+            (lg n (move l k 12) g))
+   ((enable lg-at-rhoi11a lg at)))
+
+(disable lg-rhoi11a)
+
+(prove-lemma rhoi11a-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi11a n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi11a)))
+
+;;;rhoi11b
+(prove-lemma rhoi11b-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi11b n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable rhoi11b)))
+
+;;;rhoi12
+(prove-lemma n-neq-k-rhoi12 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (not (equal k n))
+                  (at l k 12)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 0) (move g k 0)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+ 
+(disable n-neq-k-rhoi12)
+
+(prove-lemma n-eq-k-rhoi12 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (at l k 12)
+                  (lg-at-n k l g))
+            (lg-at-n n (move l k 0) (move g k 0)))
+   ((enable at lg-at-n lg-1-at-n lg-2-at-n 
+            lg-3-at-n)))
+
+(disable n-eq-k-rhoi12)
+
+(prove-lemma lg-at-rhoi12 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (numberp n)
+                  (member k (nset (length l)))
+                  (at l k 12)
+                  (lg-at-n n l g))
+            (lg-at-n n (move l k 0) (move g k 0)))
+   ((enable n-neq-k-rhoi12 n-eq-k-rhoi12)
+    (use (n-neq-k-rhoi12))))
+
+(disable lg-at-rhoi12)
+
+(prove-lemma lg-rhoi12 (rewrite)
+   (implies (and  (listp l)
+                  (listp g)
+                  (member k (nset (length l)))
+                  (numberp n)
+                  (at l k 12)
+                  (lg n l g))
+            (lg n (move l k 0) (move g k 0)))
+   ((enable lg-at-rhoi12 lg at)))
+
+(disable lg-rhoi12)
+
+(prove-lemma rhoi12-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi12 n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((enable lg-rhoi12)))
+
+(prove-lemma rho-preserves-lg (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (lg n l g))
+            (lg n lp gp))
+   ((disable rhoi0 rhoi1a rhoi1b rhoi2 rhoi3a 
+             rhoi3b rhoi4 rhoi5a rhoi5b rhoi6 
+             rhoi7a rhoi7b rhoi8 rhoi9a rhoi9b 
+             rhoi10 rhoi11a rhoi11b rhoi12)
+    (enable rhoi)))
+
+(disable rhoi0-preserves-lg)
+(disable rhoi1a-preserves-lg)
+(disable rhoi1b-preserves-lg)
+(disable rhoi2-preserves-lg)
+(disable rhoi3a-preserves-lg)
+(disable rhoi3b-preserves-lg)
+(disable rhoi4-preserves-lg)
+(disable rhoi5a-preserves-lg)
+(disable rhoi5b-preserves-lg)
+(disable rhoi6-preserves-lg)
+(disable rhoi7a-preserves-lg)
+(disable rhoi7b-preserves-lg)
+(disable rhoi8-preserves-lg)
+(disable rhoi9a-preserves-lg)
+(disable rhoi9b-preserves-lg)
+(disable rhoi10-preserves-lg)
+(disable rhoi11a-preserves-lg)
+(disable rhoi11b-preserves-lg)
+(disable rhoi12-preserves-lg)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;; a0.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;(exist-union lp n '(8 9 10 11 12))  and 
+;;;(not (exist-union l n '(8 9 10 11 12))) 
+;;;implies that k is the witness of 
+;;;(exist-union lp n '(8 9 10 11 12)). This 
+;;;proposition would have been more natural 
+;;;if we had been able to prove:
+;;;(prove-lemma exist-l8-12 (rewrite)
+;;;   (implies (and (ws n l g)
+;;;                 (member k (nset n))
+;;;                 (rhoi n k l g lp gp)
+;;;                 (exist-union lp n '(8 9 10 11 12))
+;;;                 (not (exist-union l n '(8 9 10 11 12))))
+;;;            (equal k (exist-union lp n '(8 9 10 11 12))))).
+;;;However Bmp refused to rewrite equal clause. 
+
+(prove-lemma exist-l8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (equal k (exist-union 
+                                lp n '(8 9 10 11 12)))))
+            (exist-union l n '(8 9 10 11 12)))
+   ((use (j-ex-l8-12 (j (exist-union lp n '(8 9 10 11 12)))))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) and 
+;;;(not (exist-union l n '(8 9 10 11 12))) hold,
+;;;then the k's entry of lp is between 8..12.
+(prove-lemma k-in-lp8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (exist-union l n '(8 9 10 11 12))))
+            (union-at-n lp k '(8 9 10 11 12)))
+   ((disable member-ex-union)
+    (use (exist-l8-12) (ex-lp8-12-in-lp8-12))))
+
+;;;If k's entry in lp is between 8..12 and 
+;;;k's entry of l is not between 8..12,
+;;;then k's entry of l is either 5 or 7.
+(prove-lemma k-not-in-l8-12-then-l57 (rewrite)   
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(8 9 10 11 12))
+                 (not (union-at-n l k '(8 9 10 11 12)))
+                 (not (at l k 7)))
+            (at l k 5))
+   ((enable rhoi union-at-n at)))
+
+;;;If k's entry in lp is between 8..12 and
+;;;(not (exist-union l n '(8 9 10 11 12))) holds,
+;;;then k's entry of l is either 5 or 7.
+(prove-lemma k-in-l57 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(8 9 10 11 12))
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (not (at l k 7)))
+            (at l k 5))
+   ((use (k-not-in-l8-12-then-l57))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) and 
+;;;(not (exist-union l n '(8 9 10 11 12))) hold,
+;;;then the k's entry of l is between either 5 or 7.
+(prove-lemma ex-k-in-l57 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (not (at l k 7)))
+            (at l k 5))
+   ((use (k-in-l57) (k-in-lp8-12))))
+
+;;;Auxiliary lemma for ex-cond-rhoi5.
+(prove-lemma cond-rhoi5 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(8 9 10 11 12)) 
+                 (at l k 5))
+            (not (exist-union g n '(1))))
+   ((enable rhoi union-at-n at)))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) and 
+;;;(not (exist-union l n '(8 9 10 11 12))) and
+;;;the k's entry in l is 5 then 
+;;;(not (exist-union g n '(1))) holds.
+(prove-lemma ex-cond-rhoi5 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (at l k 5))
+            (not (exist-union g n '(1))))
+   ((use (cond-rhoi5) (k-in-lp8-12))))
+
+;;;Auxiliary lemma for ex-cond-rhoi7.
+(prove-lemma cond-rhoi7 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(8 9 10 11 12))
+                 (at l k 7))
+            (exist-union g n '(4)))
+   ((enable rhoi union-at-n at)))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) and 
+;;;(not (exist-union l n '(8 9 10 11 12))) and
+;;;the k's entry in l is 7, then 
+;;;(exist-union g n '(4)) holds.
+(prove-lemma ex-cond-rhoi7 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (at l k 7))
+            (exist-union g n '(4)))
+   ((use (cond-rhoi7) (k-in-lp8-12))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) 
+;;;and (not (exist-union l n '(8 9 10 11 12))),
+;;;then (not (exist-union g n '(1))) holds.
+(prove-lemma l5-only-lp8 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (lg n l g)
+                 (exist-union lp n '(8 9 10 11 12)))
+            (not (exist-union g n '(1))))
+   ((disable member-ex-union)
+    (use (exist-l8-12) (ex-k-in-l57) (ex-cond-rhoi5)
+         (ex-cond-rhoi7) (ex-if4))))
+
+;;;If j is not equal to k and j's entry of l
+;;;is neither 3 or 4, then j's entry of lp
+;;;is not 4.
+(prove-lemma j-neq-k-j-not-in-lp4 (rewrite)
+   (implies  (and (ws n l g)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (not (union-at-n l j '(3 4))))
+             (not (at lp j 4)))
+   ((use (lp4-then-un34))))
+
+;;;If k's entry of l is neither 3 or 4, then
+;;;k's entry of lp is not 4.
+(prove-lemma j-eq-k-j-not-in-lp4 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (union-at-n l k '(3 4))))
+            (not (at lp k 4)))
+   ((enable union-at-n rhoi at)))
+
+;;;If j's entry of l is neither 3 or 4, then 
+;;;j's entry of lp is not 4.
+(prove-lemma lp4-empty (rewrite)
+   (implies  (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (union-at-n l j '(3 4))))
+            (not (at lp j 4)))
+   ((use (j-neq-k-j-not-in-lp4))))
+
+;;;If (not (exist-union l n '(8 9 10 11 12)))
+;;; and (exist-union lp n '(8 9 10 11 12)) hold,
+;;;then there is no entry 4 in l.
+(prove-lemma l8-l12-empty (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (lg n l g))
+            (a0 n lp j))
+   ((enable a0)
+    (use (lp4-empty) (l34-empty) (l5-only-lp8))))
+
+;;;If (exist-union g n '(3 4)) holds and 
+;;;the k's entry in l is not 4, then
+;;;the k's entry in lp is not 4 either. 
+;;;(Doorway is locked.)
+(prove-lemma dwy-lckd (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union g n '(3 4))
+                 (not (at l k 4)))
+            (not (at lp k 4)))
+   ((enable rhoi at)))
+
+;;;If (exist-union l n '(8 9 10 11 12))
+;;;holds and j is equal to k, then 
+;;;j's entry in lp is not 4.
+(prove-lemma j-eq-k-l8-l12-nonemp (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union l n '(8 9 10 11 12))
+                 (a0 n l k)
+                 (a1 n l g))
+             (a0 n lp k))
+   ((enable a0 a1)
+    (use (dwy-lckd) (int-8-12-3-4-then-un34))))
+
+;;;If (exist-union l n '(8 9 10 11 12))
+;;; holds and j is not equal to k, then 
+;;;the j's entry in lp is not 4.
+(prove-lemma j-neq-k-l8-l12-nonemp (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (a0 n l j)
+                 (exist-union l n '(8 9 10 11 12)))
+            (a0 n lp j))            
+   ((enable a0 at)))
+
+;;;If (exist-union l n '(8 9 10 11 12))
+;;;holds then there is no entry 4 in lp.
+;;;The order of the use hints is critical. 
+;;;Change the order and we fail.
+(prove-lemma l8-l12-nonemp (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union l n '(8 9 10 11 12))
+                 (a0 n l j)
+                 (a1 n l g))
+            (a0 n lp j))
+  ((use (j-neq-k-l8-l12-nonemp))))
+
+;;;If (exist-union lp n '(8 9 10 11 12))
+;;;holds, then there is no entry 4 in lp.
+(prove-lemma rho-preserves-a0 ()
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a0 n l j)
+                 (a1 n l g))
+            (a0 n lp j))
+   ((use (l8-l12-nonemp) (l8-l12-empty))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;; a1.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;* ep-l8-12
+
+;;;Auxiliary lemma for at-gp-rhoi5
+(prove-lemma gp-rhoi5 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(8 9 10 11 12))
+                 (at l k 5)
+                 (at g k 3))
+            (at gp k 3))
+   ((enable rhoi union-at-n at)))
+
+;;;If (not (exist-union l n '(8 9 10 11 12))), 
+;;;(exist-union lp n '(8 9 10 11 12)) and the k's
+;;;entry in l is 5 then the k's entry in gp is 3.
+(prove-lemma ex-gp-rhoi5 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (exist-union lp n '(8 9 10 11 12))
+                 (at l k 5))
+            (at gp k 3))
+   ((use (gp-rhoi5) (k-in-lp8-12) (lg-l5-g3))))
+
+;;;If (not (exist-union l n '(8 9 10 11 12)))
+;;;and (exist-union lp n '(8 9 10 11 12)) holds,
+;;;then the k's entry is either 3 or 4.
+(prove-lemma k-in-gp34 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (exist-union lp n '(8 9 10 11 12)))
+            (union-at-n gp k '(3 4)))
+   ((disable member-ex-union)
+    (use (gp3-then-un34) (exist-l8-12) (k-in-l57)
+         (ex-gp-rhoi5)(ex-cond-rhoi7) (ex-if4))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) and
+;;;(not (exist-union l n '(8 9 10 11 12))) holds,
+;;;then so does (exist-intersect-8-12-3-4 n lp gp).
+(prove-lemma lm-a1-ep-l8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (exist-union l n '(8 9 10 11 12)))
+                 (lg n l g))
+            (exist-intersect-8-12-3-4 n lp gp))
+   ((disable member-ex-union)
+    (use (exist-l8-12))))
+
+;;;If (not (exist-union l n '(8 9 10 11 12))) holds,
+;;;then so does a1.
+(prove-lemma a1-ep-l8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (not (exist-union l n '(8 9 10 11 12))))
+            (a1 n lp gp))
+   ((enable a1)))
+
+;* nep-l8-12
+
+;;;If (exist-intersect-8-12-3-4 n l g) holds and
+;;;k is not its witness then 
+;;;(exist-intersect-8-12-3-4 n lp gp) holds.
+(prove-lemma int-k-not-ex-int (rewrite)                         
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal k 
+                       (exist-intersect-8-12-3-4 n l g)))
+                 (exist-intersect-8-12-3-4 n l g))
+            (exist-intersect-8-12-3-4 n lp gp))
+   ((use (int-wtn (j (exist-intersect-8-12-3-4 n l g))))))
+
+;;;If (exist-union l n '(8 9 10 11 12)) holds and 
+;;;k's enrty is not between 8 and 12 then
+;;;(exist-intersect-8-12-3-4 n lp gp) holds.
+;;; j \neq k
+(prove-lemma a1-k-not-in-l8-12-nep-l8-12 (rewrite)   
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union l n '(8 9 10 11 12))
+                 (not (union-at-n l k '(8 9 10 11 12)))
+                 (a1 n l g))
+            (exist-intersect-8-12-3-4 n lp gp))
+   ((enable a1)
+    (use (int-k-not-ex-int))))
+
+;* k-in-l8-11
+;;;If the k's entry in l is between 8 and 11,
+;;;then the k's entry in lp is between 9 and 12.
+;;;We need rho-preserves-lg.
+(prove-lemma l8-11-k-in-lp9-12 (rewrite)
+   (implies (and  (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (union-at-n l k '(8 9 10 11)))
+            (union-at-n lp k '(9 10 11 12)))
+   ((enable rhoi union-at-n at)))
+
+;;;If the k's entry in l is between 8 and 11,
+;;;then the k's entry in lp is between 8 and 12
+;;;and the entry in gp is either 3 or 4.
+;;;l8-11-k-in-lp9-12, un9-12-then-un8-12 and 
+;;;rho-preserves-lg are used.
+(prove-lemma lm-a1-k-in-l8-11-nep-l8-12 (rewrite)
+   (implies  (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (union-at-n l k '(8 9 10 11))
+                  (lg n l g))
+             (and (union-at-n lp k '(8 9 10 11 12))
+                  (union-at-n gp k '(3 4))))
+   ((use (if4 (j k) (l lp) (g gp) ))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds,
+;;;and the k's entry in l is between 8 and 11 then
+;;;(exist-intersect-8-12-3-4 n lp gp) holds.
+;;; j \eq k and k \in l8-11
+(prove-lemma a1-k-in-l8-11-nep-l8-12 (rewrite) 
+   (implies  (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (lg n l g)
+                  (exist-union lp n '(8 9 10 11 12))
+                  (union-at-n l k '(8 9 10 11)))  
+             (exist-intersect-8-12-3-4 n lp gp))
+   ((use (un8-12-and-un34-then-int (j k)))))
+
+;;;If the k's entry in l is 12 then the k's entry in l is 0.
+(prove-lemma k-in-lp0 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (at l k 12))
+            (at lp k 0))
+   ((enable rhoi at)))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds
+;;;and k's entry in l is 12, then k is not the 
+;;;witness of (exist-union lp n '(8 9 10 11 12)).
+(prove-lemma k-not-ex-lp8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (at l k 12))
+            (not (equal k 
+                  (exist-union lp n '(8 9 10 11 12)))))
+   ((use (ex-lp8-12-not-in-lp0) (k-in-lp0))))
+
+;;;If the k's entry in lp is 8,
+;;;then k's entry in l is either 5 or 7.
+(prove-lemma lp8-k-in-l57 (rewrite)   
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (at lp k 8))
+            (union-at-n l k '(5 7)))
+   ((enable rhoi union-at-n at)))
+
+;;;If the k's entry in lp is 8,
+;;;then k's entry in l is between 5 and 12.
+(prove-lemma k-in-lp8-then-l5-12 (rewrite)
+   (implies (and (ws n l g)
+                 (rhoi n k l g lp gp)
+                 (member k (nset n))
+                 (at lp k 8))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+   ((use (un57-then-un5-12) (lp8-k-in-l57))))
+
+;;;If the k's entry in lp is between 9 and 12,
+;;;then  the k's entry in l is between 8 and 11.
+(prove-lemma lp9-12-k-in-l8-11 (rewrite)               
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(9 10 11 12)))
+            (union-at-n l k '(8 9 10 11)))
+   ((enable rhoi union-at-n at)))
+
+;;;If the k's entry in lp is between 9 and 12,
+;;;then the k's entry in l is between 5 and 12.
+(prove-lemma k-in-lp9-12-then-l5-12 (rewrite)
+   (implies (and (ws n l g)
+                 (rhoi n k l g lp gp)
+                 (member k (nset n))
+                 (union-at-n lp k '(9 10 11 12)))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+   ((use (un8-11-then-un5-12))))
+
+;;;If the k's entry in lp is between 8 and 12,
+;;;then the k's entry in l is between 5 and 12.
+(prove-lemma k-in-l5-12 (rewrite)
+   (implies (and (ws n l g)     
+                 (rhoi n k l g lp gp)
+                 (member k (nset n))
+                 (union-at-n lp k '(8 9 10 11 12)))
+            (union-at-n l k '(5 6 7 8 9 10 11 12)))
+  ((use (k-in-lp9-12-or-lp8))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds
+;;;and k is not its witness, then the witness has 
+;;;its entry in l between 5 and 12.
+;;;ex-lp8-12-in-lp8-12, member-ex-union used.
+(prove-lemma  k-neq-ex-lp8-12-in-l5-12 (rewrite)
+   (implies (and (ws n l g)
+                 (rhoi n k l g lp gp)
+                 (member k (nset n))
+                 (exist-union lp n '(8 9 10 11 12))
+                 (not (equal k (exist-union lp 
+                                n '(8 9 10 11 12)))))
+            (union-at-n l (exist-union lp n 
+             '(8 9 10 11 12))  '(5 6 7 8 9 10 11 12)))
+    ((use (un8-12-then-un5-12 
+          (j (exist-union lp n '(8 9 10 11 12)))))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds and
+;;;the witness has its entry in lp between 8 and 12,
+;;;then its entry in l is between 5 and 12.
+;;;ex-lp8-12-in-lp8-12, member-ex-union used.
+(prove-lemma ex-lp8-12-then-l5-12 (rewrite)
+   (implies (and (ws n l g)
+                 (rhoi n k l g lp gp)
+                 (member k (nset n))
+                 (exist-union lp n '(8 9 10 11 12)))
+            (union-at-n l (exist-union lp n 
+             '(8 9 10 11 12)) '(5 6 7 8 9 10 11 12)))
+   ((use (k-neq-ex-lp8-12-in-l5-12))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds
+;;;and k is not the witness of 
+;;;(exist-union lp n '(8 9 10 11 12)), then 
+;;;the witness has its entry 4 in gp.
+(prove-lemma ex-lp8-12-in-gp4 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (at l k 12)
+                 (a3-at-n1-n2 k (exist-union lp n
+                                 '(8 9 10 11 12)) l g)
+                 (not (equal k (exist-union lp n 
+                                '(8 9 10 11 12))))
+                 (exist-union lp n '(8 9 10 11 12)))
+            (at gp (exist-union lp n '(8 9 10 11 12)) 4))
+   ((enable a3-at-n1-n2 at)))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds and
+;;;k's entry in l is 12 then the witness has its 
+;;;entry in lp between 8 and 12 and in gp either 3 or 4.
+(prove-lemma lm-a1-k-in-l12-nep-l8-12 (rewrite)
+   (implies  (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (exist-union lp n '(8 9 10 11 12))
+                  (at l k 12)
+                  (a3-at-n1-n2 k (exist-union lp n 
+                                  '(8 9 10 11 12)) l g))
+                  (union-at-n gp (exist-union lp n 
+                   '(8 9 10 11 12)) '(3 4)))
+   ((use (k-not-ex-lp8-12) (ex-lp8-12-in-gp4))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds
+;;;and k's entry in l is 12, then 
+;;;(exist-intersect-8-12-3-4 n lp gp) holds.
+(prove-lemma a1-k-in-l12-nep-l8-12 (rewrite)
+   (implies  (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (exist-union lp n '(8 9 10 11 12))
+                  (at l k 12)
+                  (a3-at-n1-n2 k (exist-union lp n 
+                   '(8 9 10 11 12)) l g))
+             (exist-intersect-8-12-3-4 n lp gp))
+   ((use (int-wtn 
+          (j (exist-union lp n '(8 9 10 11 12)))))))
+
+;;;Auxiliary lemma for a1-nep-l8-12.
+;;;We have an instance of a3 in the lemma.
+(prove-lemma lm1-a1-nep-l8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a1 n l g)
+                 (a3-at-n1-n2 k (exist-union lp n 
+                  '(8 9 10 11 12)) l g)
+                 (exist-union lp n '(8 9 10 11 12))
+                 (exist-union l n '(8 9 10 11 12)))
+            (exist-intersect-8-12-3-4 n lp gp))
+   ((use (case-k))))
+
+(prove-lemma lm-a1-nep-l8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a1 n l g)
+                 (a3 n n l g)
+                 (exist-union l n '(8 9 10 11 12))
+                 (exist-union lp n '(8 9 10 11 12)))
+            (exist-intersect-8-12-3-4 n lp gp))
+   ((use (lm1-a1-nep-l8-12) (a3-ex-a3-at-n1-n2))))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) and
+;;;(exist-union l n '(8 9 10 11 12)) hold,
+;;;then so does (exist-intersect-8-12-3-4 n lp gp).
+(prove-lemma a1-nep-l8-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a1 n l g)
+                 (a3 n n l g)
+                 (exist-union l n '(8 9 10 11 12)))
+            (a1 n lp gp))
+   ((enable a1)))
+
+;;;If (exist-union lp n '(8 9 10 11 12)) holds,
+;;;then so does (exist-intersect-8-12-3-4 n lp gp).
+(prove-lemma rho-preserves-a1 ()
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a1 n l g)
+                 (a3 n n l g))
+            (a1 n lp gp))
+   ((use (a1-nep-l8-12))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;; a2.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;* i-eq-k-j-neq-k
+
+;;;If the k's entry in lp is between 10 and 12
+;;;and the k's entry in l is between 10 and 12,
+;;; then (phi9 k n g) holds.
+(prove-lemma k-in-l10-11-or-phi9 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (union-at-n lp k '(10 11 12))
+                 (not (union-at-n l k '(10 11))))
+            (phi9 k n g))
+   ((enable rhoi union-at-n at)))
+
+;;;If j is less than k and (phi9 k n g) holds,
+;;;then the j's entry in g is either 0 or 1.
+(prove-lemma phi9-j-in-g01 (rewrite)
+   (implies (and (member j (nset n))
+                 (lessp j k)
+                 (phi9 k n g))
+            (union-at-n g j '(0 1)))
+   ((enable nset phi9)))
+
+;;;If j is less than k and (phi9 k n g) holds,
+;;;then the j's entry in lp is not between 5 and 12.
+;;;lp-same-l-not is used.
+(prove-lemma case-k-in-phi9 (rewrite)                    
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lessp j k)
+                 (lg n l g)
+                 (phi9 k n g))
+            (not (union-at-n lp j 
+                   '(5 6 7 8 9 10 11 12))))
+   ((use (phi9-j-in-g01) (if1))))
+
+;;;If j is not equal to k and the k's entry in l is
+;;;either 10 or 11, then the j's entry in lp is not
+;;;between 5 and 12.
+(prove-lemma case-k-in-l10-11 (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (a2-at-n1-n2 k j l)
+                 (not (equal j k))
+                 (union-at-n l k '(10 11)))
+            (not (union-at-n lp j 
+                   '(5 6 7 8 9 10 11 12))))
+   ((enable a2-at-n1-n2)
+     (use (un10-11-then-un10-12))))
+
+;;;Auxiliary lemma for lm-i-eq-k-j-neq-k with 
+;;;(a2-at-n1-n2 k j l).
+(prove-lemma  lm1-i-eq-k-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lessp j k)
+                 (lg n l g)
+                 (a2-at-n1-n2 k j l)
+                 (union-at-n lp k '(10 11 12)))
+             (not (union-at-n lp j '(5 6 7 8 9 10 11 12))))
+   ((use (k-in-l10-11-or-phi9))))
+
+;;;If j is less then k and the k's entry in lp is
+;;;between 10 and 12, then the j's entry in lp is
+;;;not between 5 and 12.
+(prove-lemma lm-i-eq-k-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lessp j k)
+                 (lg n l g)
+                 (a2-at-n1-n2 k j l))
+            (a2-at-n1-n2 k j lp))
+   ((enable a2-at-n1-n2)))
+
+;;;If j is less than k,
+;;;then (a2-at-n1-n2 k j lp) holds.
+(prove-lemma i-eq-k-j-neq-k (rewrite)
+    (implies (and (ws n l g)
+                  (member j (nset n))
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (equal j k))
+                  (lessp j k)
+                  (lg n l g)
+                  (a2 n n l))
+             (a2-at-n1-n2 k j lp))
+    ((use (lm-i-eq-k-j-neq-k))))
+
+;* j-eq-k-i-neq-k
+
+;;;If the k's entry in l is not 4 and the k's entry in lp
+;;;is between 5 and 7, then the k's entry in l is 
+;;;between 5 and 7.
+(prove-lemma k-in-lp5-7-not-l4-then-l5-7(rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (at l k 4))
+                 (union-at-n lp k '(5 6 7)))
+            (union-at-n l k '(5 6 7)))
+   ((enable union-at-n at rhoi)))
+
+;;;If the k's entry in lp is between 5 and 7 then 
+;;;the k's entry in l is  certainly between 5 and 12.
+(prove-lemma k-in-lp5-7-then-l5-11 (rewrite)
+    (implies (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (at l k 4))
+                  (union-at-n lp k '(5 6 7)))
+             (union-at-n l k '(5 6 7 8 9 10 11)))
+    ((use (k-in-lp5-7-not-l4-then-l5-7))))
+
+;;;If the k's entry in lp is 8,
+;;;then the k's entry in l is between 5 and 11.
+(prove-lemma k-in-lp8-then-l5-11 (rewrite)
+    (implies (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (at lp k 8))
+             (union-at-n l k '(5 6 7 8 9 10 11)))
+    ((use (un57-then-un5-11) (lp8-k-in-l57))))
+
+;;;If the k's entry in lp is between 9 and 12,
+;;;then the k's entry in l is between 5 and 12.
+(prove-lemma k-in-lp9-12-then-l5-11 (rewrite)
+    (implies (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (union-at-n lp k '(9 10 11 12)))
+             (union-at-n l k '(5 6 7 8 9 10 11)))
+    ((use (lp9-12-k-in-l8-11) (un8-11-then-un5-11))))
+
+;;;If the k's entry in l is not 4 an the k's entry in lp is 
+;;;between 5 and 12, then the k's entry in l is 
+;;;between 5 and 11.
+(prove-lemma  k-in-l5-11 (rewrite)
+    (implies (and (ws n l g)
+                  (member k (nset n))
+                  (rhoi n k l g lp gp)
+                  (not (at l k 4))
+                  (union-at-n lp k '(5 6 7 8 9 10 11 12)))
+             (union-at-n l k '(5 6 7 8 9 10 11)))
+    ((use (k-in-lp5-7-or-lp8-or-lp9-12))))
+
+;;;If the k's entry in l is not 4, and the k's entry 
+;;;in lp is not between 5 and 12, then the k's entry 
+;;;in lp is not between 5 and 12.
+(prove-lemma k-not-in-l4 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (at l k 4))
+                 (not (union-at-n l k '(5 6 7 8 9 10 11 12))))
+            (not (union-at-n lp k '(5 6 7 8 9 10 11 12))))
+   ((use (un5-11-then-un5-12) (k-in-l5-11))))
+
+;;;If a0 holds, and the k's entry in l is not 
+;;;between 5 and 12, then the k's entry in lp is not
+;;;between 5 and 12.
+(prove-lemma k-not-in-lp5-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (a0 n l k)
+                 (union-at-n l i '(10 11 12))
+                 (not (union-at-n l k '(5 6 7 8 9 10 11 12))))
+            (not (union-at-n lp k 
+                  '(5 6 7 8 9 10 11 12))))
+   ((enable a0)
+    (use (un10-12-then-un8-12) (k-not-in-l4))))
+
+;;;Auxiliary lemma for lm-i-neq-k-j-eq-k.
+;;;There is (a2-at-n1-n2 i k l) in the lemma.
+(prove-lemma lm1-i-neq-k-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (lessp k i)
+                 (a0 n l k)
+                 (a2-at-n1-n2 i k l)
+                 (union-at-n lp i '(10 11 12)))
+             (not (union-at-n lp k 
+                   '(5 6 7 8 9 10 11 12))))
+   ((enable a2-at-n1-n2) (use (k-not-in-lp5-12))))
+
+;;;If k is less than i and the i's entry in lp is 
+;;;between 10 and 12, then the k's entry in lp is 
+;;;between 5 and 12.
+(prove-lemma lm-i-neq-k-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (lessp k i)
+                 (a0 n l k)
+                 (a2-at-n1-n2 i k l))
+             (a2-at-n1-n2 i k lp))
+   ((enable a2-at-n1-n2)
+    (use (lm1-i-neq-k-j-eq-k))))
+ 
+;;;If k is less than i then (a2-at-n1-n2 i k lp) holds.
+(prove-lemma i-neq-k-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (member i (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (lessp k i)
+                 (a0 n l k)
+                 (a2 n n l))
+             (a2-at-n1-n2 i k lp))
+   ((use (lm-i-neq-k-j-eq-k))))
+
+;* i-j-neq-k
+
+;;;If i and j are not equal to k and the i's entry in lp is
+;;;between 10 and 12, then the j's entry in lp is 
+;;;between 5 and 12.
+(prove-lemma lm-i-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member j (nset n))
+                 (member k (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (not (equal j k))
+                 (lessp j i)
+                 (a2-at-n1-n2 i j l))
+            (a2-at-n1-n2 i j lp))
+   ((enable a2-at-n1-n2)))
+
+;;;If i and j are not equal to k,
+;;; then (a2-at-n1-n2 i j lp) holds.
+(prove-lemma i-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))             
+                 (member j (nset n))             
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (not (equal j k))
+                 (lessp j i)
+                 (a2 n n l))
+             (a2-at-n1-n2 i j lp))
+   ((use (lm-i-j-neq-k))))
+
+;;;If i is not equal to k and j is less than i,
+;;;then (a2-at-n1-n2 i j lp) holds.
+;;;The order of the hints is crucial.
+(prove-lemma i-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (member i (nset n))             
+                 (member j (nset n))             
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (lessp j i)
+                 (a0 n l k)
+                 (a2 n n l))
+             (a2-at-n1-n2 i j lp))
+   ((use (i-j-neq-k) (i-neq-k-j-eq-k))))
+
+;;;If j is less than k then (a2-at-n1-n2 k j lp) holds.
+(prove-lemma i-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lessp j k)
+                 (lg n l g)
+                 (a2 n n l))
+            (a2-at-n1-n2 k j lp))
+   ((use (i-eq-k-j-neq-k))))
+
+;;;If i is less than j then (a2-at-n1-n2 k j lp) holds.
+;;;Again the order of the hints is crucial.
+(prove-lemma rho-preserves-a2 ()
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (member i (nset n))             
+                 (member j (nset n))             
+                 (rhoi n k l g lp gp)
+                 (lessp j i)
+                 (lg n l g)
+                 (a0 n l k)
+                 (a2 n n l))
+            (a2-at-n1-n2 i j lp))
+   ((use (i-neq-k) (i-eq-k))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;; a3.ev ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;* j-eq-k-i-neq-k
+
+;;;If the i's entry in l is 12 and the k's entry in lp is
+;;;between 5 and 12 then the k's entry in l is between 9 
+;;;and 11.
+(prove-lemma  lm-k-in-l9-11 (rewrite)           
+   (implies (and (ws n l g)                     
+                 (member i (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a0 n l k)
+                 (a3-at-n1-n2 i k l g)
+                 (at l i 12)
+                 (union-at-n l k '(5 6 7 8 9 10 11)))
+            (union-at-n l k '(9 10 11)))
+   ((enable a3-at-n1-n2)
+    (use (un5-11-then-un5-12))))
+
+;;;If i is not equal to k, the i's entry in l is 12, 
+;;;and the k's entry in lp is between 5 and 12,
+;;;then the k's entry in l is between 9 and 11.
+(prove-lemma  k-in-l9-11 (rewrite)
+   (implies (and (ws n l g)                    
+                 (member i (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a0 n l k)
+                 (a3-at-n1-n2 i k l g)
+                 (at l i 12)
+                 (union-at-n lp k '(5 6 7 8 9 10 11 12)))
+            (union-at-n l k '(9 10 11)))
+   ((enable a0)
+    (use (lm-k-in-l9-11) (l12-then-un8-12) (k-in-l5-11))))
+
+;;;If the k's entry in lp is between 9 and 11
+;;;then the k's entry in lp is between 9 and 12.
+(prove-lemma  k-in-lp9-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (union-at-n l k '(9 10 11)))
+            (union-at-n lp k '(9 10 11 12)))
+   ((enable union-at-n at rhoi)))
+
+;;Auxiliary lemma for lm-a3-i-neq-k-j-eq-k.
+;;;There is (a3-at-n1-n2 i k l g) in the lemma.
+(prove-lemma  lm1-a3-i-neq-k-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (lg n l g)
+                 (lg n lp gp)
+                 (a0 n l k)
+                 (a3-at-n1-n2 i k l g)
+                 (at l i 12)
+                 (union-at-n lp k '(5 6 7 8 9 10 11 12)))
+            (at gp k 4))
+   ((disable rho-preserves-lg)
+    (use (k-in-l9-11) (k-in-lp9-12))    ))
+
+;;;If i is not equal to k, the i's entry in lp is 12,
+;;;and the k's entry in lp is between 5 and 12,
+;;;then the k's entry in gp is 4.
+(prove-lemma  lm-a3-i-neq-k-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (lg n l g)
+                 (a0 n l k)
+                 (a3-at-n1-n2 i k l g))
+             (a3-at-n1-n2 i k lp gp))
+   ((enable a3-at-n1-n2)
+    (use (lm1-a3-i-neq-k-j-eq-k))))
+
+;;;If i is not equal to k,
+;;;then (a3-at-n1-n2 i k lp gp) holds.
+;;;The order of the hypotheses is crucial.
+(prove-lemma a3-i-neq-k-j-eq-k (rewrite)   
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a0 n l k)
+                 (a3 n n l g)
+                 (not (equal i k)))
+            (a3-at-n1-n2 i k lp gp))
+   ((use (lm-a3-i-neq-k-j-eq-k))))
+
+;* i-eq-k-j-neq-k
+
+;;;If the k's entry in lp is 12 then (phi11 k n g) holds.
+(prove-lemma cond-rhoi11 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (at lp k 12))
+            (phi11 k n g))
+   ((enable rhoi at)))
+
+;;;If the k's entry in l is between 10 and 12, 
+;;;the j's entry in l is between 5 and 12, and
+;;;(a2-at-n2 k n l) holds, then k is less than j.
+;;;Because Bmp does not rewrite the clause 
+;;;(lessp k j), we take its contrapositive.
+(prove-lemma k-lt-j (rewrite)
+   (implies (and (member j (nset n))
+                 (not (equal j k))
+                 (union-at-n l k '(10 11 12))
+                 (union-at-n l j '(5 6 7 8 9 10 11 12))
+                 (not (lessp k j)))
+            (not (a2-at-n2 k n l)))
+   ((enable nset a2-at-n2 a2-at-n1-n2)))
+
+
+;;;If k is less than j and (phi11 k n g) holds,
+;;;then the j's entry in g is either 2 or 3.
+(prove-lemma phi11-j-not-in-g23 (rewrite)
+   (implies (and (member j (nset n))
+                 (lessp k j)
+                 (phi11 k n g))
+            (not (union-at-n g j '(2 3))))
+   ((enable nset phi11)))
+
+;;;If j is not equal to k, (a2-at-n2 k n l), (phi11 k n g)
+;;;the k's entry in l is between 10 and 12 and
+;;;the j's entry in l is between 5 and 12,
+;;;then the j's entry in g is either 2 or 3.
+(prove-lemma  lm1-j-not-in-g23 (rewrite)
+   (implies (and (member j (nset n))
+                 (not (equal j k))
+                 (a2-at-n2 k n l)
+                 (phi11 k n g)
+                 (union-at-n l k '(10 11 12))
+                 (union-at-n l j '(5 6 7 8 9 10 11 12)))
+            (not (union-at-n g j '(2 3))))
+   ((use (k-lt-j) (phi11-j-not-in-g23))))
+
+;;;If j is not equal to k, the k's entry in l is 
+;;;between 10 and 12, the k's entry in lp is 12 and 
+;;;the j's entry in l is between 5 and 12,
+;;;then the j's entry in g is either 2 or 3.
+(prove-lemma  lm2-j-not-in-g23 (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (a2-at-n2 k n l)
+                 (at lp k 12)
+                 (at l k 11)
+                 (union-at-n l j '(5 6 7 8 9 10 11 12)))
+            (not (union-at-n g j '(2 3))))
+   ((use (cond-rhoi11) (lm1-j-not-in-g23)
+         (l11-then-un10-12))))
+
+;;;If j is not equal to k, the k's entry in lp is 12,
+;;;and the j's entry in l is between 5 and 12,
+;;;then the j's entry in g is either 2 or 3.
+(prove-lemma  j-not-in-g23 (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (a2 n n l)
+                 (at l k 11)
+                 (at lp k 12)
+                 (union-at-n l j '(5 6 7 8 9 10 11 12)))
+            (not (union-at-n g j '(2 3))))
+   ((use (lm2-j-not-in-g23) (a2-n-a2-at-n2))))
+
+(prove-lemma j-in-g4 (rewrite)
+   (implies (and (member j (nset n))
+                 (lg n l g)
+                 (not (union-at-n g j '(2 3)))
+                 (union-at-n l j '(5 6 7 8 9 10 11 12)))
+            (at g j 4))
+   ((enable at)
+    (use (if4) (l5-12-eq-l5-8-or-l9-12) (if3))))
+
+;;;un9-12-then-un8-12, if3, j-not-in-g23,
+;;;l5-12-eq-l5-8-or-l9-12, un8-12-then-un5-12, 
+;;;and j-in-g4 are used.
+;;;If j is not equal to k, the k's entry in lp is 12, 
+;;;the j's entry in l is between 5 and 12,
+;;;then the j's entry in g is 4.
+(prove-lemma a3-j-in-l5-12 (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lg n l g)
+                 (a2 n n l)
+                 (at l k 11)
+                 (at lp k 12)
+                 (union-at-n l j '(5 6 7 8 9 10 11 12)))
+            (at g j 4))
+   ((use (j-not-in-g23) (j-in-g4))))
+
+;;;If the k's entry in lp is 12,
+;;;then the k's entry in l is 11.
+(prove-lemma k-in-l11 (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (at lp k 12))
+            (at l k 11))
+   ((enable rhoi at)))
+
+;;;If k is not equal to j and the j's entry in g is 4,
+;;;then the j's entry in gp is 4.
+(prove-lemma lm1-a3-i-eq-k-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lg n l g)
+                 (a2 n n l)
+                 (at lp k 12)
+                 (union-at-n lp j '(5 6 7 8 9 10 11 12)))
+            (at g j 4))
+   ((use (a3-j-in-l5-12) (k-in-l11))))
+
+;;;If j is not equal to k, the k's entry in lp is 12, 
+;;;and the j's entry in lp is between 5 and 12,
+;;;then the j's entry in gp is 4.
+(prove-lemma  lm-a3-i-eq-k-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lg n l g)
+                 (a2 n n l)
+                 (a3-at-n1-n2 k j l g))
+            (a3-at-n1-n2 k j lp gp))
+   ((enable a3-at-n1-n2)
+    (use (lm1-a3-i-eq-k-j-neq-k))))
+
+;;;If j is not equal to k then (a3-at-n1-n2 k j lp gp).
+(prove-lemma a3-i-eq-k-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal j k))
+                 (lg n l g)
+                 (a2 n n l)
+                 (a3 n n l g))
+            (a3-at-n1-n2 k j lp gp))
+   ((use (a3-i-j-a3-at-n1-n2 (i k)))))
+
+;* i-j-neq-k
+
+;;;If i,j are not equal to k, the i's entry in lp is 12
+;;;and the j's entry in lp between 5 and 12
+;;;then the j's entry in gp is 4.
+(prove-lemma  lm-a3-i-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (not (equal i k))
+                 (not (equal j k))
+                 (a3-at-n1-n2 i j l g))
+            (a3-at-n1-n2 i j lp gp))
+      ((enable a3-at-n1-n2)))
+
+;;;If i,j are not equal to k, 
+;;;then (a3-at-n1-n2 i j lp gp).
+(prove-lemma a3-i-j-neq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member i (nset n))
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (a3 n n l g)
+                 (not (equal i k))
+                 (not (equal j k)))
+            (a3-at-n1-n2 i j lp gp))
+   ((use (lm-a3-i-j-neq-k))))
+
+;* i-j-eq-k
+
+(prove-lemma lm-a3-i-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a2 n n l)
+                 (a3-at-n1-n2 k k l g))
+            (a3-at-n1-n2 k k lp gp))
+   ((enable a3-at-n1-n2)
+    (use (if4 (j k) (l lp) (g gp)))))
+
+;;;(a3-at-n1-n2 k k lp gp) holds by lg.
+(prove-lemma a3-i-j-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a2 n n l)
+                 (a3 n n l g))
+            (a3-at-n1-n2 k k lp gp))
+   ((use (lm-a3-i-j-eq-k)) ))
+
+;;;(a3-at-n1-n2 k j lp gp) holds.
+(prove-lemma a3-i-eq-k (rewrite)
+   (implies (and (ws n l g)
+                 (member j (nset n))
+                 (member k (nset n))
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a2 n n l)
+                 (a3 n n l g))
+            (a3-at-n1-n2 k j lp gp))
+   ((use (a3-i-eq-k-j-neq-k) (a3-i-j-eq-k))))
+
+;;;If i is not equal to k,
+;;;then (a3-at-n1-n2 i j lp gp) holds.
+(prove-lemma a3-i-neq-k (rewrite)                         
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (member i (nset n))             
+                 (member j (nset n))             
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a0 n l k)
+                 (a2 n n l)
+                 (a3 n n l g)
+                 (not (equal i k)))
+            (a3-at-n1-n2 i j lp gp)) 
+   ((use (a3-i-j-neq-k) (a3-i-neq-k-j-eq-k))))
+
+;;;(a3-at-n1-n2 i j lp gp) holds.
+(prove-lemma rho-preserves-a3 ()
+   (implies (and (ws n l g)
+                 (member k (nset n))
+                 (member i (nset n))             
+                 (member j (nset n))             
+                 (rhoi n k l g lp gp)
+                 (lg n l g)
+                 (a0 n l k)
+                 (a2 n n l)
+                 (a3 n n l g))
+            (a3-at-n1-n2 i j lp gp))
+   ((use (a3-i-neq-k) (a3-i-eq-k))))
+

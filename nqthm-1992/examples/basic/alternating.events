@@ -1,0 +1,457 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+(boot-strap nqthm)
+
+
+; A Mechanical Checking of a Theorem About a Card Trick
+
+;  Robert S. Boyer, May 22, 1991
+
+; This is a formalization, in the Nqthm logic, of a card trick theorem
+; that de Bruijn taught Huet, Huet taught Moore, and Moore taught me.
+; Mine differs from a treatment of the same problem by Moore in that
+; he uses oracles to simulate shuffling, whereas I use a merge
+; predicate.
+
+; Here is Moore's statement of the trick:
+
+   ; Suppose you have a deck of cards of even length.  Suppose the cards
+   ; alternate between red ones and black ones.  Cut the deck into two
+   ; piles, a and b.  Shuffle a and b together.  Then the following is
+   ; true of the shuffled deck.  If the bottom-most cards in a and b are
+   ; of different color, then when the cards of the shuffled deck are
+   ; taken from the top in adjacent pairs, each pair contains a card of
+   ; each color.  On the other hand, if the bottom-most cards in a and b
+   ; are the same color, the above pairing property holds after rotating
+   ; the shuffled deck by one card, i.e., moving the bottom card to the
+   ; top.
+
+#| For other references see
+
+The Gilbreath Tick: A Case Study in Axiomatization and Proof Development in the
+COQ Proof Assistant, Gerard Huet, Technical Report 1511, INRIA, September,
+1991.
+
+M. Gardner, Mathematical Recreation Column, Scientific American, Aug. 1960.,
+p. 149, vol. 203, no. 2.
+
+N. Gilbreath, Magnetic Colors, The Linking Ring, 38(5), 1958, p. 60.
+
+|#
+
+
+
+; Now on to my formalization.  We first define the six functions
+; needed in the statement of the theorem.  The main, all encompassing,
+; theorem is stated at the very end, and is named ``all''.
+
+; Intuitively, we imagine that cards are arbitrary objects, but
+; numbers are ``red'' and nonnumbers are ``black.''
+
+(defn opposite-color (x y)
+
+; This is the definition of ``opposite-color,'' which checks that its
+; two arguments, x and y, are of opposite color, in the intuitive
+; sense mentioned above.
+
+  (or (and (numberp x) (not (numberp y)))
+      (and (numberp y) (not (numberp x)))))
+
+(defn alternating-colors (x)  
+
+; This is the definition of ``alternating-colors,'' which checks that
+; its argument, x, is a list of objects whose colors alternate.  In the
+; base case, if the list is empty or the list has length one, then we
+; say it is indeed alternating.  In the inductive or recursive case,
+; we require that the first two elements be of opposite color and that
+; the ``rest,'' i.e., cdr, i.e., all but the first, of the list be
+; alternating.
+
+  (if (or (nlistp x)
+          (nlistp (cdr x)))
+      t
+    (and (opposite-color (car x) (cadr x))
+         (alternating-colors (cdr x)))))
+
+(defn paired-colors (x) 
+
+; This is the definition of ``paired-colors,'' which checks that its
+; argument, x, is a list such that if its elements are pealed off from
+; the front in pairs, the pairs are found to be of opposite color.  In
+; the base case, we say a list of length 0 or 1 is paired.  In the
+; inductive or recursive case, where the list has at least length 2,
+; we insist that the first and second elements be of opposite color,
+; and that the ``cddr,'' i.e., the rest of the list past the first two
+; elements, is paired.
+
+  (if (or (nlistp x)
+          (nlistp (cdr x)))
+      t
+    (and (opposite-color (car x) (cadr x))
+         (paired-colors (cddr x)))))
+
+(defn plistp (x)
+
+; This is the definition of ``plistp,'' which checks that its argument
+; is a list that ends in the standard empty list, i.e., NIL.
+
+  (if (nlistp x)
+      (equal x nil)
+    (plistp (cdr x))))
+
+(defn shufflep (x y z)
+
+; This is the definition of ``shufflep,'' which checks that its third
+; argument, z, is a ``merge'' or ``shuffling'' of its first two
+; arguments, x and y.  Shufflep also requires that x, y, and z all be
+; ``plistp''.
+
+; In the base case, where z is empty, we insist that x, y, and z all
+; be NIL.
+
+; In the ``almost'' base cases in which z is not empty, but either x
+; or y is empty, we insist that if x is empty, then x is NIL, y is
+; equal to z, and y is ``plistp'', whereas if x is not empty but y is,
+; we insist that y is NIL, x is equal to z, and x is ``plistp''.
+
+; In the fully inductive case, where none of x, y, or z, is empty, we
+; insist that either (a) the first element of x is the first element
+; of z and (cdr z) is a shuffle of (cdr x) and y, or (b) the first
+; element of y is the first element of z and (cdr z) is a shuffle of x
+; and (cdr y).
+
+  (if (nlistp z)
+      (and (equal x nil)
+           (equal y nil)
+           (equal z nil))
+    (if (nlistp x)
+        (and (equal x nil)
+             (equal y z)
+             (plistp y))
+      (if (nlistp y)
+          (and (equal y nil)
+               (equal x z)
+               (plistp x))
+        (or (and (equal (car x) (car z))
+                 (shufflep (cdr x) y (cdr z)))
+            (and (equal (car y) (car z))
+                 (shufflep x (cdr y) (cdr z))))))))
+
+(defn even-length (l)
+
+; This is the definition of ``even-length,'' which checks that the
+; length of its argument, l, is even.  In the base cases, if l is
+; empty we return true and if l has one element we return false.  In
+; the inductive or recursive case, we insist that (cddr l), i.e., the
+; rest of l after its second element, has even length.
+
+  (if (nlistp l)
+      t
+    (if (nlistp (cdr l))
+         f
+      (even-length (cddr l)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; That ends the definitions needed to state the final theorem ``all,'' given
+; at the end of this file.
+
+; We now proceed to develop 17 auxiliary lemmas to help prove
+; ``all.''
+
+(prove-lemma al->pp (rewrite)
+
+; If x satisfies ``alternating-colors,'' then it satisfies
+; ``paired-colors.''
+
+  (implies (alternating-colors x)
+           (paired-colors x)))
+
+(defn silly (x y z)
+
+; This is a definition of the function ``silly,'' which is only
+; defined to force a certain weird induction, immediately below.
+; Discovering this induction was the key to getting the following
+; lemma proved.  Fundamentally, and intuitively, what silly does, one
+; might say, risking the accusation of anthropomorphising computing,
+; is ``to look into the recursion involved in checking that z is a
+; merge of x and y, but doing the looking `two deep.'''  One should be
+; careful not to try to make any sense out of what this function
+; ``returns.'' I have never even considered this matter.  Instead, I
+; just wanted to force an induction with three induction hypotheses, in
+; which z always goes down by two cdr's, whereas x and y each go down
+; by cdr's in such a way that just two cdr's are done.  It is a
+; ``feature'' of Nqthm that the user can force inductions to be done
+; in certain ways by suggesting that the prover induct ``in the way''
+; that a specified function recurses.
+
+  (if (nlistp z)
+      t
+    (list (silly (cddr x) y (cddr z))
+          (silly (cdr x) (cdr y) (cddr z))
+          (silly x (cddr y) (cddr z)))))
+
+(prove-lemma main (rewrite)
+
+; From a mathematical point of view, this lemma is perhaps the high
+; point of this entire card trick theorem.  This lemma handles the
+; case in which the colors of the top cards are different.
+
+; If z is a shuffle of x and y, and both x and y are of alternating
+; color, and neither x nor y is empty, and the first element of x is
+; of color opposite to the first element of y, then the elements of z
+; satisfy ``paired-colors.''
+
+  (implies (and (shufflep x y z)
+                (alternating-colors x)
+                (alternating-colors y)
+                (listp x)
+                (listp y)
+                (opposite-color (car x) (car y)))
+           (paired-colors z))
+
+; A hint for this lemma, which says, ``induct the way that `silly'
+; recurses on x, y, and z.
+
+  ((induct (silly x y z))))
+
+; The closer to a gensym is the name of a lemma, the more boring and
+; obvious it is.  As usual in such Nqthm proofs, these tedious lemmas
+; are conceived by carefully reading failed Nqthm proofs rather than
+; by thinking ahead.  The idea is to prove only those things which are
+; suggested by Nqthm failures.
+
+(prove-lemma f2 (rewrite)
+
+; If d and c satisfy ``plistp'', then (append c d), i.e., the
+; concatenation of c and d, is a ``shuffle'' of c and d.
+
+  (implies (and (plistp d) (plistp c))
+           (shufflep c d (append c d))))
+
+(prove-lemma f3 (rewrite)
+
+;  A variation on the above.
+
+  (implies (and (plistp d) (plistp c))
+           (shufflep c d (append d c))))
+
+(prove-lemma cdr-append (rewrite)
+
+; How to drive a cdr ``through'' an append.  What the ``rest,'' i.e.,
+; cdr of (append c d), i.e., the concatenation of c and d, is, depends
+; upon c.  If c is nonempty, then the answer is (append (cdr c) d).
+; Whereas if c is empty, the answer is (cdr d).
+
+  (equal (cdr (append c d))
+         (if (listp c)
+             (append (cdr c) d)
+           (cdr d))))
+
+(prove-lemma f4 (rewrite)
+
+; If w satisfies ``plistp'' and z is a shuffle of x and y, then
+; (append z w) is a shuffle of (append y w) and (append z w).
+
+ (implies (and (plistp w)
+               (shufflep x y z))
+          (shufflep x (append y w) (append z w))))
+
+(prove-lemma f5 (rewrite)
+
+; Variation on the above.
+
+  (implies (and (plistp w)
+                (shufflep x y z))
+           (shufflep (append x w) y (append z w))))
+
+(prove-lemma trick (rewrite)
+
+; Other than ``main,'' the lemma ``trick'' is perhaps the only
+; slightly nonobvious lemma.  It is the key to reducing the case in
+; which the two cut stacks start with the same color to the case in
+; which they do not.
+
+; If x and y are nonempty and z is a shuffle of x and y, then the
+; result of moving the first card of z to its end is either (a) a
+; shuffle of (i) the similar rotation of x and (ii) y, or (b) a
+; shuffle of (i) x and (ii) the similar rotation of y.
+
+  (implies (and (listp x)
+                (listp y)
+                (shufflep x y z))
+           (or (shufflep (append (cdr x) (list (car x)))
+                   y
+                   (append (cdr z) (list (car z))))
+               (shufflep x
+                   (append (cdr y) (list (car y)))
+                   (append (cdr z) (list (car z)))))))
+
+(prove-lemma car-append (rewrite)
+
+;  How to drive a ``car'' through an ``append''.  Analogous to
+; ``cdr-append.''
+
+  (equal (car (append x y))
+         (if (listp x)
+             (car x)
+           (car y))))
+               
+(prove-lemma f12 (rewrite)
+
+; If adding d to the end of c is of alternating color, and d is of the
+; same color as e, then adding e to the end of c is also of
+; alternating color.
+
+  (implies (and (alternating-colors (append c (list d)))
+                (not (opposite-color d e)))
+           (alternating-colors (append c (list e)))))
+
+(prove-lemma f6 (rewrite)
+
+; Analogous to the above.
+
+  (implies (and (listp l)
+                (even-length l)
+                (alternating-colors l))
+           (alternating-colors (append (cdr l) (list (car l))))))
+
+(prove-lemma g19 (rewrite)
+
+; If c is of alternating color and the first member of c is red, i.e.,
+; a number, and c has even length, and v is a number, then sticking v
+; on to the end of c results in a list of alternating color.
+
+  (implies (and (alternating-colors c)
+                (numberp (car c))
+                (even-length c)
+                (numberp v))
+           (alternating-colors (append c (list v))))
+
+; A hint for this lemma:
+
+  ((induct (paired-colors c))))
+
+(prove-lemma g20 (rewrite)
+
+; Analogous to the foregoing.
+
+  (implies (and (alternating-colors c)
+                (not (numberp (car c)))
+                (even-length c)
+                (not (numberp v)))
+           (alternating-colors (append c (list v))))
+
+; A hint for this lemma:
+
+  ((induct (paired-colors c))))
+
+(prove-lemma fap (rewrite)
+
+; This is the heart of the case in which the two cut stacks begin with
+; cars of the same color: the result of rotating the shuffled stack
+; one car is paired.
+
+  (implies (and (shufflep x y z)
+                (alternating-colors x)
+                (alternating-colors y)
+                (even-length x)
+                (even-length y)
+                (not (opposite-color (car x) (car y))))
+           (paired-colors (append (cdr z) (list (car z)))))
+
+; A hint for this lemma:
+
+  ((use (trick)
+        (main (z (append (cdr z) (list (car z))))
+              (x x)
+              (y (append (cdr y) (list (car y)))))
+        (main (z (append (cdr z) (list (car z))))
+              (x (append (cdr x) (list (car x))))
+              (y y)))))
+
+(prove-lemma al2 (rewrite)
+
+; If we cut an even deck of alternating cards into two stacks which
+; begin with the same color, then the two stacks have even length.
+
+  (implies (and (alternating-colors (append x y))
+                (even-length (append x y))
+                (not (opposite-color (car x) (car y))))
+           (and (even-length x)
+                (even-length y)))
+
+; A hint for this lemma:
+
+  ((induct (paired-colors x))))
+                
+(prove-lemma g16 (rewrite)
+
+; If x is not alternating in color, then appending y to its
+; end does not make the result alternating.
+
+  (implies (not (alternating-colors x))
+           (not (alternating-colors (append x y)))))
+
+(prove-lemma g17 (rewrite)
+
+; Like the above.
+
+  (implies (not (alternating-colors y))
+           (not (alternating-colors (append x y)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; That ends the intermediate development of auxiliary lemmas.  We are now
+; ready for the main result.
+
+(prove-lemma all ()
+
+; The main theorem.  Imagine x and y to be the two card stacks that
+; result from cutting the original deck.  The original deck is thus
+; (append x y).  Suppose that the original deck is of alternating
+; color and of even length, and that neither x nor y is empty.
+; Suppose further that z is a shuffle of x and y.  If x and y start
+; with cards of opposite color, then z satisfies ``paired-colors.''
+; On the other hand, if x and y start with cards of opposite color,
+; then the result of moving the top card of z to the end of z
+; satisfies ``paired-colors.''
+
+  (implies (and (alternating-colors (append x y))
+                (even-length (append x y))
+                (shufflep x y z)
+                (listp x)
+                (listp y))
+           (if (opposite-color (car x) (car y))
+               (paired-colors z)
+             (paired-colors (append (cdr z) (list (car z))))))
+
+; A hint for this lemma:
+
+  ((use (fap) (main))))
+
+; To run this list of events takes about 1 hour of cpu time on a
+; Sun-3/280.  To develop this list of events took about 15 hours of
+; work.

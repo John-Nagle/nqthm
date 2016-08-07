@@ -1,0 +1,304 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;   PG-THEORY.EVENTS
+;;;
+;;;   A SUM/CARRY/GENERATE/PROPAGATE theory of addition, and the tree-based
+;;;   adder TV-ADDER.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  SUM
+
+(defn v-sum (c a b)
+  (if (nlistp a)
+      nil
+    (cons (b-xor c (b-xor (car a) (car b)))
+          (v-sum (b-or3 (b-and (car a) (car b))
+                        (b-and (car a) c)
+                        (b-and (car b) c))
+                 (cdr a)
+                 (cdr b)))))
+
+(disable v-sum)
+
+(prove-lemma bvp-sum (rewrite)
+   (bvp (v-sum c a b))
+   ;;Hint
+   ((enable bvp v-sum)))
+
+(prove-lemma length-sum (rewrite)
+  (equal (length (v-sum c a b))
+         (length a))
+  ;;Hint
+  ((enable length v-sum)))
+
+(prove-lemma v-sum-congruence (rewrite)
+  (implies
+   c
+   (equal (equal (v-sum c a b)
+                 (v-sum t a b))
+          t))
+  ;;Hint
+  ((enable v-sum)))
+
+(prove-lemma a-1+1=a (rewrite)
+  (implies
+   (and (bvp a) c)
+   (equal (v-sum c (v-not (nat-to-v 0 (length a))) a)
+          a))
+  ;;Hint
+  ((enable v-sum v-not nat-to-v length)))
+
+;;;  V-CARRY
+
+(defn v-carry (c a b)
+  (if (nlistp a)
+      (boolfix c)
+    (let ((a-bit (car a))
+          (b-bit (car b)))
+      (let ((p (or a-bit b-bit))
+            (g (and a-bit b-bit)))
+        (v-carry (or g (and p c)) (cdr a) (cdr b))))))
+
+(disable v-carry)
+
+;;;  V-PROPAGATE
+
+(defn v-propagate (a b)
+  (if (nlistp a)
+      t
+    (let ((a-bit (car a))
+          (b-bit (car b)))
+      (and (or a-bit b-bit)
+           (v-propagate (cdr a) (cdr b))))))
+
+(disable v-propagate)
+
+;;;  V-GENERATE
+
+(defn v-generate (a b)
+  (if (nlistp a)
+      f
+    (let ((a-bit (car a))
+          (b-bit (car b)))
+      (or (v-generate (cdr a) (cdr b))
+          (and a-bit b-bit (v-propagate (cdr a) (cdr b)))))))
+
+(disable v-generate)
+
+;;;  T-CARRY
+;;;
+;;;   We keep this non-recursive definition disabled because we are usually
+;;;   interested in the logical properties of T-CARRY with respect to V-CARRY,
+;;;   V-PROPAGATE, and V-GENERATE.
+
+(defn f$t-carry (c prop gen)
+  (f-or (f-and c prop) gen))
+
+(disable f$t-carry)
+
+(defn t-carry (c prop gen)
+  (b-not (ao6 c prop gen)))
+
+(disable t-carry)
+
+(prove-lemma f$t-carry=t-carry (rewrite)
+  (implies
+   (and (boolp c)
+        (boolp prop)
+        (boolp gen))
+   (equal (f$t-carry c prop gen)
+          (t-carry c prop gen)))
+  ;;Hint
+  ((enable f$t-carry t-carry)))
+
+(prove-lemma t-carry-congruence (rewrite)
+  (implies
+   x
+   (equal (equal (t-carry x p g)
+                 (t-carry t p g))
+          t))
+  ;;Hint
+  ((enable t-carry)))
+
+(defn t-carry* ()
+  '(t-carry (c prop gen) (z)
+            ((g0 (z-) ao6 (c prop gen))
+             (g1 (z) b-not (z-)))
+            nil))
+
+(module-predicate t-carry*)
+
+(module-netlist t-carry*)
+
+(prove-lemma t-carry$value (rewrite)
+  (implies
+   (t-carry& netlist)
+   (equal (dual-eval 0 't-carry (list c prop gen) state netlist)
+          (list (f$t-carry c prop gen))))
+  ;;Hint
+  ((enable t-carry& f$t-carry b-not$value ao6$value)))
+
+(disable t-carry$value)
+
+;;;   Lemmas 
+
+(prove-lemma v-append-propagate (rewrite)
+  (implies
+   (equal (length a) (length c))
+   (equal (v-propagate (append a b) (append c d))
+          (and (v-propagate a c)
+               (v-propagate b d))))
+  ;;Hint
+  ((enable length v-propagate append)))
+
+(prove-lemma v-propagate-append (rewrite)
+  (implies
+   (equal (length a) (length c))
+   (equal (b-and (v-propagate a c)
+                 (v-propagate b d))
+          (v-propagate (append a b) (append c d)))))
+
+(disable v-propagate-append)
+
+(prove-lemma generate-append (rewrite)
+ (implies
+   (equal (length a) (length c))
+   (equal (t-carry (v-generate a c) (v-propagate b d) (v-generate b d))
+          (v-generate (append a b) (append c d))))
+ ;;Hint
+ ((enable length t-carry v-generate v-propagate append)))
+
+(prove-lemma append-sum (rewrite)
+  (implies
+   (and (equal (length a) (length b))
+        (equal c2 (v-carry c1 a b)))
+   (equal (append (v-sum c1 a b) (v-sum c2 c d))
+          (v-sum c1 (append a c) (append b d))))
+  ;;Hint
+  ((enable length v-carry append v-sum boolfix)))
+
+(prove-lemma t-carry-p-g-carry (rewrite)
+  (equal (t-carry c (v-propagate a b) (v-generate a b))
+         (v-carry c a b))
+  ;;Hint
+  ((enable t-carry v-propagate v-generate v-carry boolfix)))
+
+;;;   Show that V-ADDER-OUTPUT == V-SUM, and V-ADDER-CARRY-OUT = V-CARRY
+
+(prove-lemma v-adder-output=v-sum (rewrite)
+  (equal (v-adder-output c a b)
+         (v-sum c a b))
+  ;;Hint
+  ((enable v-adder v-sum firstn length)))
+
+(prove-lemma v-adder-carry-out=v-carry (rewrite)
+   (equal (v-adder-carry-out c a b)
+          (v-carry c a b))
+   ;;Hint
+   ((enable v-adder v-carry nth restn length)))
+
+;;;  TV-ADDER is a propagate-generate adder specification. C is the carry-in, A
+;;;  and B are bit-vector addends, and TREE specifies the carry-lookahead
+;;;  structure of the adder.  TV-ADDER conceptually returns 3 results:  The CAR
+;;;  is (V-PROPAGATE A B), the CADR is (V-GENERATE A B), and the CDDR is
+;;;  (V-SUM C A B).
+
+(defn tv-adder (c a b tree)
+  (if (nlistp tree)
+      (list (b-or (car a) (car b))
+            (b-and (car a) (car b))
+            (b-xor (car a) (b-xor (car b) c)))
+    (let ((lhs (tv-adder c
+                           (tfirstn a tree)
+                           (tfirstn b tree)
+                           (car tree))))
+      (let ((lhs-p (car lhs))
+            (lhs-g (cadr lhs))
+            (lhs-sum (cddr lhs)))
+        (let ((rhs-c (t-carry c lhs-p lhs-g)))
+          (let ((rhs (tv-adder rhs-c
+                                 (trestn a tree)
+                                 (trestn b tree)
+                                 (cdr tree))))
+            (let ((rhs-p (car rhs))
+                  (rhs-g (cadr rhs))
+                  (rhs-sum (cddr rhs)))
+              (let ((p (b-and lhs-p rhs-p))
+                    (g (t-carry lhs-g rhs-p rhs-g)))
+                (cons p (cons g (append lhs-sum rhs-sum)))))))))))
+
+(disable tv-adder)
+
+;;;  The proofs that TV-ADDER = (P . (G . SUM)).
+
+(prove-lemma car-tv-adder-as-p (rewrite)
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (equal (length b) (tree-size tree)))
+   (equal (car (tv-adder c a b tree))
+          (v-propagate a b)))
+  ;;Hint
+  ((induct (tv-adder c a b tree))
+   (disable b-and v-append-propagate)
+   (enable v-propagate-append v-propagate)
+   (expand (tv-adder c a b tree))))
+
+(prove-lemma cadr-tv-adder-as-g (rewrite)
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (equal (length b) (tree-size tree)))
+   (equal (cadr (tv-adder c a b tree))
+          (v-generate a b)))
+  ;;Hint
+  ((induct (tv-adder c a b tree))
+   (disable b-and v-append-propagate t-carry-p-g-carry)
+   (enable v-propagate v-generate v-propagate-append)
+   (expand (tv-adder c a b tree))))
+
+(prove-lemma cddr-tv-adder-as-sum (rewrite)
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (equal (length b) (tree-size tree)))
+   (equal (cddr (tv-adder c a b tree))
+          (v-sum c a b)))
+  ;;Hint
+  ((induct (tv-adder c a b tree))
+   (disable b-and t-carry v-append-propagate)
+   (enable v-sum v-propagate-append)
+   (expand (tv-adder c a b tree))))
+
+(prove-lemma equality-of-three-element-lists ()
+  (implies
+   (and (not (equal x 0))
+        (not (equal y 0))
+        (not (equal z 0)))
+   (equal (equal w (cons x (cons y z)))
+          (and (equal (car w) x)
+               (equal (cadr w) y)
+               (equal (cddr w) z)))))
+
+(prove-lemma tv-adder-as-p-g-sum (rewrite)
+  (implies
+   (and (equal (length a) (tree-size tree))
+        (equal (length b) (tree-size tree)))
+   (equal (tv-adder c a b tree)
+          (cons (v-propagate a b)
+                (cons (v-generate a b)
+                      (v-sum c a b)))))
+  ;;Hint
+  ((disable tv-adder boolp)
+   (use (equality-of-three-element-lists
+         (w (tv-adder c a b tree))
+         (x (v-propagate a b))
+         (y (v-generate a b))
+         (z (v-sum c a b))))))
+
+(disable car-tv-adder-as-p)
+(disable cadr-tv-adder-as-g)
+(disable cddr-tv-adder-as-sum)
+(disable tv-adder-as-p-g-sum)

@@ -1,0 +1,171 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    ADDERS.EVENTS
+;;;
+;;;    Various non-recursive and recursive adders.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  BV-ADDER
+
+(defn bv-adder (c a b)
+  ;; c is a bit, a and b are bit-vectors of some length n; this
+  ;; function returns a bit vector of length n+1
+  (if (nlistp a)
+      (list c)
+    (cons (xor c (xor (car a) (car b)))
+          (bv-adder (or (and (car a) (car b))
+                        (and (car a) c)
+                        (and (car b) c))
+                    (cdr a)
+                    (cdr b)))))
+
+;;;  BV-ADDER-BODY
+
+(defn bv-adder-body (m n)
+  ;; m is the starting point for the ``current index,'' and n is
+  ;; the number of occurrences that we want to build.
+  (if (zerop n)
+      nil
+    (cons (list #i(g m)                 ;label
+                (list #i(sum m)         ;outputs
+                      #i(carry (add1 m)))
+                'full-adder             ;device type
+                (list #i(a m)           ;inputs
+                      #i(b m)   
+                      #i(carry m)))
+          (bv-adder-body (add1 m) (sub1 n)))))
+
+(disable bv-adder-body)
+
+;;;  BV-ADDER* -- The BV-ADDER* lemmas are necessary for technical reasons
+;;;  (having to do with the heuristics for the direction of EQUALity
+;;;  substitution) that arise in proofs using BV-ADDER-BODY-LEMMA.
+
+(defn bv-adder* (n)
+  ;; n-bit wide input vectors
+  (list #i(bv-adder n)              ;(index bv-adder n), intuitively bv-adder_n
+        (cons #i(carry 0)           ;primary inputs are
+              (append #i(a 0 n)     ; (carry_0 a_0 a_1 ... a_n-1 
+                      #i(b 0 n)))   ;          b_0 b_1 ... b_n-1)
+        (append #i(sum 0 n)         ;outputs are
+                (list #i(carry n))) ; (sum_0 sum_1 ... sum_n-1 carry_n)
+        (bv-adder-body 0 n)         ;occurrences
+        nil))                       ;NIL state
+
+(destructuring-lemma bv-adder*)
+
+;;(module-predicate bv-adder*), but not for parametrized modules
+
+(defn bv-adder& (netlist n)
+  (and (equal (lookup-module #i(bv-adder n) netlist) (bv-adder* n))
+       (full-adder& (delete-module #i(bv-adder n) netlist))))
+
+(disable bv-adder&)
+
+;;(module-netlist bv-adder*), but not for parametrized modules
+
+(defn bv-adder$netlist (n)
+  (cons (bv-adder* n)
+        (full-adder$netlist)))
+
+(disable bv-adder$netlist)
+
+(defn bv-adder-body$induction (m n bindings state-bindings netlist)
+  ;; adapted from dual-eval-body-bindings
+  (if (zerop n)
+      bindings
+    (let ((occ-name #i(g m))
+          (outputs (list #i(sum m) #i(carry (add1 m))))
+          (fn 'full-adder)
+          (inputs (list #i(a m) #i(b m)
+                        #i(carry m))))
+      (bv-adder-body$induction
+       (add1 m)
+       (sub1 n)
+       (append (pairlist outputs
+                         (dual-eval 0
+                                    fn
+                                    (collect-value inputs bindings)
+                                    (value occ-name state-bindings)
+                                    netlist))
+               bindings)
+       state-bindings
+       netlist))))
+
+(prove-lemma bv-adder$unbound-in-body-sum (rewrite)
+             (implies
+              (lessp l m)
+              (unbound-in-body #i(sum l)
+                               (bv-adder-body m n)))
+             ;;Hint
+             ((enable unbound-in-body bv-adder-body)))
+
+(prove-lemma bv-adder$unbound-in-body-carry
+             (rewrite)
+             (implies (lessp l (add1 m))
+                      (unbound-in-body (index 'carry l)
+                                       (bv-adder-body m n)))
+             ((enable unbound-in-body bv-adder-body)))
+
+(disable bv-adder$unbound-in-body-sum)
+(disable bv-adder$unbound-in-body-carry)
+
+(prove-lemma bv-adder-body$value (rewrite)
+  (implies
+   (and (full-adder& netlist)
+        (boolp (value #i(carry m) bindings))
+        (bvp (collect-value #i(a m n) bindings))
+        (bvp (collect-value #i(b m n) bindings)))
+   (equal (collect-value
+           (append #i(sum m n) (list #i(carry (plus n m)))) ;outputs
+           (dual-eval 1 (bv-adder-body m n)
+                      bindings state-bindings netlist))
+          (bv-adder (value #i(carry m) bindings)
+                    (collect-value #i(a m n) bindings)
+                    (collect-value #i(b m n) bindings))))
+  ((enable bv-adder-body full-adder$value make-list fv-if-rewrite
+           bv-adder$unbound-in-body-sum bv-adder$unbound-in-body-carry)
+   (induct
+    (bv-adder-body$induction m n
+                             bindings state-bindings netlist))))
+
+(prove-lemma bv-adder-body-special-case$value (rewrite)
+  (implies
+   (and (full-adder& netlist)
+        (boolp (value #i(carry 0) bindings))
+        (bvp (collect-value #i(a 0 n) bindings))
+        (bvp (collect-value #i(b 0 n) bindings)))
+   (equal (collect-value
+           (append #i(sum 0 n) (list #i(carry n))) ;outputs
+           (dual-eval 1 (bv-adder-body 0 n)
+                      bindings state-bindings netlist))
+          (bv-adder (value #i(carry 0) bindings)
+                    (collect-value #i(a 0 n) bindings)
+                    (collect-value #i(b 0 n) bindings))))
+  ((use (bv-adder-body$value (m 0)))))
+
+(prove-lemma bv-adder$value (rewrite)
+  (implies
+   (and (bv-adder& netlist n)
+        (boolp c)
+        (bvp a)
+        (bvp b)
+        (equal (length a) n)
+        (equal (length b) n))
+   (equal
+    (dual-eval 0 #i(bv-adder n) (cons c (append a b)) state netlist)
+    (bv-adder c a b)))
+  ;; Hint
+  ((enable bv-adder& bv-adder*$destructure full-adder$value)
+   (disable collect-value-append)
+   ;;(expand (dual-eval 0 'bv-adder (cons c (append a b)) state netlist))
+   ))
+
+(disable bv-adder-body-special-case$value)
+(disable bv-adder-body$value)
+(disable bv-adder$value)

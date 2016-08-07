@@ -1,0 +1,25 @@
+                      The FM9001 Microprocessor:
+                     Its Formal Specification and
+                     Mechanical Correctness Proof
+
+We are releasing the mechanically checked proof scripts for the FM9001
+microprocessor.  The FM9001 is a general-purpose 32-bit microprocessor
+which has been implemented as a CMOS ASIC.  The proof being released
+rigorously connects the expression of the FM9001 as a netlist with the
+characterization of the FM9001 at the machine-code programmer's level.
+(The FM9001 is the foundation of the `CLI Stack', which also includes
+several verified compilers and applications all running on the FM9001.
+Other parts of the `CLI Stack' are separately released.)
+
+To obtain information about the FM9001 microprocessor and proof,
+please examine the URL http://www.cli.com/hardware/fm9001.html
+
+To obtain the FM9001 system, connect to Internet site ftp.cli.com by
+anonymous ftp, giving your email address as the password, `get' the
+file /pub/fm9001/README and follow the instructions therein.  Or get
+the URL ftp://ftp.cli.com/pub/fm9001/README via your WWW browser.
+
+Bishop C. Brock and Warren A. Hunt, Jr.
+brock@cli.com       hunt@cli.com
+Spring 1995
+

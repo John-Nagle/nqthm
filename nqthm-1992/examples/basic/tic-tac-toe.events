@@ -1,0 +1,1813 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(boot-strap nqthm)
+
+(defn boardp (x)
+  (if (nlistp x)
+      (equal x nil)
+      (and (or (equal (car x) 'x)
+               (equal (car x) 'o)
+               (equal (car x) f))
+           (boardp (cdr x)))))
+
+(defn endp (board)
+  (if (nlistp board)
+      t
+      (if (car board)
+          (endp (cdr board))
+          f)))
+
+(defn legal-movep (board1 player board2)
+  (cond ((nlistp board1) f)
+        ((equal (car board1) (car board2))
+         (legal-movep (cdr board1) player (cdr board2)))
+        ((and (equal (car board1) f)
+              (equal (car board2) player))
+         (equal (cdr board1) (cdr board2)))
+        (t f)))
+
+(defn nth (i board)
+  (if (zerop i)
+      (car board)
+      (nth (sub1 i) (cdr board))))
+
+(defn winp1 (x line board)
+  (if (nlistp line)
+      t
+      (if (equal x (nth (car line) board))
+          (winp1 x (cdr line) board)
+          f)))
+
+(defn winp (x board)
+  (or (winp1 x '(0 1 2) board)
+      (winp1 x '(3 4 5) board)
+      (winp1 x '(6 7 8) board)
+      (winp1 x '(0 3 6) board)
+      (winp1 x '(1 4 7) board)
+      (winp1 x '(2 5 8) board)
+      (winp1 x '(0 4 8) board)
+      (winp1 x '(2 4 6) board)))
+
+(disable winp)
+
+(defn other-player (player)
+  (if (equal player 'x) 'o 'x))
+
+(defn end (outcome player lst)
+
+; Outcome is either 'win or 'draw.  Player is either 'x or 'o.  We
+; combine those two to form the reported outcome, which is either
+; 'x-win, 'o-win, or 'draw.  Lst is the cdr after the board just
+; checked.  Lst must be the singleton list containing the reported
+; outcome.  If not, then we return f, indicating that the alleged game
+; was ill-formed (because either the outcome was not reported
+; accurately or because moves continued after a the game was over).
+; Otherwise, we return the reported outcome.
+
+  (let ((outcome (if (equal outcome 'win)
+                     (if (equal player 'o) 'o-win 'x-win)
+                     'draw)))
+    (if (equal lst (list outcome))
+        outcome
+        f)))
+
+(defn tic-tac-toep1 (board player lst)
+  (cond ((nlistp lst)
+         (end 'win (other-player player) lst))
+        ((not (boardp (car lst)))
+         f)
+        ((not (legal-movep board player (car lst)))
+         (end 'win (other-player player) (cdr lst)))
+        ((winp player (car lst))
+         (end 'win player (cdr lst)))
+        ((endp (car lst))
+         (end 'draw player (cdr lst)))
+        (t (tic-tac-toep1 (car lst) (other-player player) (cdr lst)))))
+
+(defn tic-tac-toep (lst)
+
+; We check that lst is a legal tic-tac-toe game and announce the
+; winner (if any).  Precisely, we mean that it is a succession of
+; tic-tac-toe boards, starting with the empty one, each successive
+; board of which is obtained from the previous board via a legal move
+; by the appropriate player.  We suppose X moves first.  We return one
+; of four tokens: 'X-WIN, 'O-WIN, 'DRAW or F.  We return F if the
+; sequence is not a proper list of independently well-formed
+; tic-tac-toe boards ending in either a win or a drawn game on a
+; completely filled out board.  If on a given player's turn the board
+; presented is not obtained by a move from the previous board, we
+; award a win to the other player.  Thus, a player making an illegal
+; move or no move, automatically forfeits.
+
+  (if (and (listp lst)
+           (equal (car lst)
+                  (list f f f
+                        f f f
+                        f f f)))
+      (tic-tac-toep1 (car lst) 'x (cdr lst))
+      f))
+
+
+; We now develop a function, tic-tac-toe, that plays a game of
+; tic-tac-toe against a given list of opponent moves.  We prove
+; two things about it:  that it plays tic-tac-toe and that it
+; never loses.  Something else we could prove about it is that
+; it plays "fair", i.e., it respects the user's moves and it
+; doesn't cheat by looking ahead.  For example, we could arrange
+; for the program to win by ignoring the user's request to put his
+; 'x in a winning spot!  Or we could look ahead to his second move
+; and put our first 'o on that spot, guaranteeing that the poor
+; user always makes an illegal second move!  We'll return to these
+; issues after exhibiting the definition.
+
+(defn move (x i board)
+  (if (nlistp board)
+      board
+      (if (zerop i)
+          (cons x (cdr board))
+          (cons (car board)
+                (move x (sub1 i) (cdr board))))))
+
+(defn legalp (i board)
+  (and (lessp i '9)
+       (equal (nth i board) f)))
+
+(defn open-squares (board)
+  (if (nlistp board)
+      0
+      (if (car board)
+          (open-squares (cdr board))
+          (add1 (open-squares (cdr board))))))
+
+(prove-lemma legal-moves-reduce-open-squares (rewrite)
+  (implies (and x (legalp i board))
+           (lessp (open-squares (move x i board))
+                  (open-squares board))))
+
+(prove-lemma move-never-increases-open-squares (rewrite)
+  (implies x (not (lessp (open-squares board)
+                         (open-squares (move x i board))))))
+
+; A carefully crafted aspect of pick-move, defined below, is that
+; it *always* returns a number less than 9.  This required a
+; subtle coding of pick-move1, where we return 0 when we fail to
+; find an open square.  The reason we want pick-move always to
+; return a number less than 9 has nothing to do with its
+; correctness vis-a-vis tic-tac-toep.  Rather, it is concerned
+; with its easy implementation.  If pick-move sometimes returns
+; 9 (say), then the implementation may violate certain bounds
+; (on say the size of numerically represented boards when a 
+; moven is carried out on 9).  The only way we can prevent it
+; is to carry along the invariant that the board is not at
+; and endp.  But we don't want endp in the implementation -- it
+; suffices just to count the moves.  Since we just count moves, the
+; legality of pick-move's answer depends on the invariant that
+; the number of moves is related in a certain way to the number of
+; open squares and hence to endp.  Rather than maintain this invariant,
+; I am just defining pick-move1 to return 0 when it is tempted to
+; return 9.
+
+(defn pick-move1 (board i)
+  (cond ((nlistp board) 0)
+        ((equal (car board) f) i)
+        (t (pick-move1 (cdr board) (add1 i)))))
+
+(defn pick-move (board)
+  (let ((book-move
+         (assoc
+          board
+          '(((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE O X X) . 2)  
+            ((*1*FALSE X X *1*FALSE O O O X X) . 3)  
+            ((X *1*FALSE X *1*FALSE O O O X X) . 3)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE O X X) . 5)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O *1*FALSE O X X) . 2)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X X O X) . 1)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE X O X) . 1)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE X O X) . 1)  
+            ((O X X *1*FALSE O *1*FALSE X O X) . 5)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((*1*FALSE *1*FALSE O *1*FALSE O X *1*FALSE X X) . 6)  
+            ((*1*FALSE *1*FALSE O X O X X O X) . 1)  
+            ((*1*FALSE *1*FALSE O *1*FALSE O X X *1*FALSE X) . 7)  
+            ((*1*FALSE *1*FALSE O X O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((X *1*FALSE O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O X O *1*FALSE X) . 2)  
+            ((*1*FALSE *1*FALSE X X O *1*FALSE O *1*FALSE X) . 5)  
+            ((*1*FALSE X *1*FALSE X O *1*FALSE O *1*FALSE X) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O *1*FALSE X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O O *1*FALSE X X) . 3)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O O X *1*FALSE X) . 3)  
+            ((O *1*FALSE X X O O *1*FALSE X X) . 6)  
+            ((O *1*FALSE X X O O X *1*FALSE X) . 7)  
+            ((*1*FALSE X X *1*FALSE O O *1*FALSE *1*FALSE X) . 3)  
+            ((X *1*FALSE X *1*FALSE O O *1*FALSE *1*FALSE X) . 3)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 5)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X O X O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 2)  
+            ((X O X *1*FALSE O *1*FALSE O X X) . 5)  
+            ((X O *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((X O *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((X O *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE X) . 7)  
+            ((X O *1*FALSE X O *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((X O X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE 
+                       *1*FALSE X) 
+             . 4)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE O X X) . 2)  
+            ((*1*FALSE X X *1*FALSE O O O X X) . 3)  
+            ((X *1*FALSE X *1*FALSE O O O X X) . 3)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE O X X) . 5)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O *1*FALSE O X X) . 2)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((X *1*FALSE X O O *1*FALSE X X O) . 5)  
+            ((X X *1*FALSE O O *1*FALSE X X O) . 5)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X X O) . 3)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((X O *1*FALSE *1*FALSE O X X X O) . 3)  
+            ((X O *1*FALSE X O X *1*FALSE X O) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X *1*FALSE X *1*FALSE) . 8)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O X O X *1*FALSE) . 2)  
+            ((O *1*FALSE X X O *1*FALSE O X X) . 5)  
+            ((O *1*FALSE X X O X O X *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE O X *1*FALSE) . 8)  
+            ((*1*FALSE X *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((X O X X O *1*FALSE *1*FALSE X O) . 6)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((*1*FALSE X O X O *1*FALSE X X O) . 5)  
+            ((X X O *1*FALSE O *1*FALSE X X O) . 5)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE X *1*FALSE) . 6)  
+            ((*1*FALSE X O X O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE O X X) . 2)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O X O X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((X O X *1*FALSE O *1*FALSE O X X) . 5)  
+            ((X O X *1*FALSE O X O X *1*FALSE) . 8)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE X 
+                       *1*FALSE) 
+             . 4)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X X O X) . 1)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE X O X) . 1)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE X O X) . 1)  
+            ((O X X *1*FALSE O *1*FALSE X O X) . 5)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((X *1*FALSE X O O *1*FALSE X X O) . 5)  
+            ((X X *1*FALSE O O *1*FALSE X X O) . 5)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X X O) . 3)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O X X *1*FALSE O) . 3)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O *1*FALSE X *1*FALSE X) . 7)  
+            ((O *1*FALSE *1*FALSE X O *1*FALSE X X *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O X X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((*1*FALSE O X *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((*1*FALSE O X *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((*1*FALSE O X *1*FALSE O X X *1*FALSE *1*FALSE) . 7)  
+            ((*1*FALSE O X X O *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((X O X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 1)  
+            ((O X X *1*FALSE O *1*FALSE X O X) . 5)  
+            ((O X *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((O X *1*FALSE *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((O X *1*FALSE *1*FALSE O X X *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((X *1*FALSE *1*FALSE O O *1*FALSE X *1*FALSE X) . 5)  
+            ((X *1*FALSE *1*FALSE O O *1*FALSE X X *1*FALSE) . 5)  
+            ((X O *1*FALSE O O X X *1*FALSE X) . 7)  
+            ((X O *1*FALSE O O X X X *1*FALSE) . 8)  
+            ((X *1*FALSE X O O *1*FALSE X *1*FALSE *1*FALSE) . 5)  
+            ((X X *1*FALSE O O *1*FALSE X *1*FALSE *1*FALSE) . 5)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 3)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE X *1*FALSE 
+                       *1*FALSE) 
+             . 4)  
+            ((*1*FALSE *1*FALSE O *1*FALSE O X *1*FALSE X X) . 6)  
+            ((*1*FALSE *1*FALSE O X O X X O X) . 1)  
+            ((*1*FALSE *1*FALSE O *1*FALSE O X X *1*FALSE X) . 7)  
+            ((*1*FALSE *1*FALSE O X O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((X *1*FALSE O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE X) . 2)  
+            ((X O *1*FALSE *1*FALSE O X X X O) . 3)  
+            ((X O *1*FALSE X O X *1*FALSE X O) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X *1*FALSE X *1*FALSE) . 8)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O X X *1*FALSE O) . 3)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE O X X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O X *1*FALSE *1*FALSE X) . 2)  
+            ((O *1*FALSE *1*FALSE X O X *1*FALSE X *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O X X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((X O X *1*FALSE O X X *1*FALSE O) . 7)  
+            ((X O X X O X *1*FALSE *1*FALSE O) . 7)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE X *1*FALSE) . 6)  
+            ((O X O *1*FALSE O X X *1*FALSE X) . 7)  
+            ((O X O *1*FALSE O X X X *1*FALSE) . 8)  
+            ((O X O X O X X *1*FALSE *1*FALSE) . 8)  
+            ((*1*FALSE X O X O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X X O *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 2)  
+            ((X *1*FALSE O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((X *1*FALSE O *1*FALSE O X *1*FALSE X *1*FALSE) . 6)  
+            ((X *1*FALSE O O O X X *1*FALSE X) . 7)  
+            ((X *1*FALSE O O O X X X *1*FALSE) . 8)  
+            ((X *1*FALSE O *1*FALSE O X X *1*FALSE *1*FALSE) . 3)  
+            ((X *1*FALSE O X O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X X O *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE X *1*FALSE *1*FALSE 
+                       *1*FALSE) 
+             . 4)  
+            ((O X O *1*FALSE X *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((O *1*FALSE *1*FALSE *1*FALSE X *1*FALSE *1*FALSE *1*FALSE X) . 2)  
+            ((O O X *1*FALSE X *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((O X O *1*FALSE X *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((O *1*FALSE *1*FALSE *1*FALSE X *1*FALSE X *1*FALSE *1*FALSE) . 2)  
+            ((O *1*FALSE *1*FALSE O X X *1*FALSE *1*FALSE X) . 6)  
+            ((O *1*FALSE *1*FALSE O X X *1*FALSE X *1*FALSE) . 6)  
+            ((O *1*FALSE *1*FALSE O X X X *1*FALSE *1*FALSE) . 2)  
+            ((O *1*FALSE X O X X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((O X *1*FALSE O X X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((O *1*FALSE *1*FALSE *1*FALSE X X *1*FALSE *1*FALSE *1*FALSE) . 3)  
+            ((O X O X X O X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X X O X *1*FALSE *1*FALSE) . 2)  
+            ((O *1*FALSE X X X O *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((O X *1*FALSE X X O *1*FALSE *1*FALSE *1*FALSE) . 7)  
+            ((O *1*FALSE *1*FALSE X X *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 5)  
+            ((O *1*FALSE X *1*FALSE X *1*FALSE O *1*FALSE X) . 3)  
+            ((O *1*FALSE X *1*FALSE X *1*FALSE O X *1*FALSE) . 3)  
+            ((O *1*FALSE X *1*FALSE X X O *1*FALSE *1*FALSE) . 3)  
+            ((O *1*FALSE X X X *1*FALSE O *1*FALSE *1*FALSE) . 5)  
+            ((O *1*FALSE X *1*FALSE X *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((O X *1*FALSE O X X *1*FALSE O X) . 6)  
+            ((O X *1*FALSE *1*FALSE X X *1*FALSE O *1*FALSE) . 3)  
+            ((O X *1*FALSE X X *1*FALSE *1*FALSE O *1*FALSE) . 5)  
+            ((O X X *1*FALSE X X O O *1*FALSE) . 8)  
+            ((O X X X X *1*FALSE O O *1*FALSE) . 8)  
+            ((O X X *1*FALSE X *1*FALSE *1*FALSE O *1*FALSE) . 6)  
+            ((O X *1*FALSE *1*FALSE X *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 7)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O X O *1*FALSE X) . 2)  
+            ((*1*FALSE *1*FALSE X X O *1*FALSE O *1*FALSE X) . 5)  
+            ((*1*FALSE X *1*FALSE X O *1*FALSE O *1*FALSE X) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O *1*FALSE X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE O X X) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O X O X *1*FALSE) . 2)  
+            ((O *1*FALSE X X O *1*FALSE O X X) . 5)  
+            ((O *1*FALSE X X O X O X *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE O X *1*FALSE) . 8)  
+            ((*1*FALSE X *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((*1*FALSE *1*FALSE *1*FALSE X O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((O *1*FALSE *1*FALSE X O *1*FALSE X *1*FALSE X) . 7)  
+            ((O *1*FALSE *1*FALSE X O *1*FALSE X X *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O X X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O X *1*FALSE *1*FALSE X) . 2)  
+            ((O *1*FALSE *1*FALSE X O X *1*FALSE X *1*FALSE) . 8)  
+            ((O *1*FALSE *1*FALSE X O X X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O O *1*FALSE X X) . 6)  
+            ((O *1*FALSE X X O O X *1*FALSE X) . 7)  
+            ((O *1*FALSE X X O *1*FALSE *1*FALSE *1*FALSE X) . 5)  
+            ((O *1*FALSE X X O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((O *1*FALSE X X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X O X O *1*FALSE *1*FALSE X X) . 6)  
+            ((O X O X O *1*FALSE X *1*FALSE X) . 7)  
+            ((O X *1*FALSE X O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((O X *1*FALSE X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O *1*FALSE X) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O X O *1*FALSE *1*FALSE) . 2)  
+            ((X O X X O *1*FALSE O *1*FALSE X) . 7)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((*1*FALSE *1*FALSE *1*FALSE X *1*FALSE *1*FALSE *1*FALSE *1*FALSE 
+                       *1*FALSE) 
+             . 4)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O O *1*FALSE X X) . 3)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O O X *1*FALSE X) . 3)  
+            ((O *1*FALSE X X O O *1*FALSE X X) . 6)  
+            ((O *1*FALSE X X O O X *1*FALSE X) . 7)  
+            ((*1*FALSE X X *1*FALSE O O *1*FALSE *1*FALSE X) . 3)  
+            ((X *1*FALSE X *1*FALSE O O *1*FALSE *1*FALSE X) . 3)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 5)  
+            ((X O X X O *1*FALSE *1*FALSE X O) . 6)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((*1*FALSE O X *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((*1*FALSE O X *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((*1*FALSE O X *1*FALSE O X X *1*FALSE *1*FALSE) . 7)  
+            ((*1*FALSE O X X O *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((X O X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 1)  
+            ((X O X *1*FALSE O X X *1*FALSE O) . 7)  
+            ((X O X X O X *1*FALSE *1*FALSE O) . 7)  
+            ((*1*FALSE *1*FALSE X *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O O *1*FALSE X X) . 6)  
+            ((O *1*FALSE X X O O X *1*FALSE X) . 7)  
+            ((O *1*FALSE X X O *1*FALSE *1*FALSE *1*FALSE X) . 5)  
+            ((O *1*FALSE X X O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((O *1*FALSE X X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O *1*FALSE X X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 5)  
+            ((O X X *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((O X X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X X *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((X O X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((X O X O O X *1*FALSE X *1*FALSE) . 8)  
+            ((X O X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((X O X *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 7)  
+            ((X O X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 7)  
+            ((*1*FALSE *1*FALSE X *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE 
+                       *1*FALSE) 
+             . 4)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X O X O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 2)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((*1*FALSE X O X O *1*FALSE X X O) . 5)  
+            ((X X O *1*FALSE O *1*FALSE X X O) . 5)  
+            ((*1*FALSE X O *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE X *1*FALSE) . 6)  
+            ((*1*FALSE X O X O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 2)  
+            ((O X X *1*FALSE O *1*FALSE X O X) . 5)  
+            ((O X *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((O X *1*FALSE *1*FALSE O *1*FALSE X X *1*FALSE) . 8)  
+            ((O X *1*FALSE *1*FALSE O X X *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((*1*FALSE X O *1*FALSE O X *1*FALSE X *1*FALSE) . 6)  
+            ((O X O *1*FALSE O X X *1*FALSE X) . 7)  
+            ((O X O *1*FALSE O X X X *1*FALSE) . 8)  
+            ((O X O X O X X *1*FALSE *1*FALSE) . 8)  
+            ((*1*FALSE X O X O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X X O *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 2)  
+            ((O X O X O *1*FALSE *1*FALSE X X) . 6)  
+            ((O X O X O *1*FALSE X *1*FALSE X) . 7)  
+            ((O X *1*FALSE X O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((O X *1*FALSE X O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X *1*FALSE X O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 5)  
+            ((O X X *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 8)  
+            ((O X X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 8)  
+            ((O X X *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((O X X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 8)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((X X O *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X X O X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((*1*FALSE X *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE 
+                       *1*FALSE) 
+             . 4)  
+            ((X O X *1*FALSE O *1*FALSE O X X) . 5)  
+            ((X O *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X X) . 6)  
+            ((X O *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE X) . 7)  
+            ((X O *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE X) . 7)  
+            ((X O *1*FALSE X O *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((X O X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE O X X) . 2)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O X O X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((X O X *1*FALSE O *1*FALSE O X X) . 5)  
+            ((X O X *1*FALSE O X O X *1*FALSE) . 8)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((X *1*FALSE *1*FALSE O O *1*FALSE X *1*FALSE X) . 5)  
+            ((X *1*FALSE *1*FALSE O O *1*FALSE X X *1*FALSE) . 5)  
+            ((X O *1*FALSE O O X X *1*FALSE X) . 7)  
+            ((X O *1*FALSE O O X X X *1*FALSE) . 8)  
+            ((X *1*FALSE X O O *1*FALSE X *1*FALSE *1*FALSE) . 5)  
+            ((X X *1*FALSE O O *1*FALSE X *1*FALSE *1*FALSE) . 5)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 3)  
+            ((X *1*FALSE O *1*FALSE O X *1*FALSE *1*FALSE X) . 6)  
+            ((X *1*FALSE O *1*FALSE O X *1*FALSE X *1*FALSE) . 6)  
+            ((X *1*FALSE O O O X X *1*FALSE X) . 7)  
+            ((X *1*FALSE O O O X X X *1*FALSE) . 8)  
+            ((X *1*FALSE O *1*FALSE O X X *1*FALSE *1*FALSE) . 3)  
+            ((X *1*FALSE O X O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X X O *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X *1*FALSE *1*FALSE *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O *1*FALSE X) . 2)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE O X *1*FALSE) . 2)  
+            ((X *1*FALSE *1*FALSE X O X O *1*FALSE *1*FALSE) . 2)  
+            ((X O X X O *1*FALSE O *1*FALSE X) . 7)  
+            ((X *1*FALSE *1*FALSE X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X O X *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 7)  
+            ((X O X O O X *1*FALSE X *1*FALSE) . 8)  
+            ((X O X *1*FALSE O *1*FALSE X *1*FALSE *1*FALSE) . 7)  
+            ((X O X *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 7)  
+            ((X O X X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 7)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE *1*FALSE X) . 6)  
+            ((X X O *1*FALSE O *1*FALSE *1*FALSE X *1*FALSE) . 6)  
+            ((X X O *1*FALSE O X *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X X O X O *1*FALSE *1*FALSE *1*FALSE *1*FALSE) . 6)  
+            ((X *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE *1*FALSE 
+                *1*FALSE) 
+             . 4)))))
+    (if book-move (cdr book-move) (pick-move1 board 0))))
+
+(disable pick-move)
+
+; Note that in the following automation of the game, we do not even
+; check that the user might have won nor do we check that our moves
+; are legal.  We know these checks are redundant.  It is worth noting
+; that our formal spec of the game will force us to prove this
+; redundancy.  Suppose the user did win but we then replied with another
+; move.  Then the game would be ill-formed.  Similarly, if our move
+; is illegal, either because our 'o replaces an 'x or because our 'o
+; goes into a nonexistent square, the resulting board will not pass
+; legal-movep.
+
+(defn tic-tac-toe1 (xmoves board)
+  (let ((board1 (move 'x (car xmoves) board)))
+    (if (legalp (car xmoves) board)
+        (if (endp board1)
+            (list board1 'draw)
+            (let ((board2 (move 'o (pick-move board1) board1)))
+              (if (winp 'o board2)
+                  (list board1 board2 'o-win)
+                  (cons board1
+                        (cons board2 (tic-tac-toe1 (cdr xmoves)
+                                                   board2))))))
+        (list board1 'o-win)))
+  ((lessp (open-squares board))))
+
+(defn tic-tac-toe (xmoves)
+  (let ((board0 (list f f f
+                      f f f
+                      f f f)))
+    (cons board0 (tic-tac-toe1 xmoves board0))))
+
+; We now set about trying to prove that tic-tac-toe plays the game.
+; We start with some fundamentals that I know will be needed even
+; though I haven't seen their explicit use.
+
+(defn length (x)
+  (if (nlistp x)
+      0
+      (add1 (length (cdr x)))))
+
+(prove-lemma length-move (rewrite)
+  (equal (length (move x i board)) (length board)))
+
+(defn legal-bookp (alist)
+  (if (nlistp alist)
+      t
+      (and (legalp (cdar alist) (caar alist))
+           (legal-bookp (cdr alist)))))
+
+(prove-lemma legal-bookp-implies-legalp-cdr-assoc (rewrite)
+  (implies (and (legal-bookp alist)
+                (assoc board alist))
+           (legalp (cdr (assoc board alist)) board)))
+
+(defn pick-move2 (board)
+  (cond ((nlistp board) 0)
+        ((equal (car board) f) 0)
+        (t (add1 (pick-move2 (cdr board))))))
+
+
+; The following theorem probably holds a record for successfully
+; completed subgoals:
+
+;     That finishes the proof of *1.1.1.1.1.1.1.1.1.1, which, in turn, finishes 
+;the proof of *1.1.1.1.1.1.1.1.1, which finishes the proof of *1.1.1.1.1.1.1.1, 
+;which finishes the proof of *1.1.1.1.1.1.1, which, consequently, finishes the 
+;proof of *1.1.1.1.1.1, which finishes the proof of *1.1.1.1.1, which finishes 
+;the proof of *1.1.1.1, which finishes the proof of *1.1.1, which, in turn, 
+;finishes the proof of *1.1, which finishes the proof of *1.  Q.E.D. 
+
+;[ 0.0 6.5 3.4 ]   (On a Sparc 2)
+
+; This would be even more impressive if boards had length 1000!
+
+(prove-lemma not-endp-implies-legalp-pick-move2 (rewrite)
+  (implies (and (not (endp board))
+                (lessp (length board) 10))
+           (legalp (pick-move2 board) board)))
+
+(prove-lemma pick-move1-is-pick-move2 (rewrite)
+  (implies (and (not (endp board))
+                (numberp i))
+           (equal (pick-move1 board i) (plus i (pick-move2 board)))))
+
+; If you don't do the following we get stack overflow while trying to confirm
+; that the alist built into pick-moves is a legal-bookp.
+
+(compile-uncompiled-defns "tmp")
+
+(prove-lemma legalp-pick-move (rewrite)
+  (implies (and (not (endp board))
+                (lessp (length board) 10))
+           (legalp (pick-move board) board))
+  ((enable pick-move)
+   (disable assoc)))
+
+(prove-lemma boardp-move (rewrite)
+  (implies (and (boardp board)
+                (or (equal player 'x)
+                    (equal player 'o)))
+           (boardp (move player i board))))
+
+; We now establish that pick-move indeed has our "carefully crafted
+; aspect" of less than 9, when (endp board)!
+
+(prove-lemma legalp-implies-lessp-9 (rewrite)
+  (implies (and (legalp (cdr (assoc board alist)) board)
+                (equal (length board) 9))
+           (lessp (cdr (assoc board alist)) 9))
+  ((enable legalp)))
+
+(prove-lemma endp-implies-pick-move1-0 (rewrite)
+  (implies (endp board)
+           (equal (pick-move1 board i) 0)))
+
+(prove-lemma lessp-pick-move (rewrite)
+  (implies (equal (length board) 9)
+           (lessp (pick-move board) 9))
+  ((disable legalp-pick-move assoc)
+   (enable pick-move)
+   (use (legalp-pick-move))))
+
+; The strategy of our proof that tic-tac-toe never loses is to arrange
+; for tic-tac-toe to expand so as to play all possible games!  The first
+; step is the lemma below, which forces the function open provided the board
+; is given as an explicit list of 9 elements.  The lemma below is just
+; the equation of (tic-tac-toe xmoves board) with its body, for board
+; replaced by an explicit list.
+
+(prove-lemma tic-tac-toe1-opener (rewrite)
+  (equal 
+   (tic-tac-toe1 xmoves (list s0 s1 s2 s3 s4 s5 s6 s7 s8)) 
+   (if 
+    (legalp (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)) 
+    (cond ((endp (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8))) 
+           (list (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)) 'draw)) 
+          ((winp 'o 
+                 (move 'o 
+                       (pick-move (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8))) 
+                       (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)))) 
+           (list (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)) 
+                 (move 'o 
+                       (pick-move (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8))) 
+                       (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)))
+                 'o-win)) 
+          (t (cons (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)) 
+                   (cons (move 'o 
+                               (pick-move (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8))) 
+                               (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)))
+                         (tic-tac-toe1 (cdr xmoves) 
+                                       (move 'o 
+                                             (pick-move (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8))) 
+                                             (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)))))))) 
+    (list (move 'x (car xmoves) (list s0 s1 s2 s3 s4 s5 s6 s7 s8)) 'o-win)))
+  ((disable legalp move)))
+
+(disable tic-tac-toe1)
+
+; With that lemma in place, the function will expand repeatedly, as soon as
+; board2 is reduced to normal form.
+
+; The next problem is to force the first legalp expression above to cause us
+; to case split on all the legal moves on the given board.  Our first attempt
+; at this proof just let legalp expand and we considered all 9 possible moves.
+; But this caused a tremendous explosion.
+
+; The sequence of lemmas below culminate in the following wondrous
+; effect.  (legalp x (list s0 s1 ... s8)) expands to (or ...(equal x
+; i)...)  for just those i such that si is f.  To achieve this we
+; transform legalp in two steps.  First we show that it is equal to
+; legalp1, below, which does not use NTH and instead decrements x and
+; cdrs board.  Then we transform legalp1 into legalp2, which keeps x
+; unchanged but cdrs board as it increments an accumulator i.
+; Finally, we prove the opener lemmas that let the cdring of board
+; drive the production of a bunch of disjuncts against the running i.
+; This development was fairly subtle for me.
+
+(defn legalp1 (x board)
+  (if (zerop x)
+      (not (car board))
+      (if (nlistp board)
+          f
+          (legalp1 (sub1 x) (cdr board)))))
+
+(prove-lemma legalp1-fact1 (rewrite)
+  (implies (not (lessp x (length board)))
+           (not (legalp1 x board))))
+
+(prove-lemma legalp1-fact2 (rewrite)
+  (implies (nth x board)
+           (not (legalp1 x board))))
+
+(prove-lemma legalp1-fact3 (rewrite)
+  (implies (and (lessp x (length board))
+                     (not (nth x board)))
+           (legalp1 x board)))
+
+; So here is the first half...
+
+(prove-lemma legalp-is-legalp1 (rewrite)
+  (implies (equal (length board) '9)
+           (equal (legalp x board)
+                  (legalp1 x board))))
+
+; Now we introduce legalp2.
+
+(defn legalp2 (x board i)
+  (if (nlistp board)
+      f
+      (if (and (not (car board)) (equal (fix x) i))
+          t
+          (legalp2 x (cdr board) (add1 i)))))
+
+(prove-lemma legalp2-fact1 (rewrite)
+  (implies (lessp x i)
+           (not (legalp2 x board i))))
+
+(prove-lemma sub1-difference (rewrite)
+  (equal (sub1 (difference x y))
+         (difference (sub1 x) y)))
+
+(prove-lemma legalp1-is-legalp2-gen nil
+  (implies (and (numberp i)
+                (not (lessp x i)))
+           (equal (legalp1 (difference x i) board)
+                  (legalp2 x board i))))
+
+(disable sub1-difference)
+
+; Here is the second half...
+
+(prove-lemma legalp1-is-legalp2 (rewrite)
+  (equal (legalp1 x board)
+         (legalp2 x board '0))
+  ((use (legalp1-is-legalp2-gen (i '0)))))
+
+; Now we'll show how to use semi-explicit boards to drive the production
+; of disjuncts.
+
+(prove-lemma legalp2-opener-f (rewrite)
+  (implies (numberp i)
+           (equal (legalp2 x (cons f board) i)
+                  (or (if (equal i 0) (zerop x) (equal x i))
+                      (legalp2 x board (add1 i))))))
+
+(prove-lemma legalp2-opener-x (rewrite)
+  (equal (legalp2 x (cons 'x board) i)
+         (legalp2 x board (add1 i))))
+
+(prove-lemma legalp2-opener-o (rewrite)
+  (equal (legalp2 x (cons 'o board) i)
+         (legalp2 x board (add1 i))))
+
+(prove-lemma legalp2-opener-nil (rewrite)
+  (equal (legalp2 x 'nil i) f))
+
+(disable legalp2)
+(disable legalp)
+
+; And now we put it all together and cut out the middlemen:
+
+(prove-lemma legalp-simplifier (rewrite)
+  (equal (legalp x (list s0 s1 s2 s3 s4 s5 s6 s7 s8))
+         (legalp2 x (list s0 s1 s2 s3 s4 s5 s6 s7 s8) 0)))
+
+(disable legalp-is-legalp1)
+(disable legalp1-is-legalp2)
+(disable member)
+(disable move)
+
+(prove-lemma noop-move-gen nil
+  (implies (not (lessp i (length board)))
+           (equal (move x i board) board))
+  ((enable move)))
+
+(prove-lemma noop-move (rewrite)
+  (implies (and (equal (length board) 9)
+                (numberp i)
+                (not (equal i 0))
+                (not (equal i 1))
+                (not (equal i 2))
+                (not (equal i 3))
+                (not (equal i 4))
+                (not (equal i 5))
+                (not (equal i 6))
+                (not (equal i 7))
+                (not (equal i 8)))
+           (equal (move x i board) board))
+  ((use (noop-move-gen))))
+
+(prove-lemma move-zerop (rewrite)
+  (implies (and (equal (length board) 9)
+                (not (numberp i)))
+           (equal (move x i board) (cons x (cdr board))))
+  ((enable move)))
+
+(prove-lemma not-legal-movep-x-x (rewrite)
+  (not (legal-movep board 'x board)))
+
+(prove-lemma not-legal-movep-if-occupied (rewrite)
+  (implies (nth i board)
+           (not (legal-movep board 'x (move 'x i board))))
+  ((enable move)))
+
+(prove-lemma not-legal-movep-if-too-big (rewrite)
+  (implies (not (lessp i (length board)))
+           (not (legal-movep board 'x (move 'x i board))))
+  ((enable move)))
+
+; This is another hideously silly descent from 9 to 0 in subgoals.  But, hey,
+; it works...
+
+(prove-lemma legal-movep-move (rewrite)
+  (implies (and (boardp board)
+                (equal (length board) 9))
+           (equal (legal-movep board 'x (move 'x i board))
+                  (legalp i board)))
+  ((enable legalp move)))
+
+(disable legal-movep)
+
+; The following theorem produces 4.8 Mb of .proofs output.  The proof
+; takes roughly 7.5 minutes and generates 2930 cases.
+
+(prove-lemma tic-tac-toe-correct1 (rewrite)
+  (member (tic-tac-toep (tic-tac-toe xmoves))
+          '(draw o-win)))
+
+(disable tic-tac-toe1-opener)
+(disable legalp-simplifier)
+
+; Comments on What is Not Proved
+
+; This is not a very satisfying specification for an implementation of tic-tac-toe.
+; I can think of two ways to cheat while satisfying this spec.
+
+; (1) Return a fixed game or, more generally, ignore the user's moves
+;     when they get in your way of winning.  One could still prove the
+;     above theorem.
+
+; (2) Look ahead into the user's moves and always make your first move
+;     to the square to which he'll make his second.  This guarantees
+;     that he will always play illegal games and lose by default.
+
+; We could avoid (1) by proving another theorem that says "the user's
+; actual moves (extracted from the sequence of boards returned by
+; tic-tac-toe) is an initial subsequence of the specified moves."
+; I think this would not be hard to prove.
+
+; We could avoid (2) by proving a theorem that says "If two lists of user
+; moves, xmoves1 and xmoves2, agree on the first i moves, then 
+; (tic-tac-toe xmoves1) and (tic-tac-toe xmoves2) agree on the first
+; 2i boards."  I believe this theorem rules out the possibility that
+; the machine is looking ahead.
+
+; We address these two concerns below, in slightly reformulated ways.
+
+; We now turn to the next problem, proving that the function honors
+; the requested moves by 'x.
+
+(defn x-moves-honored1 (board xmoves lst)
+  (cond ((nlistp lst) t)
+        ((nlistp (cdr lst)) t)
+        (t (and (equal (car lst) (move 'x (car xmoves) board))
+                (x-moves-honored1 (cadr lst) (cdr xmoves) (cddr lst))))))
+
+(defn x-moves-honored (xmoves lst)
+  (x-moves-honored1 (car lst) xmoves (cdr lst)))
+
+(prove-lemma tic-tac-toe-correct2-lemma (rewrite)
+  (implies (boardp board)
+           (x-moves-honored1 board xmoves (tic-tac-toe1 xmoves board)))
+  ((enable tic-tac-toe1)
+   (disable legalp move endp pick-move)))
+
+(prove-lemma tic-tac-toe-correct2 (rewrite)
+  (x-moves-honored xmoves (tic-tac-toe xmoves)))
+
+; The final conjunction of the specification is that the game playing
+; program does not look-ahead into xmoves!
+
+(defn init-game1 (n lst)
+  (if (zerop n)
+      nil
+      (if (nlistp lst)
+          nil
+          (if (nlistp (cdr lst))
+              (list (car lst))
+              (cons (car lst)
+                    (cons (cadr lst)
+                          (init-game1 (sub1 n) (cddr lst))))))))
+
+(defn init-game (n lst)
+  (cons (car lst) (init-game1 n (cdr lst))))
+
+(prove-lemma tic-tac-toe-correct3-lemma (rewrite)
+  (equal (equal (init-game1 (length opening)
+                            (tic-tac-toe1 (append opening xmoves1) board))
+                (init-game1 (length opening)
+                            (tic-tac-toe1 (append opening xmoves2) board)))
+         t)
+  ((induct (tic-tac-toe1 opening board))
+   (enable tic-tac-toe1)
+   (disable legalp move endp pick-move)))  
+
+(prove-lemma tic-tac-toe-correct3 (rewrite)
+  (equal (equal (init-game (length opening)
+                           (tic-tac-toe (append opening xmoves1)))
+                (init-game (length opening)
+                           (tic-tac-toe (append opening xmoves2))))
+         t))
+
+(prove-lemma tic-tac-toe-correct nil
+  (and (member (tic-tac-toep (tic-tac-toe xmoves))
+               '(draw o-win))
+       (x-moves-honored xmoves (tic-tac-toe xmoves))
+       (equal (init-game (length opening)
+                         (tic-tac-toe (append opening xmoves1)))
+              (init-game (length opening)
+                         (tic-tac-toe (append opening xmoves2)))))
+  ((disable member tic-tac-toep tic-tac-toe x-moves-honored init-game)))
+       
+; The following theorem establishes that the outcome reported by a
+; legal game is in fact the outcome reported by the definition of the
+; game.  Note that this is a fact about legal games, not about our
+; particular strategy.
+
+(prove-lemma tic-tac-toep1-outcome (rewrite)
+  (implies (tic-tac-toep1 board player lst)
+           (equal (tic-tac-toep1 board player lst)
+                  (nth (sub1 (length lst)) lst))))
+
+(prove-lemma tic-tac-toep-outcome (rewrite)
+  (implies (tic-tac-toep lst)
+           (equal (tic-tac-toep lst)
+                  (nth (sub1 (length lst)) lst))))
+
+#|
+Historical Plaque:
+
+My original formulation of the problem did not contain tic-tac-toep.
+Instead I had a tic-tac-toe function which allegedly played a game
+against the user.  The intent was that the buyer read this function
+and was convinced that it played the game we call tic-tac-toe.  Then
+I proved that it never lost, and the buyer would have been surprised
+and pleased.  Here is the definition and the main theorem:
+
+(defn tic-tac-toe (xmoves board)
+  (if (legalp (car xmoves) board)
+      (if (winp 'x
+                (move 'x (car xmoves) board))
+          'x-won
+          (if (endp (move 'x (car xmoves) board))
+              'draw
+              (if (legalp (pick-move (move 'x (car xmoves) board))
+                          (move 'x (car xmoves) board))
+                  (if (winp 'o
+                            (move 'o
+                                  (pick-move (move 'x (car xmoves) board))
+                                  (move 'x (car xmoves) board)))
+                      'o-won
+                      (tic-tac-toe (cdr xmoves)
+                                   (move 'o
+                                         (pick-move (move 'x (car xmoves) board))
+                                         (move 'x (car xmoves) board))))
+                  'o-illegal)))
+      'x-illegal)
+  ((lessp (open-squares board))))
+
+(prove-lemma pick-move-never-loses nil
+  (member (tic-tac-toe xmoves
+                       (list f f f
+                             f f f
+                             f f f))
+          '(x-illegal draw o-won)))
+
+I found this an unsatisfying formalization when I noted to Bill Young
+that, as the implementor of this program, he could omit the test
+that the user won and the test that the program's move is legal.
+That made me realize that tic-tac-toe, as defined above, is equivalent
+to the version that makes no such tests.  But when that shorter
+version is taken as a spec, it is not credible.  Simple syntactic inspection
+reveals the user can't win (that token is never mentioned by the program)
+and hence, without complete analysis of pick-move, the buyer can't
+come to the opinion that tic-tac-toe is even the game implemented.
+
+|#
+
+; Before we start the implementation, we will introduce the standard
+; small set of arithmetic facts.  We'll prove more as needed.
+
+(PROVE-LEMMA PLUS-ADD1 (REWRITE)
+  (EQUAL (PLUS X (ADD1 Y)) (ADD1 (PLUS X Y))))
+(PROVE-LEMMA PLUS-COMMUTES1 (REWRITE)
+  (EQUAL (PLUS X Y) (PLUS Y X)))
+(PROVE-LEMMA PLUS-COMMUTES2 (REWRITE)
+  (EQUAL (PLUS X Y Z) (PLUS Y X Z)))
+(PROVE-LEMMA PLUS-ASSOCIATES (REWRITE)
+  (EQUAL (PLUS (PLUS X Y) Z) (PLUS X Y Z)))
+(PROVE-LEMMA TIMES-0 (REWRITE) (EQUAL (TIMES X 0) 0))
+(PROVE-LEMMA TIMES-NON-NUMBERP (REWRITE)
+  (IMPLIES (NOT (NUMBERP Z)) (EQUAL (TIMES X Z) 0)))
+(PROVE-LEMMA TIMES-ADD1 (REWRITE)
+  (EQUAL (TIMES X (ADD1 Y)) (PLUS X (TIMES X Y))))
+(PROVE-LEMMA TIMES-DISTRIBUTES1 (REWRITE)
+  (EQUAL (TIMES X (PLUS Y Z)) (PLUS (TIMES X Y) (TIMES X Z))))
+(PROVE-LEMMA TIMES-COMMUTES1 (REWRITE)
+  (EQUAL (TIMES X Y) (TIMES Y X))) 
+(PROVE-LEMMA TIMES-COMMUTES2 (REWRITE)
+  (EQUAL (TIMES X Y Z) (TIMES Y X Z))) 
+(PROVE-LEMMA TIMES-ASSOCIATES (REWRITE)
+  (EQUAL (TIMES (TIMES X Y) Z) (TIMES X Y Z)))
+(PROVE-LEMMA TIMES-DISTRIBUTES2 (REWRITE)
+  (EQUAL (TIMES (PLUS X Y) Z) (PLUS (TIMES X Z) (TIMES Y Z))))
+(PROVE-LEMMA DIFFERENCE-IS-0 (REWRITE)
+  (IMPLIES (NOT (LESSP Y X)) (EQUAL (DIFFERENCE X Y) 0)))
+(PROVE-LEMMA DIFFERENCE-PLUS-CANCELLATION1 (REWRITE)
+  (EQUAL (DIFFERENCE (PLUS I X) I) (FIX X)))
+(PROVE-LEMMA DIFFERENCE-PLUS-CANCELLATION2 (REWRITE)
+  (EQUAL (DIFFERENCE (PLUS I X) (PLUS I Y)) (DIFFERENCE X Y)))
+(PROVE-LEMMA DIFFERENCE-PLUS-CANCELLATION3 (REWRITE)
+  (EQUAL (DIFFERENCE (PLUS I J X) J) (PLUS I X)))
+(PROVE-LEMMA LESSP-REMAINDER (GENERALIZE)
+  (EQUAL (LESSP (REMAINDER X Y) Y) (NOT (ZEROP Y))))
+(PROVE-LEMMA REMAINDER-QUOTIENT-ELIM (ELIM REWRITE)
+  (IMPLIES (NUMBERP X)
+           (EQUAL (PLUS (REMAINDER X Y)
+                        (TIMES Y (QUOTIENT X Y)))
+                  X)))
+
+; Our strategy for implementing tic-tac-toe is to transform the
+; function in several steps to one that has a very straightforward
+; micro-Gypsy implementation.  Each of the steps will produce a
+; function with the name tic-tac-toe-x, where x = a, b, c, etc.  Each
+; time we define such a function we will prove that it is equivalent
+; to the previous such function, starting with tic-tac-toe at the top.
+; When the sequence of steps is done, we will combine the results into
+; a single equation relating tic-tac-toe to the (final) implementation
+; function.
+
+; We first eliminate the need for the endp test by just counting the
+; moves.
+
+(defn tic-tac-toe1-a (xmoves board i)
+  (let ((board1 (move 'x (car xmoves) board)))
+    (if (legalp (car xmoves) board)
+        (if (lessp i 9)
+            (let ((board2 (move 'o (pick-move board1) board1)))
+              (if (winp 'o board2)
+                  (list board1 board2 'o-win)
+                  (cons board1
+                        (cons board2 (tic-tac-toe1-a (cdr xmoves)
+                                                     board2
+                                                     (add1 (add1 i)))))))
+            (list board1 'draw))
+        (list board1 'o-win)))
+  ((lessp (difference 9 i))))
+
+(defn tic-tac-toe-a (xmoves)
+  (let ((board0 (list f f f
+                      f f f
+                      f f f)))
+    (cons board0 (tic-tac-toe1-a xmoves board0 1))))
+
+(enable tic-tac-toe1)
+(enable legalp)
+(enable move)
+
+(prove-lemma endp-open-squares (rewrite)
+  (equal (endp board)
+         (zerop (open-squares board))))
+
+(prove-lemma open-squares-move-rewrite (rewrite)
+ (implies (and x (legalp i board))
+          (equal (open-squares (move x i board))
+                 (sub1 (open-squares board)))))
+
+(prove-lemma add1-difference (rewrite)
+  (implies (not (lessp x y))
+           (equal (add1 (difference x y)) (difference (add1 x) y))))
+
+(prove-lemma lessp-open-squares-length (rewrite)
+  (not (lessp (length board) (open-squares board))))
+
+; The proof of the following lemma is tedious.
+(prove-lemma lemma-a1 nil
+  (implies (equal (length board) 9)
+           (equal (tic-tac-toe1 xmoves board)
+                  (tic-tac-toe1-a xmoves board (difference 10 (open-squares board)))))
+  ((expand (tic-tac-toe1-a xmoves board 
+                           (difference 10 
+                                       (open-squares board))))))
+
+(disable add1-difference)
+
+(prove-lemma lemma-a (rewrite)
+  (equal (tic-tac-toe xmoves)
+         (tic-tac-toe-a xmoves))
+  ((use (lemma-a1 (board (list f f f f f f f f f))))))
+
+; Next, we will convert the board from a list representation to a
+; numeric interpretation.  Suppose that tic-tac-toe-b is defined
+; analogously to tic-tac-toe-a but deals with numeric boards.
+; Then we will want to prove:
+
+; (equal (tic-tac-toe-a xmoves)
+;        (number->board* (tic-tac-toe-b xmoves)))
+
+(defn piece->number (x)
+  (if (equal x f) 0 (if (equal x 'x) 1 2)))
+
+(defn number->piece (j)
+  (if (equal j 0) f (if (equal j 1) 'x 'o)))
+
+(defn board->number (board)
+  (if (nlistp board)
+      0
+      (plus (piece->number (car board))
+            (times 4 (board->number (cdr board))))))
+
+(defn number->board (n len)
+  (if (zerop len)
+      nil
+      (cons (number->piece (remainder n 4))
+            (number->board (quotient n 4) (sub1 len)))))
+
+(defn boardp* (lst len)
+  (if (nlistp lst)
+      (equal lst nil)
+      (and (boardp (car lst))
+           (equal (length (car lst)) len)
+           (boardp* (cdr lst) len))))
+
+(defn number->board* (lst len)
+  (if (nlistp lst)
+      nil
+      (cons (if (equal (car lst) -2)
+                'o-win
+                (if (equal (car lst) -1)
+                    'draw
+                    (number->board (car lst) len)))
+            (number->board* (cdr lst) len))))
+
+; Some more arithmetic...
+
+(prove-lemma remainder-plus-times (rewrite)
+  (implies (and (numberp x)
+                (lessp x y))
+           (equal (remainder (plus x (times y z)) y)
+                  x))
+  ((induct (times z y))))
+
+(prove-lemma remainder-plus-times-instance (rewrite)
+  (implies (not (zerop y))
+           (equal (remainder (times y z) y)
+                  0))
+  ((use (remainder-plus-times (x 0)))
+   (disable remainder-plus-times)))
+
+(prove-lemma quotient-plus-times (rewrite)
+  (implies (and (numberp z)
+                (lessp x y))
+           (equal (quotient (plus x (times y z)) y)
+                  z))
+  ((induct (times z y))))
+
+(prove-lemma quotient-plus-times-instance (rewrite)
+  (implies (and (numberp z)
+                (not (zerop y)))
+           (equal (quotient (times y z) y)
+                  z))
+  ((use (quotient-plus-times (x 0)))
+   (disable quotient-plus-times)))
+
+; The crucial fact about this representation is:
+
+(prove-lemma board->number->board (rewrite)
+  (implies (boardp board)
+           (equal (number->board (board->number board) (length board))
+                  board)))
+
+; Now we begin a litany of definitions of the numeric counterparts of
+; of the subroutines of tic-tac-toe-a.
+
+(defn moven (x i board)
+  (cond ((zerop i)
+         (plus x
+               (times 4 (quotient board 4))))
+        (t (plus (remainder board 4)
+                 (times 4 (moven x (sub1 i) (quotient board 4)))))))
+
+(prove-lemma move-is-moven (rewrite)
+  (implies (and (or (equal x 'x)
+                    (equal x 'o))
+                (boardp board))
+           (equal (move x i board)
+                  (number->board (moven (piece->number x) i (board->number board))
+                                 (length board)))))
+
+(defn nthn (i board)
+  (if (zerop i)
+      (remainder board 4)
+      (nthn (sub1 i) (quotient board 4))))
+
+(prove-lemma nth-is-nthn (rewrite)
+  (implies (and (lessp i (length board))
+                (boardp board))
+           (equal (nth i board)
+                  (number->piece (nthn i (board->number board))))))
+
+(defn legalpn (i board)
+  (and (lessp i 9)
+       (equal (nthn i board) 0)))
+
+(prove-lemma legalp-is-legalpn (rewrite)
+  (implies (and (boardp board)
+                (equal (length board) 9))
+           (equal (legalp i board)
+                  (legalpn i (board->number board))))
+  ((enable legalp)))
+
+(defn winp1n (x i j k board)
+  (and (equal x (nthn i board))
+       (equal x (nthn j board))
+       (equal x (nthn k board))))
+
+(prove-lemma lessp-nthn-3-lemma nil
+  (implies (and (lessp i (length board))
+                (boardp board))
+           (equal (piece->number (nth i board))
+                  (nthn i (board->number board))))
+  ((disable nth-is-nthn)))
+
+(prove-lemma lessp-nthn-3 (rewrite)
+  (implies (and (lessp i (length board))
+                (boardp board))
+           (lessp (nthn i (board->number board)) 3))
+  ((use (lessp-nthn-3-lemma))))
+
+(prove-lemma winp1-is-winp1n (rewrite)
+  (implies (and (boardp board)
+                (lessp i (length board))
+                (lessp j (length board))
+                (lessp k (length board))
+                (or (equal x 'x)
+                    (equal x 'o)))
+           (equal (winp1 x (list i j k) board)
+                  (winp1n (piece->number x) i j k (board->number board)))))
+
+(defn winpn (x board)
+  (or (winp1n x 0 1 2 board)
+      (winp1n x 3 4 5 board)
+      (winp1n x 6 7 8 board)
+      (winp1n x 0 3 6 board)
+      (winp1n x 1 4 7 board)
+      (winp1n x 2 5 8 board)
+      (winp1n x 0 4 8 board)
+      (winp1n x 2 4 6 board)))
+
+(prove-lemma winp-is-winpn (rewrite)
+  (implies (and (equal (length board) 9)
+                (boardp board)
+                (or (equal x 'x)
+                    (equal x 'o)))
+           (equal (winp x board)
+                  (winpn (piece->number x) (board->number board))))
+  ((enable winp)
+   (disable piece->number *1*piece->number winp1 winp1n)))
+
+(prove-lemma quotient-4-decreases (rewrite)
+  (implies (not (zerop n))
+           (lessp (quotient n 4) n)))
+
+; I originally defined pick-move1n as follows:
+; (defn pick-move1n (board i)
+;   (cond ((zerop board) 0)
+;         ((zerop (remainder board 4)) i)
+;         (t (pick-move1n (quotient board 4) (add1 i)))))
+; And to my great surprise, this function isn't anything
+; like pick-move1!  Consider the fact that
+; on (list 'x 'o f f f f f f f) pick-move1 returns 2 but
+; (on the numeric image of the above board) pick-move1n
+; returns 0.  This seems to me a likely bug to have occurred
+; in a program attempting to implement this.
+
+(defn pick-move1n (board i len)
+  (cond ((zerop len) 0)
+        ((zerop (remainder board 4)) i)
+        (t (pick-move1n (quotient board 4) (add1 i) (sub1 len)))))
+
+(defn board->number-alist (alist)
+  (if (nlistp alist)
+      nil
+      (cons (cons (board->number (caar alist)) (cdar alist))
+            (board->number-alist (cdr alist)))))
+
+(defn boardp-alistp (alist)
+  (if (nlistp alist)
+      (equal alist nil)
+      (and (boardp (caar alist))
+           (equal (length (caar alist)) 9)
+           (boardp-alistp (cdr alist)))))
+
+(defn pick-moven (board)
+  (let ((book-move
+         (assoc
+          board
+          '((91648 . 2) (90688 . 2) (92692 . 3) (92689 . 3) (90640 . 5) 
+            (90628 . 2) (90625 . 2) (82432 . 6) (103936 . 1) (102976 . 1) 
+            (102928 . 1) (102934 . 5) (70144 . 7) (83488 . 6) (104032 . 1) 
+            (71200 . 7) (67168 . 6) (67108 . 6) (67105 . 6) (67072 . 2) 
+            (90688 . 2) (75328 . 2) (74320 . 5) (74308 . 2) (74305 . 2) 
+            (66112 . 6) (84496 . 3) (72208 . 3) (84562 . 6) (72274 . 7) 
+            (68116 . 3) (68113 . 3) (66064 . 5) (82468 . 6) (70180 . 7) 
+            (67108 . 6) (66148 . 6) (66085 . 6) (66052 . 2) (90649 . 5) 
+            (82441 . 6) (70153 . 7) (67081 . 7) (66121 . 7) (66073 . 7) 
+            (65536 . 4) (91648 . 2) (90688 . 2) (92692 . 3) (92689 . 3) 
+            (90640 . 5) (90628 . 2) (90625 . 2) (82432 . 6) (152209 . 5) 
+            (152197 . 5) (152065 . 3) (20992 . 8) (153097 . 3) (149065 . 6) 
+            (17920 . 8) (90688 . 2) (26176 . 2) (90706 . 5) (26194 . 8) 
+            (25174 . 8) (25156 . 2) (25153 . 2) (16960 . 6) (148057 . 6) 
+            (16912 . 8) (82468 . 6) (152164 . 5) (152101 . 5) (21028 . 8) 
+            (17956 . 6) (16996 . 6) (16933 . 6) (16900 . 2) (90625 . 2) 
+            (26113 . 2) (25153 . 2) (90649 . 5) (26137 . 8) (16897 . 6) 
+            (16384 . 4) (103936 . 1) (102976 . 1) (102928 . 1) (102934 . 5) 
+            (70144 . 7) (152209 . 5) (152197 . 5) (152065 . 3) (20992 . 8) 
+            (136705 . 3) (5632 . 8) (70210 . 7) (21058 . 8) (5698 . 8) (4690 . 8) 
+            (4678 . 8) (70168 . 7) (21016 . 8) (5656 . 7) (4696 . 7) (4633 . 7) 
+            (4624 . 1) (102934 . 5) (70150 . 7) (20998 . 8) (5638 . 8) (4678 . 8) 
+            (4630 . 8) (70273 . 5) (21121 . 5) (71305 . 7) (22153 . 8) (4753 . 5) 
+            (4741 . 5) (4609 . 3) (4096 . 4) (83488 . 6) (104032 . 1) (71200 . 7) 
+            (67168 . 6) (67108 . 6) (67105 . 6) (67072 . 2) (153097 . 3) 
+            (149065 . 6) (17920 . 8) (136705 . 3) (5632 . 8) (67138 . 2) 
+            (17986 . 8) (5698 . 8) (1618 . 8) (1606 . 8) (136729 . 7) (132697 . 7) 
+            (1552 . 8) (67108 . 6) (17956 . 6) (71206 . 7) (22054 . 8) (5734 . 8) 
+            (1636 . 6) (1573 . 6) (1540 . 2) (67105 . 6) (17953 . 6) (71329 . 7) 
+            (22177 . 8) (5665 . 3) (1633 . 6) (1573 . 6) (1537 . 2) (1024 . 4) 
+            (65830 . 7) (65794 . 2) (16666 . 6) (4390 . 7) (4354 . 2) (66946 . 6) 
+            (17794 . 6) (5506 . 2) (1426 . 6) (1414 . 6) (1282 . 3) (6502 . 8) 
+            (6466 . 2) (2386 . 6) (2374 . 7) (322 . 5) (74002 . 3) (24850 . 3) 
+            (9490 . 3) (8530 . 5) (274 . 6) (99718 . 6) (34054 . 3) (33094 . 5) 
+            (42262 . 8) (41302 . 8) (33046 . 6) (262 . 7) (90688 . 2) (75328 . 2) 
+            (74320 . 5) (74308 . 2) (74305 . 2) (66112 . 6) (90688 . 2) 
+            (26176 . 2) (90706 . 5) (26194 . 8) (25174 . 8) (25156 . 2) 
+            (25153 . 2) (16960 . 6) (70210 . 7) (21058 . 8) (5698 . 8) (4690 . 8) 
+            (4678 . 8) (67138 . 2) (17986 . 8) (5698 . 8) (1618 . 8) (1606 . 8) 
+            (84562 . 6) (72274 . 7) (66130 . 5) (16978 . 8) (4690 . 8) (1618 . 8) 
+            (598 . 8) (82534 . 6) (70246 . 7) (16966 . 8) (4678 . 8) (1606 . 8) 
+            (598 . 8) (74305 . 2) (25153 . 2) (9793 . 2) (74329 . 7) (577 . 6) 
+            (64 . 4) (84496 . 3) (72208 . 3) (84562 . 6) (72274 . 7) (68116 . 3) 
+            (68113 . 3) (66064 . 5) (148057 . 6) (16912 . 8) (70168 . 7) 
+            (21016 . 8) (5656 . 7) (4696 . 7) (4633 . 7) (4624 . 1) (136729 . 7) 
+            (132697 . 7) (1552 . 8) (84562 . 6) (72274 . 7) (66130 . 5) 
+            (16978 . 8) (4690 . 8) (1618 . 8) (598 . 8) (66070 . 5) (16918 . 8) 
+            (4630 . 8) (1558 . 8) (598 . 8) (66073 . 7) (18073 . 8) (4633 . 7) 
+            (1561 . 7) (601 . 7) (16 . 4) (82468 . 6) (70180 . 7) (67108 . 6) 
+            (66148 . 6) (66085 . 6) (66052 . 2) (82468 . 6) (152164 . 5) 
+            (152101 . 5) (21028 . 8) (17956 . 6) (16996 . 6) (16933 . 6) 
+            (16900 . 2) (102934 . 5) (70150 . 7) (20998 . 8) (5638 . 8) (4678 . 8) 
+            (4630 . 8) (67108 . 6) (17956 . 6) (71206 . 7) (22054 . 8) (5734 . 8) 
+            (1636 . 6) (1573 . 6) (1540 . 2) (82534 . 6) (70246 . 7) (16966 . 8) 
+            (4678 . 8) (1606 . 8) (598 . 8) (66070 . 5) (16918 . 8) (4630 . 8) 
+            (1558 . 8) (598 . 8) (66085 . 6) (16933 . 6) (1573 . 6) (613 . 6) 
+            (4 . 4) (90649 . 5) (82441 . 6) (70153 . 7) (67081 . 7) (66121 . 7) 
+            (66073 . 7) (90625 . 2) (26113 . 2) (25153 . 2) (90649 . 5) 
+            (26137 . 8) (16897 . 6) (70273 . 5) (21121 . 5) (71305 . 7) 
+            (22153 . 8) (4753 . 5) (4741 . 5) (4609 . 3) (67105 . 6) (17953 . 6) 
+            (71329 . 7) (22177 . 8) (5665 . 3) (1633 . 6) (1573 . 6) (1537 . 2) 
+            (74305 . 2) (25153 . 2) (9793 . 2) (74329 . 7) (577 . 6) (66073 . 7) 
+            (18073 . 8) (4633 . 7) (1561 . 7) (601 . 7) (66085 . 6) (16933 . 6) 
+            (1573 . 6) (613 . 6) (1 . 4)))))
+    (if book-move (cdr book-move) (pick-move1n board 0 9))))
+
+(compile-uncompiled-defns "tmp")
+
+(prove-lemma board->number-one-to-one (rewrite)
+  (implies (and (equal (length board1) (length board2))
+                (boardp board1)
+                (boardp board2))
+           (equal (equal (board->number board1)
+                         (board->number board2))
+                  (equal board1 board2)))
+  ((disable board->number->board)
+   (use (board->number->board (board board1))
+        (board->number->board (board board2)))))
+
+(prove-lemma assoc-board->number (rewrite)
+  (implies (and (equal (length board) 9)
+                (boardp board)
+                (boardp-alistp alist))
+           (iff (assoc board alist)
+                (assoc (board->number board) (board->number-alist alist)))))
+
+(prove-lemma cdr-assoc-board->number (rewrite)
+  (implies (and (equal (length board) 9)
+                (boardp board)
+                (boardp-alistp alist))
+           (equal (cdr (assoc board alist))
+                  (cdr (assoc (board->number board) (board->number-alist alist))))))
+
+(prove-lemma pick-move1-is-pick-move1n (rewrite)
+  (implies (boardp board)
+           (equal (pick-move1 board i)
+                  (pick-move1n (board->number board) i (length board)))))
+
+(prove-lemma pick-move-is-pick-moven (rewrite)
+  (implies (and (equal (length board) 9)
+                (boardp board))
+           (equal (pick-move board)
+                  (pick-moven (board->number board))))
+  ((disable assoc)
+   (enable pick-move)))
+
+(disable pick-moven)
+
+(defn tic-tac-toe1-b (xmoves board i)
+  (let ((board1 (moven 1 (car xmoves) board)))
+    (if (legalpn (car xmoves) board)
+        (if (lessp i 9)
+            (let ((board2 (moven 2 (pick-moven board1) board1)))
+              (if (winpn 2 board2)
+                  (list board1 board2 -2)
+                  (cons board1
+                        (cons board2 (tic-tac-toe1-b (cdr xmoves)
+                                                     board2
+                                                     (add1 (add1 i)))))))
+            (list board1 -1))
+        (list board1 -2)))
+  ((lessp (difference 9 i))))
+
+(defn tic-tac-toe-b (xmoves)
+  (cons 0 (tic-tac-toe1-b xmoves 0 1)))
+
+(prove-lemma legalpn-implies-lessp (rewrite)
+  (implies (and (legalpn i (board->number board))
+                (equal (length board) 9))
+           (equal (lessp i 9) t)))
+
+(prove-lemma length-number->board (rewrite)
+  (equal (length (number->board n len))
+         (fix len)))
+
+(prove-lemma boardp-number-board (rewrite)
+  (boardp (number->board n len)))
+
+(defn boardpn (n)
+  (if (zerop n)
+      t
+      (if (lessp (remainder n 4) 3)
+          (boardpn (quotient n 4))
+          f)))
+
+(prove-lemma boardpn-board->number (rewrite)
+  (implies (boardp board)
+           (boardpn (board->number board))))
+
+(prove-lemma boardpn-moven (rewrite)
+  (implies (and (numberp board)
+                (boardpn board)
+                (or (equal x 1)
+                    (equal x 2)))
+           (boardpn (moven x i board)))
+  ((disable times)))
+
+; The following function is not the length of the board because the
+; high numbered squares might be empty!
+
+(defn lengthn (board)
+  (if (zerop board)
+      0
+      (add1 (lengthn (quotient board 4)))))
+
+(prove-lemma number->board->number (rewrite)
+  (implies (and (numberp board)
+                (boardpn board)
+                (not (lessp len (lengthn board))))
+           (equal (board->number (number->board board len)) board)))
+
+(prove-lemma lengthn-board->number (rewrite)
+  (not (lessp (length board) (lengthn (board->number board)))))
+
+(prove-lemma lengthn-moven nil
+  (implies (or (equal x 1)
+               (equal x 2))
+           (equal (lengthn (moven x i board))
+                  (if (lessp i (lengthn board))
+                      (lengthn board)
+                      (add1 i)))))
+
+(prove-lemma lengthn-moven-hack-1 (rewrite)
+  (implies (and (lessp i 9)
+                (boardp board)
+                (equal (length board) 9))
+           (not (lessp 9 (lengthn (moven 1 i (board->number board))))))
+  ((use (lengthn-moven (x 1) (board (board->number board))))))
+
+(prove-lemma lessp-pick-moven (rewrite)
+  (implies (and (lessp i 9)
+                (boardp board)
+                (equal (length board) 9))
+           (lessp (pick-moven (moven 1 i (board->number board))) 9))
+  ((disable lessp-pick-move)
+   (use (lessp-pick-move (board (move 'x i board))))))
+
+(prove-lemma lengthn-moven-hack-2 (rewrite)
+  (implies (and (lessp i 9)
+                (boardp board)
+                (equal (length board) 9))
+           (not (lessp 9
+                       (lengthn (moven 2
+                                       (pick-moven (moven 1 i (board->number board)))
+                                       (moven 1 i (board->number board)))))))
+  ((use (lengthn-moven (x 2)
+                       (i (pick-moven (moven 1 i (board->number board))))
+                       (board (moven 1 i (board->number board)))))))
+
+; The theorem prover does the wrong induction below.  It too chooses
+; the one suggested by tic-tac-toe1-a, but it throws away the board
+; instantiation because of the competition from board->number.
+
+(prove-lemma lemma-b1 (rewrite)
+  (implies (and (boardp board)
+                (equal (length board) 9))
+           (equal (tic-tac-toe1-a xmoves board i)
+                  (number->board* (tic-tac-toe1-b xmoves (board->number board) i) 9)))
+  ((induct (tic-tac-toe1-a xmoves board i))
+   (expand (tic-tac-toe1-a xmoves board i))
+   (disable move moven legalp legalpn winp winpn board->number number->board
+            piece->number number->piece)))
+
+(prove-lemma lemma-b (rewrite)
+  (equal (tic-tac-toe-a xmoves)
+         (number->board* (tic-tac-toe-b xmoves) 9)))
+
+; The next transformation will remove the consing of the list of
+; boards and replace it by an accumulator treated as an array.
+; Because of the explicit test that i is less than 9 -- and the
+; knowledge that i starts at 0 and so never gets larger than 9 itself
+; -- we know that an array of length 10 will suffice to hold all the
+; boards we might generate and thus an array of length 11 will hold all
+; the boards plus the final outcome.  We call the array t3.  Thus, in t3(0)
+; through t3(9) one will find boards generated.  But we may not fill
+; it because the game may end with a win.  We store the outcome in the
+; last array element filled.  Thus, to recreate the game, make a list of
+; boards form the elements of the array, starting at t3(0) and going through
+; the one containing -2 or -1.
+
+(defn array->lst (i array)
+
+; Make a list out of that segment of the array starting at element i
+; and going through the first non-numeric (i.e., non-natural-numeric)
+; element. For termination purposes, we also stop when i reaches the 
+; length of array.
+
+  (cond ((not (lessp i (length array))) nil)
+        ((numberp (nth i array))
+         (cons (nth i array) (array->lst (add1 i) array)))
+        (t (list (nth i array))))
+  ((lessp (difference (length array) i))))
+
+(defn put (val n lst)
+  (if (zerop n)
+      (if (listp lst)
+          (cons val (cdr lst))
+          (list val))
+      (cons (car lst) (put val (sub1 n) (cdr lst)))))
+
+(prove-lemma nth-put (rewrite)
+  (implies (and (numberp i)
+                (numberp j)
+                (lessp j (length array)))
+           (equal (nth i (put val j array))
+                  (if (equal i j)
+                      val
+                      (nth i array)))))
+
+(defn tic-tac-toe1-c (xmoves board i t3)
+  (let ((board1 (moven 1 (car xmoves) board)))
+    (if (legalpn (car xmoves) board)
+        (if (lessp i 9)
+            (let ((board2 (moven 2 (pick-moven board1) board1)))
+              (if (winpn 2 board2)
+                  (put -2 (add1 (add1 i))
+                       (put board2 (add1 i)
+                            (put board1 i t3)))
+                  (tic-tac-toe1-c (cdr xmoves)
+                                  board2
+                                  (add1 (add1 i))
+                                  (put board2 (add1 i)
+                                       (put board1 i t3)))))
+            (put -1 (add1 i)
+                 (put board1 i t3)))
+        (put -2 (add1 i)
+             (put board1 i t3))))
+  ((lessp (difference 9 i))))
+
+(defn tic-tac-toe-c (xmoves)
+  (tic-tac-toe1-c xmoves 0 1 (list 0 0 0 0 0 0 0 0 0 0 0)))
+
+(prove-lemma length-put (rewrite)
+  (implies (lessp i (length array))
+           (equal (length (put val i array)) (length array))))
+
+; The following is just the definition of array->lst and forces us to
+; open it.  This would run forever if given the chance.  But there is
+; another rule coming...
+
+(prove-lemma array->lst-opener (rewrite)
+  (implies (and (lessp j (length array))
+                (lessp i (length array)))
+           (equal (array->lst i (put val j array))
+                  (if (numberp (nth i (put val j array)))
+                      (cons (nth i (put val j array)) (array->lst (add1 i) (put val j array)))
+                      (list (nth i (put val j array)))))))
+
+(prove-lemma array->lst-opener-stopper (rewrite)
+  (implies (and (numberp i)
+                (numberp j)
+                (lessp j (length array))
+                (lessp j i))
+           (equal (array->lst i (put val j array))
+                  (array->lst i array))))
+
+; It surprised me that I had to state that i is always odd below.  I mean,
+; it shouldn't have surprised me, but it did.
+
+(prove-lemma length-tic-tac-toe1-c (rewrite)
+  (implies (and (numberp board)
+                (numberp i)
+                (equal (remainder i 2) 1)
+                (lessp i 10)
+                (equal (length t3) 11))
+           (equal (length (tic-tac-toe1-c xmoves board i t3))
+                  11))
+  ((disable legalpn winpn put nth)))
+
+(prove-lemma nth-tic-tac-toe1-c (rewrite)
+  (implies (and (numberp board)
+                (numberp i)
+                (equal (remainder i 2) 1)
+                (lessp i 10)
+                (equal (length t3) 11)
+                (numberp n)
+                (lessp n i))
+           (equal (nth n (tic-tac-toe1-c xmoves board i t3))
+                  (nth n t3)))
+  ((induct (tic-tac-toe1-c xmoves board i t3))
+   (disable legalpn winpn put nth)))
+
+(prove-lemma remainder-add1-add1-2 (rewrite)
+  (equal (remainder (add1 (add1 i)) 2)
+         (remainder i 2)))
+
+(prove-lemma odd-lessp-9-is-lessp-8 (rewrite)
+  (implies (and (equal (remainder i 2) 1)
+                (lessp i 9))
+           (equal (lessp i 8) t)))
+
+(prove-lemma lemma-c1 nil
+  (implies (and (numberp board)
+                (numberp i)
+                (equal (remainder i 2) 1)
+                (lessp i 10)
+                (equal (length t3) 11))
+           (equal (tic-tac-toe1-b xmoves board i)
+                  (array->lst i (tic-tac-toe1-c xmoves board i t3))))
+  ((disable legalpn winpn put nth)))
+
+(prove-lemma lemma-c (rewrite)
+  (equal (tic-tac-toe-b xmoves)
+         (array->lst 0 (tic-tac-toe-c xmoves)))
+  ((use (lemma-c1 (board 0)
+                  (i 1)
+                  (t3 (list 0 0 0 0 0 0 0 0 0 0 0))))))
+
+; I should have thought of this earlier but it escaped me:  I need
+; to treat xmoves as an array, not a list.  This means using another
+; index, j, to get its elements.
+
+(defn tic-tac-toe1-d (xmoves j board i t3)
+  (let ((board1 (moven 1 (nth j xmoves) board)))
+    (if (legalpn (nth j xmoves) board)
+        (if (lessp i 9)
+            (let ((board2 (moven 2 (pick-moven board1) board1)))
+              (if (winpn 2 board2)
+                  (put -2 (add1 (add1 i))
+                       (put board2 (add1 i)
+                            (put board1 i t3)))
+                  (tic-tac-toe1-d xmoves
+                                  (add1 j)
+                                  board2
+                                  (add1 (add1 i))
+                                  (put board2 (add1 i)
+                                       (put board1 i t3)))))
+            (put -1 (add1 i)
+                 (put board1 i t3)))
+        (put -2 (add1 i)
+             (put board1 i t3))))
+  ((lessp (difference 9 i))))
+
+(defn tic-tac-toe-d (xmoves)
+  (tic-tac-toe1-d xmoves 0 0 1 (list 0 0 0 0 0 0 0 0 0 0 0)))
+
+(defn nth-cdr (j lst)
+  (if (zerop j) lst (nth-cdr (sub1 j) (cdr lst))))
+
+(prove-lemma car-nth-cdr (rewrite)
+  (equal (car (nth-cdr j lst)) (nth j lst)))
+
+(prove-lemma cdr-nth-cdr (rewrite)
+  (equal (cdr (nth-cdr j lst)) (nth-cdr j (cdr lst))))
+
+(prove-lemma lemma-d1 nil
+  (equal (tic-tac-toe1-c (nth-cdr j xmoves) board i t3)
+         (tic-tac-toe1-d xmoves j board i t3))
+  ((disable legalpn winpn put nth)))
+
+(prove-lemma lemma-d (rewrite)
+  (equal (tic-tac-toe-c xmoves)
+         (tic-tac-toe-d xmoves))
+  ((use (lemma-d1 (j 0)
+                  (board 0)
+                  (i 1)
+                  (t3 (list 0 0 0 0 0 0 0 0 0 0 0))))))
+
+(defn up (t3)
+  (number->board* (array->lst 0 t3) 9))
+
+(prove-lemma tic-tac-toe-d-correct nil
+  (and (member (tic-tac-toep (up (tic-tac-toe-d xmoves)))
+               '(draw o-win))
+       (x-moves-honored xmoves (up (tic-tac-toe-d xmoves)))
+       (equal (init-game (length opening)
+                         (up (tic-tac-toe-d (append opening xmoves1))))
+              (init-game (length opening)
+                         (up (tic-tac-toe-d (append opening xmoves2))))))
+  ((disable tic-tac-toe tic-tac-toe-a tic-tac-toe-b tic-tac-toe-c tic-tac-toe-d) 
+   (use (tic-tac-toe-correct))))
+
+
+

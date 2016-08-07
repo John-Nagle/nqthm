@@ -1,0 +1,18 @@
+\contentsline {section}{\numberline {1}Introduction}{1}
+\contentsline {section}{\numberline {2}A Few Basic Functions}{2}
+\contentsline {section}{\numberline {3}Start Up}{3}
+\contentsline {section}{\numberline {4}Some Constants}{3}
+\contentsline {section}{\numberline {5}Bit Vector Arithmetic}{6}
+\contentsline {section}{\numberline {6}Integer Arithmetic}{9}
+\contentsline {section}{\numberline {7}Binary Trees for Memory}{12}
+\contentsline {section}{\numberline {8}Operands from Memory}{16}
+\contentsline {section}{\numberline {9}Storing the Result}{19}
+\contentsline {section}{\numberline {10}Retrieving the Operand According to Oplen}{22}
+\contentsline {section}{\numberline {11}Effective Address Calculation}{23}
+\contentsline {section}{\numberline {12}The Individual Instructions}{33}
+\contentsline {section}{\numberline {13}Stepi and Stepn}{102}
+\contentsline {section}{\numberline {14}Auxiliary Functions}{102}
+\contentsline {section}{\numberline {15}An Example of Simulation}{104}
+\contentsline {section}{\numberline {16}Acknowledgements}{106}
+\contentsline {section}{\numberline {17}Syntax Summary}{107}
+\contentsline {section}{Index}{110}

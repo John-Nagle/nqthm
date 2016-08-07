@@ -1,0 +1,389 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+(boot-strap nqthm)
+
+;  This file contains examples that illustrate the use
+;  of the new events CONSTRAIN and FUNCTIONALLY-INSTANTIATE.
+
+;  Example 1.  Here we simply introduce three new function symbols of
+;  1 argument with no constraints on them.
+
+(constrain p-q-r-intro (rewrite) t
+  ((p (lambda (x) x))
+   (q (lambda (x) x))
+   (r (lambda (x) x))))
+
+
+
+;  Example 2.  Here we introduce the function h, which has the strange
+;  property we call ``commutativity2'' and show that one can ``map''
+;  with such a function in a primitive recursive way (using pr-h) or
+;  by using an accumulator (using pr-ac); but either way one gets the
+;  same result.  We then can FUNCTIONALLY-INSTANTIATE this result
+;  using times instead of h.
+
+(constrain intro-h
+  (rewrite)
+  (equal (h x (h y z))
+         (h y (h x z)))
+  ((h plus)))
+
+(defn pr-h (l z)
+  (if (nlistp l)
+      z
+    (h (car l) (pr-h (cdr l) z))))
+
+(defn ac-h (l z)
+  (if (nlistp l)
+      z
+    (ac-h (cdr l) (h (car l) z))))
+
+(prove-lemma pr-is-ac (rewrite)
+  (equal (ac-h l z) (pr-h l z))
+  ((induct (ac-h l z))))
+
+(defn pr-times (l z)
+  (if (nlistp l)
+      z
+    (times (car l) (pr-times (cdr l) z))))
+
+(defn ac-times (l z)
+  (if (nlistp l)
+      z
+    (ac-times (cdr l) (times (car l) z))))
+
+(functionally-instantiate
+  pr-times-is-ac-times (rewrite)
+  (equal (ac-times l z) (pr-times l z))
+  pr-is-ac
+  ((h times)
+   (pr-h pr-times)
+   (ac-h (lambda (x y) (ac-times x y)))))
+
+
+
+;  Example 3.  This example is somewhat similar to the last one in
+;  spirit.  This time we constrain the function lt to have one of the
+;  properties of a simple order, define a sort on top of it, prove the
+;  sort correct, and then instantiate the result with lessp for lt.
+
+(constrain lt-intro (rewrite)
+  (implies (lt z v)
+           (not (lt v z)))
+  ((lt (lambda (x y) f))))
+
+(defn ordered-lt
+  (l)
+  (if (listp l)
+      (if (listp (cdr l))
+          (if (lt (cadr l) (car l))
+              f
+            (ordered-lt (cdr l)))
+        t)
+    t))
+
+(defn addtolist-lt
+  (x l)
+  (if (listp l)
+      (if (lt x (car l))
+          (cons x l)
+        (cons (car l) (addtolist-lt x (cdr l))))
+    (list x)))
+
+(defn sort-lt
+  (l)
+  (if (listp l)
+      (addtolist-lt (car l) (sort-lt (cdr l)))
+    nil))
+
+
+(prove-lemma ordered-sort-lt (rewrite)
+  (ordered-lt (sort-lt l)))
+
+(defn ordered-lessp
+  (l)
+  (if (listp l)
+      (if (listp (cdr l))
+          (if (lessp (cadr l) (car l))
+              f
+            (ordered-lessp (cdr l)))
+        t)
+    t))
+
+(defn addtolist-lessp
+  (x l)
+  (if (listp l)
+      (if (lessp x (car l))
+          (cons x l)
+        (cons (car l) (addtolist-lessp x (cdr l))))
+    (list x)))
+
+(defn sort-lessp
+  (l)
+  (if (listp l)
+      (addtolist-lessp (car l) (sort-lessp (cdr l)))
+    nil))
+
+(functionally-instantiate ordered-sort-lessp 
+  (rewrite)
+  (ordered-lessp (sort-lessp l))
+  ordered-sort-lt
+  ((lt lessp)
+   (ordered-lt ordered-lessp)
+   (addtolist-lt addtolist-lessp)
+   (sort-lt sort-lessp)))
+
+
+
+;  Example 4.  We here define the familiar map function, show that it
+;  distributes over append, and instantiate the result with a LAMBDA
+;  that has a free variable.
+
+(constrain fn-intro nil t ((fn add1)))
+
+(defn map-fn (x)
+  (if (nlistp x)
+      nil
+    (cons (fn (car x)) (map-fn (cdr x)))))
+
+(prove-lemma map-distributes-over-append (rewrite)
+  (equal (map-fn (append u v))
+         (append (map-fn u) (map-fn v))))
+
+(defn map-plus-y (x y)
+  (if (nlistp x)
+      nil
+    (cons (plus (car x) y) (map-plus-y (cdr x) y))))
+
+(functionally-instantiate map-plus-y-distributes-over-append (rewrite)
+  (equal (map-plus-y (append u v) z)
+         (append (map-plus-y u z) (map-plus-y v z)))
+  map-distributes-over-append
+  ((fn (lambda (x) (plus x z)))
+   (map-fn (lambda (x) (map-plus-y x z)))))
+
+
+
+;  Example 5.  Here we follow the lead of Goodstein in his book
+;  Primitive Recursive Arithmetic and of McCarthy with his recursion
+;  induction.  We show, using FUNCTIONALLY-INSTANTIATE, that the
+;  associativity of append can be proved without explicit appeal to
+;  induction.  Of course there are inductions hidden all over the
+;  place, e.g. in the type-set analysis for true-rec and in the proof
+;  of the metatheorem that justifies FUNCTIONALLY-INSTANTIATE.  Still,
+;  this is a startling development to those who regard the
+;  associativity of append as the first theorem requiring an inductive
+;  proof.
+
+(defn true-rec (x)
+  (if (nlistp x)
+      t
+    (true-rec (cdr x))))
+
+(prove-lemma true-rec-is-true (rewrite)
+  (true-rec x))
+
+(defn app (x y)
+  (if (nlistp x)
+      y
+    (cons (car x) (app (cdr x) y))))
+
+(functionally-instantiate assoc-of-app (rewrite)
+  (equal (app (app x y) z) (app x (app y z)))
+  true-rec-is-true
+  ((true-rec (lambda (x) (equal (app (app x y) z) (app x (app y z)))))))
+
+
+
+;  Example 6.  We illustrate that one can prove theorems using
+;  CONSTRAIN and FUNCTIONALLY-INSTANTIATE that resemble proofs in
+;  first-order predicate calculus with quantifiers.
+
+(constrain all-x-p-x-intro (rewrite)
+  (implies (all-x-p-x) (p x))
+  ((all-x-p-x false)))
+
+(constrain all-x-not-p-x-into (rewrite)
+  (implies (all-x-not-p-x) (not (p x)))
+  ((all-x-not-p-x false)))
+
+(prove-lemma all-x-not-p-x-into-converse (rewrite)
+  (implies (p x) (not (all-x-not-p-x))))
+
+(defn some-x-p-x () (not (all-x-not-p-x)))
+
+(prove-lemma all-implies-some nil (implies (all-x-p-x) (some-x-p-x))
+  ((use (all-x-p-x-intro))))
+
+;  Example 7.  We illustrate a CONSTRAIN that expresses that a
+;  function is ``fair'' in the sense that it is infinitely often true
+;  and false.
+
+(defn even (x) (if (zerop x) t (if (equal x 1) (false) (not (even (sub1 x))))))
+
+(constrain fair-intro (rewrite)
+  (and (fair (fair-true-witness n))
+       (not (fair (fair-false-witness n)))
+       (not (lessp (fair-true-witness n) n))
+       (not (lessp (fair-false-witness n) n)))
+  ((fair even)
+   (fair-true-witness (lambda (x) (if (even x) x (add1 x))))
+   (fair-false-witness (lambda (x) (if (even x) (add1 x) x)))))
+
+;  Example 8.  We illustrate the idea of ``stubbing'' functions.  We
+;  define interp to call an undefined, but constrained, function num.
+;  Later we prove a result about instantiation of interp by
+;  FUNCTIONALLY-INSTANTIATE.
+
+(constrain num-intro (rewrite)
+  (numberp (num x))
+  ((num add1)))
+
+(defn interp (x)
+  (if (not (zerop x))
+      (times x x)
+    (num x)))
+
+(prove-lemma interp-is-numeric (rewrite)
+  (numberp (interp x)))
+
+(defn interp2 (x)
+  (if (not (zerop x))
+      (times x x)
+    (plus x x)))
+
+(functionally-instantiate interp2-is-numeric (rewrite)
+  (numberp (interp2 x))
+  interp-is-numeric
+  ((interp interp2)
+   (num (lambda (x) (plus x x)))))
+
+
+       
+;  Example 9.  We here illustrate the fact that add-axioms
+;  are correctly tracked.
+
+(defn p-alias (x) (p x))
+
+(add-axiom even-p-alias (rewrite)
+  (even (p-alias x)))
+
+(prove-lemma even-p (rewrite) (even (p x))
+  ((use (even-p-alias))))
+
+#|  
+
+;  Because this step fails, we comment it out.  The failure
+;  stems from our having provided a substitution for the
+;  apparently irrelevant function q-alias.  However, providing
+;  an analogue to q-alias explose the real problem, the necessity
+;  of anopther add-axiom.  The key point is that p-alias
+;  is not irrelevant when trying to FUNCTIONALLY-INSTANTIATE
+;  even-p because p is ancestral in even-p-alias.
+
+(functionally-instantiate even-q nil
+  (even (q x))
+  even-p
+  ((p q)))
+
+|#
+
+;  Example 10.  It is necessary for soundness that we check that
+;  the variables in the constraints do not intersect the free variables
+;  in the FUNCTIONALLY-INSTANTIATE substitutions.  Otherwise,
+;  the following sequence would lead to unsoundness.
+
+(constrain pp-intro (rewrite)
+  (implies (equal y 0)
+           (equal (pp) y))
+  ((pp (lambda () 0))))
+
+(prove-lemma pp-is-0 (rewrite)
+  (equal 0 (pp)))
+
+#|  
+
+;  Because this last step fails, we comment it out.  Note that if we
+;  did not catch this, relieving the constraint would amount to
+;  checking merely that (implies (equal y 0) (equal y y)).
+
+(functionally-instantiate anything-is-0 (rewrite)
+  (equal 0 y)
+  pp-is-0
+  ((pp (lambda () y))))
+
+|#
+
+;  Example 11.  Some from ``higher logic.''
+
+(constrain fn-commutative
+           (rewrite)
+           (equal (fn2 x y) (fn2 y x))
+           ((fn2 plus)))
+
+(defn foldr-fn (lst r)
+  (if (listp lst)
+      (fn2 (car lst) (foldr-fn (cdr lst) r))
+    r))
+
+(defn foldl-fn (lst r)
+  (if (listp lst)
+      (foldl-fn (cdr lst) (fn2 r (car lst)))
+    r))
+
+(defn reverse (x)
+  (if (listp x)
+      (append (reverse (cdr x)) (list (car x)))
+    nil))
+
+(prove-lemma foldl-is-foldr (rewrite)
+  (equal (foldr-fn lst r)
+         (foldl-fn (reverse lst) r)))
+
+(prove-lemma times-add1 (rewrite)
+             (equal (times x (add1 y))
+                    (plus x (times x y))))
+
+(prove-lemma times-comm (rewrite)
+  (equal (times x y) (times y x)))
+
+(defn foldr-times (lst r)
+  (if (listp lst)
+      (times (car lst) (foldr-times (cdr lst) r))
+    r))
+
+(defn foldl-times (lst r)
+  (if (listp lst)
+      (foldl-times (cdr lst) (times r (car lst)))
+    r))
+
+(functionally-instantiate foldl-times-is-foldr-times (rewrite)
+  (equal (foldr-times lst r)
+         (foldl-times (reverse lst) r))
+  foldl-is-foldr
+  ((foldr-fn foldr-times)
+   (foldl-fn foldl-times)
+   (fn2 times)))
+

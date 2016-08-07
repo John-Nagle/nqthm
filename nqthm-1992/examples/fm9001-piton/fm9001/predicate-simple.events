@@ -1,0 +1,2195 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PREDICATE-SIMPLE.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;  Syntax Requirements for Hardware Description Language
+;;;
+;;;  The predicate TOP-LEVEL-PREDICATE-SIMPLE is a simpler version
+;;;  of the circuit predicate in file "predicate.events".  These
+;;;  predicates only return a symbol indicating what main property
+;;;  was violated.  The circuit recognizer predicates in file
+;;;  "predicate.events" return more useful information, but the
+;;;  functions there are much more complex.
+;;;
+;;;  We don't use these circuit predicates during our proofs; however,
+;;;  once we have a netlist we check its well-formedness using these
+;;;  predicates.
+;;;  
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn name-simple-okp (name)
+  (or (litatom name)
+      (and (indexp name)
+           (litatom (i-name name)))))
+
+(disable name-simple-okp)
+
+(defn name-list-simple-okp (name-list)
+  (if (nlistp name-list)
+      (equal name-list nil)
+    (let ((name (car name-list))
+          (rest (cdr name-list)))
+      (and (name-simple-okp name)
+           (not (member name rest))
+           (name-list-simple-okp rest)))))
+
+(disable name-list-simple-okp)
+
+(defn occ-syntax-simple-okp (occ netlist) ;; occ is a single occurrence
+  
+  (let ((o-name (occ-name       occ))
+        (o-outs (occ-outputs    occ))
+        (o-fn   (occ-function   occ))
+        (o-ins  (occ-inputs     occ))
+        (o-anno (occ-annotation occ)))
+
+    (and (or (equal 4 (length occ))
+             (and (equal 5 (length occ))
+                  (alistp o-anno)))
+         (properp occ)
+
+         (name-simple-okp o-name)
+         (name-list-simple-okp o-outs)
+         (properp o-ins)
+
+         ; We cannot check NAME-LIST-SIMPLE-OKP for O-INS because of
+         ; wiring fanouts.  All O-INS names are checked
+         ; elsewhere because they must ultimately be a subset
+         ; of signals, which are checked either as module inputs
+         ; or as occurrence outputs.
+
+         (if (primp o-fn)
+
+             (and (equal (length (primp2 o-fn 'inputs))
+                         (length o-ins))
+                  (equal (length (primp2 o-fn 'outputs))
+                         (length o-outs)))
+
+           (let ((module (lookup-module o-fn netlist)))
+             (let ((lm-ins  (module-inputs  module))
+                   (lm-outs (module-outputs module)))
+
+               (and (listp module)
+                    (equal (length lm-ins)  (length o-ins))
+                    (equal (length lm-outs) (length o-outs)))))))))
+
+(disable occ-syntax-simple-okp)
+
+
+;;;  In OCC-BODY-SYNTAX-SIMPLE-OKP, the parameters are as follows:
+;;;    body - the list of occurrences from a module (or a tail of it).
+;;;    signals - a list of defined signals, consisting of module inputs and
+;;;              outputs of occurrences previous to body.
+;;;    non-depends - a list of signals that were not defined when they were
+;;;                  used as inputs of ocurrences previous to body.  The
+;;;                  outputs of those occurrences should not have depended on
+;;;                  the undefined inputs, but that check is made elsewhere
+;;;                  (in function OUT-DEPENDS-SIMPLE).
+;;;    occ-names - a list of the names of occurrences previous to body.
+;;;    outputs - a list of the outputs of the module.
+;;;    states - a list of the state names of the module.
+;;;    netlist - the netlist
+
+(defn occ-body-syntax-simple-okp (body signals non-depends occ-names
+                                       outputs states netlist)
+  (if (nlistp body)
+
+      (and (equal body nil)
+
+           (subset outputs signals)
+           (subset non-depends signals)
+           (subset states occ-names)
+
+           (not (duplicates? signals))
+           (not (duplicates? occ-names)))
+
+    (let ((occ (car body)))
+      (let ((o-name (occ-name    occ))
+            (o-outs (occ-outputs occ))
+            (o-ins  (occ-inputs  occ)))
+
+        (if (occ-syntax-simple-okp occ netlist)
+
+            (occ-body-syntax-simple-okp (cdr body)
+                                        (append o-outs signals)
+                                        (append (set-diff o-ins signals)
+                                                non-depends)
+                                        (cons o-name occ-names)
+                                        outputs states
+                                        netlist)
+          f)))))
+
+(disable occ-body-syntax-simple-okp)
+                                    
+
+
+(defn module-syntax-simple-okp (netlist)
+
+  (let ((module (car netlist))
+        (net-rest (cdr netlist)))
+
+    (let ((m-name   (module-name        module))
+          (m-ins    (module-inputs      module))
+          (m-outs   (module-outputs     module))
+          (m-occs   (module-occurrences module))
+          (m-states (module-statenames  module))
+          (m-anno   (module-annotation  module)))
+
+      (let ((m-states-list (m-states-list m-states)))
+
+        (and (or (equal (length module) 5)
+                 (and (equal (length module) 6)
+                      (alistp m-anno)))
+             (properp module)
+
+             (name-simple-okp m-name)
+             (not (lookup-module m-name net-rest))
+             (not (primp m-name))
+
+             (name-list-simple-okp m-ins)
+             (name-list-simple-okp m-outs)
+             (name-list-simple-okp m-states-list)
+
+             (disjoint m-ins m-outs)
+
+             (listp m-occs)
+
+             (occ-body-syntax-simple-okp m-occs m-ins nil nil m-outs
+                                         m-states-list net-rest))))))
+
+(disable module-syntax-simple-okp)
+
+(defn netlist-syntax-simple-okp (netlist)
+  (if (nlistp netlist)
+
+      (equal netlist nil)
+
+    (if (module-syntax-simple-okp netlist)
+        (netlist-syntax-simple-okp (cdr netlist))
+      f)))
+
+(disable netlist-syntax-simple-okp)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Output Dependencies
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  In OUT-DEPENDS-SIMPLE, module-database can be a table of
+;;;  previously computed output dependencies (see function
+;;;  dependency-table).  Without this table, OUT-DEPENDS-SIMPLE
+;;;  recomputes output dependencies for a module every time it is
+;;;  used.  With the table, OUT-DEPENDS-SIMPLE merely looks up (and
+;;;  fixes) the precomputed value.  (Fixing the value means replacing
+;;;  local names with the dependencies provided as an argument.)
+
+(defn out-depends-simple (flg x0 x1 netlist module-database)
+  (case
+    flg
+    (0 (let ((fn x0)     ; name of a primitive or a module in netlist
+             (args x1))  ; list of dependency lists for fn inputs
+
+         (cond ((primp fn)
+                (list-collect-value
+                 (primp2 fn 'out-depends)
+                 (pairlist (primp2 fn 'inputs) args)))
+
+               ((lookup-module 'out-depends
+                               (cdr (lookup-module fn module-database)))
+                (list-collect-value
+                 (cdr (lookup-module
+                       'out-depends
+                       (cdr (lookup-module fn module-database))))
+                 (pairlist (module-inputs (lookup-module fn netlist))
+                           args)))
+
+               (t (let ((module (lookup-module fn netlist)))
+                    (if (listp module)
+                        (let ((m-ins  (module-inputs      module))
+                              (m-outs (module-outputs     module))
+                              (m-occs (module-occurrences module)))
+
+                          (let ((alist-depends
+                                 (out-depends-simple 1
+                                              m-occs
+                                              (pairlist m-ins args)
+                                              (delete-module fn netlist)
+                                              module-database)))
+
+                            (if (and alist-depends
+                                     (subset m-outs
+                                             (strip-cars alist-depends)))
+                                (collect-value m-outs alist-depends)
+                              f)))
+                      f))))))
+
+    (1 (let ((body x0)      ; list of occurrences from a module (or a tail of
+                            ; it)
+             (bindings x1)) ; alist binding each signal to its INPUT
+                            ; dependencies
+
+         (if (nlistp body)
+             bindings
+
+             (let ((occ (car body)))
+               (let ((o-outs (occ-outputs  occ))
+                     (o-fn   (occ-function occ))
+                     (o-ins  (occ-inputs   occ)))
+
+                 (let ((local-depend-list
+                        (out-depends-simple 0 o-fn
+                                     (listify o-ins)
+                                     netlist module-database)))
+                   (if (and (subset (flatten-list local-depend-list)
+                                    (strip-cars bindings))
+                            local-depend-list)
+
+                       (out-depends-simple 1 (cdr body)
+                                    (append (pairlist o-outs
+                                                      (list-collect-value
+                                                       local-depend-list
+                                                       bindings))
+                                            bindings)
+                                    netlist module-database)
+                       f)))))))
+
+    (otherwise f))
+                             
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(disable out-depends-simple)
+
+
+(defn simple-dependency-table (netlist)
+
+  (if (nlistp netlist)
+      nil
+      
+    (let ((module (car netlist))
+          (net-rest (cdr netlist)))
+
+      (let ((t2 (simple-dependency-table net-rest))
+            (m-name (module-name    module))
+            (m-ins  (module-inputs  module)))
+
+        (if t2
+
+            (let ((dependencies (out-depends-simple 0
+                                             m-name
+                                             (listify m-ins)
+                                             netlist t2)))
+
+              (if dependencies
+                  (cons (list m-name
+                              (cons 'out-depends dependencies))
+                        t2)
+                f))
+          f)))))
+
+(disable simple-dependency-table)
+
+
+;;;  Function output-dependencies-simple is a utility function (not part of the
+;;;  predicate).  
+
+(defn output-dependencies-simple (module-name args netlist)
+
+  (if (or (and (primp module-name)
+               (equal (length args)
+                      (length (primp2 module-name 'inputs))))
+        
+          (and (lookup-module module-name netlist)
+               (equal (length args)
+                      (length (module-inputs
+                               (lookup-module module-name
+                                              netlist))))))
+      (list-list-sort
+       (out-depends-simple 0 module-name args netlist
+                    (simple-dependency-table netlist)))
+
+    f))
+
+(disable output-dependencies-simple)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Input/Output Types
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Below are functions that check the types of module inputs and outputs.  
+
+(defn type-value-simple (n alist default)
+  (let ((r (lookup-module n alist)))
+    (if (nlistp r)
+        (if default 'free (list n))
+      (if (nlistp (cdr r))
+          (cdr r)
+        (if (equal (cadr r) n)
+            (if default 'free (cdr r))
+          (type-value-simple (cadr r)
+                             (delete-module n alist)
+                             default))))))
+
+(disable type-value-simple)
+
+(defn collect-types (names alist default)
+  (if (nlistp names)
+      nil
+    (cons (type-value-simple (car names) alist default)
+          (collect-types (cdr names) alist default))))
+
+(disable collect-types)
+
+(defn add-new-type (new-type-entry known-types)
+  (let ((name (car new-type-entry))
+        (new-type (cdr new-type-entry)))
+    (let ((old-type-entry (lookup-module name known-types)))
+      (let ((old-type (cdr old-type-entry)))
+        (cond ((equal new-type 'free) known-types)
+              ((nlistp old-type-entry) (cons new-type-entry known-types))
+              ((equal new-type old-type) known-types)
+              ((listp new-type)
+               (cons (cons (car new-type) old-type)
+                     known-types))
+              ((listp old-type)
+               (let ((r (add-new-type (cons (car old-type) new-type)
+                                      (delete-module name known-types))))
+                 (if r (cons new-type-entry r) f)))
+              (t f))))))
+
+(disable add-new-type)
+
+(defn update-known-types (new-types known-types)
+  (if (or (nlistp new-types)
+          (falsep known-types))
+      known-types
+    (update-known-types (cdr new-types)
+                        (add-new-type (car new-types) known-types))))
+
+(disable update-known-types)
+
+(defn fix-dependent-types (types alist)
+  (if (nlistp types)
+      nil
+    (if (listp (car types))
+        (cons (value (caar types) alist)
+              (fix-dependent-types (cdr types) alist))
+      (cons (car types)
+            (fix-dependent-types (cdr types) alist)))))
+
+(disable fix-dependent-types)
+
+
+(defn io-types-simple (flg x0 x1 netlist type-table)
+  (case
+    flg
+    (0 (let ((fn x0)
+             (arg-types x1))
+
+         (cond ((primp fn)
+                (cons (primp2 fn 'input-types)
+                      (fix-dependent-types
+                       (primp2 fn 'output-types)
+                       (pairlist (primp2 fn 'inputs) arg-types))))
+
+               ((and (lookup-module 'input-types
+                                    (cdr (lookup-module fn type-table)))
+                     (lookup-module 'output-types
+                                    (cdr (lookup-module fn type-table))))
+                (cons (cdr (lookup-module
+                            'input-types
+                            (cdr (lookup-module fn type-table))))
+                      (fix-dependent-types
+                       (cdr (lookup-module
+                             'output-types
+                             (cdr (lookup-module fn type-table))))
+                       (pairlist (module-inputs (lookup-module fn netlist))
+                                 arg-types))))
+
+               (t (let ((module (lookup-module fn netlist)))
+                    (if (listp module)
+                        (let ((m-ins  (module-inputs      module))
+                              (m-outs (module-outputs     module))
+                              (m-occs (module-occurrences module)))
+
+                          (let ((o-types
+                                 (io-types-simple 1 m-occs nil
+                                                  (delete-module fn netlist)
+                                                  type-table)))
+
+                            (if o-types
+                                (cons (collect-types m-ins o-types t)
+                                      (fix-dependent-types
+                                       (collect-types m-outs o-types f)
+                                       (pairlist m-ins arg-types)))
+                              f)))
+                      
+                      f))))))
+
+    (1 (let ((body x0)
+             (known-types x1))
+
+         (if (nlistp body)
+             known-types
+
+           (let ((occ (car body)))
+             (let ((o-outs (occ-outputs  occ))
+                   (o-fn   (occ-function occ))
+                   (o-ins  (occ-inputs   occ)))
+
+               (let ((o-types 
+                      (io-types-simple 0 o-fn
+                                       (collect-types o-ins known-types f)
+                                       netlist type-table)))
+                 (if (listp o-types)
+                     (let ((o-in-types  (car o-types))
+                           (o-out-types (cdr o-types)))
+                       (let ((new-types (update-known-types
+                                         (pairlist o-outs o-out-types)
+                                         (update-known-types
+                                          (pairlist o-ins o-in-types)
+                                          known-types))))
+                         (if new-types
+
+                             (io-types-simple 1 (cdr body) new-types
+                                              netlist type-table)
+                           f)))
+
+                   f)))))))
+
+    (otherwise f))
+                             
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(disable io-types-simple)
+
+
+(defn netlist-type-table-simple (netlist)
+
+  (if (nlistp netlist)
+      nil
+      
+    (let ((r (netlist-type-table-simple (cdr netlist)))
+          (module (car netlist)))
+
+      (if r
+          (let ((m-name (module-name    module))
+                (m-ins  (module-inputs  module)))
+            (let ((io-types-simple
+                   (io-types-simple 0 m-name (listify m-ins) netlist r)))
+
+              (if (listp io-types-simple)
+                  (cons (list m-name
+                              (cons 'input-types (car io-types-simple))
+                              (cons 'output-types (cdr io-types-simple)))
+                        r)
+                f)))
+        f))))
+
+(disable netlist-type-table-simple)
+
+
+(defn types-acceptablep (flg x0 netlist acceptable-types checked-modules)
+  (case
+    flg
+    (0 (let ((fn x0))
+
+         (cond ((primp fn)
+                (and (subset (primp2 fn 'input-types) acceptable-types)
+                     (subset (fix-dependent-types
+                              (primp2 fn 'output-types)
+                              (pairlist (primp2 fn 'inputs)
+                                        (primp2 fn 'input-types)))
+                             acceptable-types)))
+
+               ((member fn checked-modules) t)
+
+               (t (let ((module (lookup-module fn netlist)))
+
+                    (if (listp module)
+                        (let ((m-occs (module-occurrences module)))
+
+                          (types-acceptablep 1 m-occs
+                                             (delete-module fn netlist)
+                                             acceptable-types
+                                             checked-modules))
+                      f))))))
+
+    (1 (let ((body x0))
+
+         (if (nlistp body)
+             t
+
+           (let ((occ (car body)))
+             (let ((o-fn (occ-function occ)))
+
+               (if (types-acceptablep 0 o-fn netlist
+                                      acceptable-types checked-modules)
+                   (types-acceptablep 1 (cdr body) netlist
+                                      acceptable-types checked-modules)
+                 f))))))
+
+    (otherwise f))
+                             
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(disable types-acceptablep)
+
+
+(defn netlist-types-acceptable-list (netlist)
+  (if (nlistp netlist)
+      nil
+    (let ((r (netlist-types-acceptable-list (cdr netlist)))
+          (module (car netlist)))
+      (if r
+          (let ((m-name (module-name module)))
+            (if (types-acceptablep 0 m-name netlist
+                                   '(boolp clk level clk-10 free)
+                                   r)
+                (cons m-name r)
+              f))
+        f))))
+
+(disable netlist-types-acceptable-list)
+
+
+(defn netlist-type-check-simple-okp (netlist)
+  (if (netlist-types-acceptable-list netlist)
+      (netlist-type-table-simple netlist)
+    f))
+
+(disable netlist-type-check-simple-okp)
+
+
+;;; The following 2 functions are utility functions (not part of the
+;;; predicate).
+
+(defn arg-types-match-simplep (actuals formals)
+  (if (or (nlistp actuals) (nlistp formals))
+      (equal actuals formals)
+    (and (or (equal (car actuals) (car formals))
+             (equal (car formals) 'free))
+         (arg-types-match-simplep (cdr actuals) (cdr formals)))))
+
+(disable arg-types-match-simplep)
+
+(defn arg-types-simple-okp (fn arg-types netlist)
+
+  (if (not (subset arg-types '(boolp clk level clk-10)))
+      f
+
+    (let ((io-types-simple
+           (io-types-simple 0 fn arg-types netlist
+                            (netlist-type-table-simple netlist))))
+      (if (listp io-types-simple)
+          (arg-types-match-simplep arg-types (car io-types-simple))
+        f))))
+
+(disable arg-types-simple-okp)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    State Types
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  The predicates below check that a state argument for DUAL-EVAL
+;;;  is well-formed (the correct type) with respect to the netlist.
+
+
+(defn make-ram-state (structure width bit-value)
+  (if (nlistp structure)
+      (ram (make-list width bit-value))
+    (cons (make-ram-state (car structure) width bit-value)
+          (make-ram-state (cdr structure) width bit-value))))
+
+(disable make-ram-state)
+
+(defn state-type-requirement-simple (flg x0 x1 netlist type-table)
+  (case
+    flg
+    (0 (let ((fn x0))
+
+         (cond ((primp fn)
+                (if (lookup-module 'state-types (cdr (primp fn)))
+                    (eval$ t
+                           (cdr (lookup-module 'state-types (cdr (primp fn))))
+                           nil)
+                  T))
+
+               ((lookup-module fn type-table)
+                (if (lookup-module 'state-types
+                                   (cdr (lookup-module fn type-table)))
+                    (cdr (lookup-module 'state-types
+                                        (cdr (lookup-module fn type-table))))
+                  t))
+
+               (t (let ((module (lookup-module fn netlist)))
+                    (if (listp module)
+                        (let ((m-occs   (module-occurrences module))
+                              (m-states (module-statenames  module)))
+                          (let ((m-state-list (m-states-list m-states))
+                                (state-types
+                                 (state-type-requirement-simple
+                                  1 m-occs nil
+                                  (delete-module fn netlist)
+                                  type-table)))
+                            (if (set-equal m-state-list (strip-cars
+                                                         state-types))
+                                (if (equal m-states nil)
+                                    T
+                                  (collect-states m-states state-types))
+                              f)))
+                      f))))))
+
+    (1 (let ((body x0)
+             (state-types x1))
+
+         (if (nlistp body)
+             state-types
+
+           (let ((occ (car body)))
+             (let ((o-name (occ-name     occ))
+                   (o-fn   (occ-function occ)))
+
+               (let ((o-type
+                      (state-type-requirement-simple 0 o-fn nil
+                                                     netlist type-table)))
+                 (if (truep o-type)
+
+                     (state-type-requirement-simple 1 (cdr body) state-types
+                                                    netlist type-table)
+                   (if o-type
+                       (state-type-requirement-simple
+                        1 (cdr body)
+                        (cons (cons o-name o-type) state-types)
+                        netlist type-table)
+
+                     f))))))))
+
+    (otherwise f))
+                             
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(disable state-type-requirement-simple)
+
+
+(defn netlist-state-types-simple (netlist)
+
+  (if (nlistp netlist)
+      nil
+      
+    (let ((r (netlist-state-types-simple (cdr netlist)))
+          (module (car netlist)))
+
+      (if r
+          (let ((m-name (module-name module)))
+            (let ((state-types (state-type-requirement-simple 0 m-name nil
+                                                              netlist r)))
+
+              (if (truep state-types)
+                  r
+                (if state-types
+                    (cons (list m-name
+                                (cons 'state-types state-types))
+                          r)
+                  f))))
+        f))))
+
+(disable netlist-state-types-simple)
+
+
+;;;  The following 2 functions are utility functions (not part of the
+;;;  predicate).
+
+(defn state-simple-okp (state type)
+  (cond ((truep type)
+         (equal state nil))
+        ((equal type 'boolp)
+         (boolp state))
+        ((ramp type)
+         (and (ramp state)
+              (state-simple-okp (ram-guts state) (ram-guts type))))
+        ((romp type)
+         (and (romp state)
+              (state-simple-okp (rom-guts state) (rom-guts type))))
+        ((stubp type)
+         (and (stubp state)
+              (state-simple-okp (stub-guts state) (stub-guts type))))
+        ((listp type)
+         (and (listp state)
+              (state-simple-okp (car state) (car type))
+              (state-simple-okp (cdr state) (cdr type))))
+        ((equal type nil)
+         (equal state nil))
+        (T F)))
+
+(disable state-simple-okp)
+
+
+(defn apply-state-simple-okp (fn state netlist)
+  (let ((type (state-type-requirement-simple
+               0 fn nil netlist (netlist-state-types-simple netlist))))
+    (state-simple-okp state type)))
+
+(disable apply-state-simple-okp)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Netlist Loadings and Drives
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Note:  This assumes each loading is a number, a name, or a list of
+;;;  number and names, and each drive value is a number or a name.
+
+
+(defn fix-dependent-lds (lds alist)
+  (if (nlistp lds)
+      lds
+    (let ((ld (cond ((or (litatom (car lds)) (indexp (car lds)))
+                     (value (car lds) alist))
+                    ((nlistp (car lds)) (car lds))
+                    (t (fix-dependent-lds (car lds) alist)))))
+      (cons ld (fix-dependent-lds (cdr lds) alist)))))
+
+(disable fix-dependent-lds)
+
+(defn parent-synonym-simple (name slist)
+  (if (listp (lookup-module name slist))
+      (let ((v (cdr (lookup-module name slist))))
+        (if (or (litatom v) (indexp v))
+            (parent-synonym-simple v (delete-module name slist))
+          name))
+    name))
+
+(disable parent-synonym-simple)
+
+(defn add-loading-simple (name loading ld-list)
+  (if (nlistp (lookup-module name ld-list))
+      (cons (cons name (if (listp loading) loading (list loading)))
+            ld-list)
+    (let ((old-loadings (cdr (lookup-module name ld-list))))
+      (cons (cons name
+                  (if (listp loading)
+                      (append loading old-loadings)
+                    (cons loading old-loadings)))
+            (delete-module name ld-list)))))
+
+(disable add-loading-simple)
+
+(defn add-loading-simples (names loadings ld-list)
+  (if (nlistp names)
+      ld-list
+    (add-loading-simples (cdr names) (cdr loadings)
+                         (add-loading-simple (car names) (car loadings)
+                                             ld-list))))
+
+(disable add-loading-simples)
+
+(defn sum-numbers (lst)
+  (cond ((nlistp lst) 0)
+        ((numberp (car lst))
+         (plus (car lst) (sum-numbers (cdr lst))))
+        (t (sum-numbers (cdr lst)))))
+
+(disable sum-numbers)
+
+(defn extract-names-simple (lst)
+  (cond ((nlistp lst) nil)
+        ((and (or (litatom (car lst)) (indexp (car lst)))
+              (not (member (car lst) (cdr lst))))
+         (cons (car lst) (extract-names-simple (cdr lst))))
+        (t (extract-names-simple (cdr lst)))))
+
+(disable extract-names-simple)
+      
+(defn sum-loading (ld)
+  (let ((name (car ld))
+        (nval (sum-numbers (cdr ld)))
+        (sval (extract-names-simple (cdr ld))))
+    (cons name
+          (cond ((nlistp sval) (list nval))
+                ((zerop nval) sval)
+                (t (cons nval sval))))))
+
+(disable sum-loading)
+    
+(defn sum-loadings (lds)
+  (if (nlistp lds)
+      nil
+    (cons (sum-loading (car lds))
+          (sum-loadings (cdr lds)))))
+
+(disable sum-loadings)
+
+
+;;; FIX-LOADINGS transfers loadings from synonyms to their parent synonym.
+;;; It then sums numeric loadings and removes duplicates from name loadings.
+
+(defn fix-loadings (slist lds)
+  (if (nlistp slist)
+      (sum-loadings lds)
+    (if (or (litatom (cdar slist)) (indexp (cdar slist)))
+        (fix-loadings (cdr slist)
+                      (add-loading-simple (cdar slist)
+                                          (value (caar slist) lds)
+                                          (delete-module (caar slist) lds)))
+      (fix-loadings (cdr slist) lds))))
+
+(disable fix-loadings)
+
+
+;;; FIX-DRIVES replaces name drive values with the parent synonym.  
+
+(defn fix-drives (drs slist)
+  (if (nlistp drs)
+      nil
+    (if (or (litatom (cdar drs)) (indexp (cdar drs)))
+        (cons (cons (caar drs) (parent-synonym-simple (cdar drs) slist))
+              (fix-drives (cdr drs) slist))
+      (cons (car drs) (fix-drives (cdr drs) slist)))))
+
+(disable fix-drives)
+
+
+;;; NET-DRIVES subtracts loads from drive values, returning F if a signal is
+;;; overloaded.  
+
+(defn net-drives (drs lds)
+  (cond ((nlistp drs) nil)
+        ((numberp (cdar drs))
+         (let ((nld (sum-numbers (value (caar drs) lds))))
+           (if (lessp (cdar drs) nld)
+               F
+             (let ((r (net-drives (cdr drs) lds)))
+               (if r
+                   (cons (cons (caar drs) (difference (cdar drs) nld))
+                         r)
+                 F)))))
+        (t (let ((r (net-drives (cdr drs) lds)))
+             (if r
+                 (cons (car drs) r)
+               F)))))
+
+(disable net-drives)
+
+
+;;; EXTERNAL-LOADING removes internal signal names (names not in
+;;; external-names) from ld-lst (a list of loadings).
+
+(defn external-loading (ld-lst external-names)
+  (cond ((nlistp ld-lst) ld-lst)
+        ((and (or (litatom (car ld-lst)) (indexp (car ld-lst)))
+              (not (member (car ld-lst) external-names)))
+         (external-loading (cdr ld-lst) external-names))
+        (t (cons (car ld-lst)
+                 (external-loading (cdr ld-lst) external-names)))))
+
+(disable external-loading)
+      
+(defn collect-loadings-simple (names loadings external-names)
+  ;; Each value in the alist LOADINGS should be a list, possibly empty.
+  (if (nlistp names)
+      nil
+    (if (lookup-module (car names) loadings)
+        (let ((r (external-loading (value (car names) loadings)
+                                   external-names)))
+          (cons
+           (cond ((nlistp r) 0)
+                 ((nlistp (cdr r)) (car r))
+                 (t r))
+           (collect-loadings-simple (cdr names) loadings external-names)))
+      (cons 0
+            (collect-loadings-simple (cdr names) loadings external-names)))))
+
+(disable collect-loadings-simple)
+
+
+;;;  COLLECT-DRIVES-SIMPLE collects drive values for module outputs
+;;;  NAMES, which are expected to be a subset of EXTERNAL-NAMES
+;;;  (module inputs and outputs).  DRIVES should be an alist, and, on
+;;;  the initial call, each value in it should be either a number or
+;;;  the parent synonym of the corresponding key.
+;;;
+;;;  The code beginning "(let ((s (parent-synonym-simple v drives)))" 
+;;;  handles cases like 
+;;;    (FANOUT-4 (A) 
+;;;             (Z0 Z1 Z2 Z3) 
+;;;             ((AA (AA) B-BUF (A)) 
+;;;              (G0 (Z0) ID (AA)) 
+;;;              (G1 (Z1) ID (AA)) 
+;;;              (G2 (Z2) ID (AA)) 
+;;;              (G3 (Z3) ID (AA))) 
+;;;             NIL)
+
+;;;  where some outputs are synonyms for an internal signal.  The
+;;;  first such output (Z0) gets the drive value of the internal
+;;;  signal (AA), and the other outputs are marked as synonyms of the
+;;;  first output instead of the internal signal.  In the if-test true
+;;;  branch (equal s v), internal signal v is the parent synonym, and
+;;;  its drive value will be numeric (every parent synonym either has
+;;;  a numeric drive value or is a module input).  The first output
+;;;  (car names) is given v's drive value and made the parent synonym
+;;;  of v.  In the if-test false branch, s and v are different only
+;;;  when DRIVES has been modified by the if-test true branch; s is a
+;;;  member of the original NAMES list, thus an external name.
+
+(defn collect-drives-simple (names drives external-names)
+  (if (nlistp names)
+      nil
+    (let ((v (value (car names) drives)))
+      (if (or (not (or (litatom v) (indexp v)))
+              (member v external-names))
+          (cons v (collect-drives-simple (cdr names) drives external-names))
+        (let ((s (parent-synonym-simple v drives)))
+          (if (equal s v)
+              (cons (value v drives)
+                    (collect-drives-simple
+                     (cdr names)
+                     (cons (cons v (car names))
+                           (cons (cons (car names) (value v drives))
+                                 (delete-module (car names)
+                                                (delete-module v drives))))
+                     external-names))
+            (cons s (collect-drives-simple (cdr names)
+                                           drives external-names))))))))
+
+(disable collect-drives-simple)
+
+(defn loadings-and-drives-simple (flg x0 x1 x2 netlist lds-table)
+  (case
+    flg
+    (0 (let ((fn x0)
+             (inputs x1)
+             (outputs x2))
+
+         (cond
+          ((primp fn)
+           (let ((arg-map (append (pairlist (primp2 fn 'inputs) inputs)
+                                  (pairlist (primp2 fn 'outputs)
+                                            outputs))))
+             (cons (fix-dependent-lds (primp2 fn 'loadings) arg-map)
+                   (fix-dependent-lds (primp2 fn 'drives) arg-map))))
+
+
+          ((and (lookup-module 'loadings
+                               (cdr (lookup-module fn lds-table)))
+                (lookup-module 'drives
+                               (cdr (lookup-module fn lds-table))))
+           (let ((module (lookup-module fn netlist)))
+             (let ((arg-map (append (pairlist (module-inputs module)
+                                              inputs)
+                                    (pairlist (module-outputs module)
+                                              outputs))))
+               (cons (fix-dependent-lds
+                      (cdr (lookup-module 'loadings
+                                          (cdr (lookup-module fn
+                                                              lds-table))))
+                      arg-map)
+                     (fix-dependent-lds
+                      (cdr (lookup-module 'drives
+                                          (cdr (lookup-module fn
+                                                              lds-table))))
+                      arg-map)))))
+
+          (t (let ((module (lookup-module fn netlist)))
+               (if (listp module)
+                   (let ((m-ins  (module-inputs      module))
+                         (m-outs (module-outputs     module))
+                         (m-occs (module-occurrences module)))
+
+                     (let ((o-lds-drs (loadings-and-drives-simple
+                                       1 m-occs nil nil
+                                       (delete-module fn netlist)
+                                       lds-table)))
+                       (if o-lds-drs
+                           (let ((o-lds (car o-lds-drs))
+                                 (o-drs (cdr o-lds-drs))
+                                 (arg-map (append
+                                           (pairlist m-ins inputs)
+                                           (pairlist m-outs outputs))))
+                             (cons (fix-dependent-lds
+                                    (collect-loadings-simple m-ins o-lds
+                                                             m-outs)
+                                    arg-map)
+                                   (fix-dependent-lds 
+                                    (collect-drives-simple m-outs o-drs
+                                                           (append m-ins
+                                                                   m-outs))
+                                    arg-map)))
+                         f)))
+                      
+                 f))))))
+
+    (1 (let ((body x0)
+             (loadings x1)
+             (drives x2))
+
+         (if (nlistp body)
+             (let ((fixed-drs (fix-drives drives drives)))
+               (let ((fixed-lds (fix-loadings fixed-drs loadings)))
+                 (let ((net-drs (net-drives fixed-drs fixed-lds)))
+                   (if (and fixed-lds net-drs)
+                       (cons fixed-lds net-drs)
+                     f))))
+
+           (let ((occ (car body)))
+             (let ((o-outs (occ-outputs  occ))
+                   (o-fn   (occ-function occ))
+                   (o-ins  (occ-inputs   occ)))
+
+               (let ((o-lds-drs
+                      (loadings-and-drives-simple 0 o-fn o-ins o-outs
+                                                  netlist lds-table)))
+                 (if o-lds-drs
+                     (loadings-and-drives-simple
+                      1 (cdr body)
+                      (add-loading-simples o-ins (car o-lds-drs) loadings)
+                      (append (pairlist o-outs (cdr o-lds-drs))
+                              drives)
+                      netlist lds-table)
+                   f)))))))
+
+    (otherwise f))
+                             
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(disable loadings-and-drives-simple)
+
+(defn netlist-loadings-and-drives-simple (netlist)
+  (if (nlistp netlist)
+      nil
+    (let ((r (netlist-loadings-and-drives-simple (cdr netlist)))
+          (module (car netlist)))
+      (if r
+          (let ((m-name (module-name    module))
+                (m-ins  (module-inputs  module))
+                (m-outs (module-outputs module)))
+            (let ((m-lds-drs (loadings-and-drives-simple 0 m-name m-ins m-outs
+                                                         netlist r)))
+
+              (if m-lds-drs
+                  (cons (list m-name
+                              (cons 'loadings (car m-lds-drs))
+                              (cons 'drives (cdr m-lds-drs)))
+                        r)
+                f)))
+        f))))
+
+(disable netlist-loadings-and-drives-simple)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Top Level Predicates
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Our circuit predicates should be used in a specific order.  The
+;;;  predicate NETLIST-SYNTAX-SIMPLE-OKP must be used to ensure that
+;;;  the basic syntax and arities of all modules in a netlist are
+;;;  correct; our other predicates depend on this.
+
+(defn top-level-predicate-simple (netlist)
+  (if (not (netlist-syntax-simple-okp netlist))
+      'netlist-syntax-simple-okp-error
+  (if (not (simple-dependency-table netlist))
+      'dependency-table-simple-error
+  (if (not (netlist-type-check-simple-okp netlist))
+      'netlist-type-check-simple-okp-error
+  (if (not (netlist-state-types-simple netlist))
+      'netlist-state-types-simple-error
+  (if (not (netlist-loadings-and-drives-simple netlist))
+      'netlist-loadings-and-drives-simple-error
+      t))))))
+
+
+#|
+
+(setq d2 '((d2 (in0) 
+               (out0) 
+               ((g (out0) b-and (in0 out0)))
+               nil)))
+
+(setq d3 (list (list 'd3
+                     '(in0) 
+                     (list (index 'out0 3))
+                     (list (list 'g
+                                 (list (index 'out0 3))
+                                 'b-and
+                                 (list 'in0
+                                       (index 'out0 3))))
+                     nil)))
+
+(defn d4 ()
+  (list (list 'd4
+              '(in0) 
+              (list (index 'out0 3))
+              (list (list 'g
+                          (list (index 'out0 3))
+                          'b-and
+                          (list 'in0
+                                (index 'out0 3))))
+              nil)))
+
+
+(netlist-syntax-simple-okp d2 10 nil)
+(out-depends-simple 0 'd2 '((a)) d2 nil)
+
+
+(setq ex-net
+      '((m1 (clk)
+            (out1 out2)
+            ((o1 (out1 out2) fd1 (out1 clk)))
+            o1)))
+
+(top-level-predicate ex-net)
+(netlist-loadings-and-drives-simple ex-net)
+  = '((M1 (LOADINGS 1) (DRIVES 9 10)))
+
+
+(setq ex-net '((m3 (in0 clk) (out1 out2)
+                   ((o1 (oi1) b-not (in0))
+                    (o2 (out1) b-not (in0))
+                    (o5 (out2 waste) fd1 (oi2 clk)) 
+                           ; oi2 is ok here because out2 does not
+                           ; depend on oi2.  Out2 depends only on
+                           ; fd1's internal state before update.
+                    (o4 (ii1) b-and (out2 oi1))
+                    (o3 (oi2) b-and (in0 ii1)))
+                   o5)))
+
+(netlist-syntax-simple-okp ex-net 10 nil)
+(out-depends-simple 0 'm3 '((new-in) (new-clk)) ex-net nil)
+
+(arg-types-simple-okp 'm3 '(boolp clk) ex-net)
+(arg-types-simple-okp 'm3 '(clk boolp) ex-net)
+(arg-types-simple-okp 'm3 '(boolp boolp) ex-net)
+(netlist-type-table-simple ex-net)
+(netlist-type-check-simple-okp ex-net)
+
+(netlist-state-types-simple ex-net)
+
+; in the following, first 2 are ok and the remaining 3 are not
+(list (apply-state-simple-okp 'm3 f ex-net)
+      (apply-state-simple-okp 'm3 t ex-net)
+      (apply-state-simple-okp 'm3 (x) ex-net)
+      (apply-state-simple-okp 'm3 (list t) ex-net)
+      (apply-state-simple-okp 'm3 nil ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+  = '((M3 (LOADINGS 5 1) (DRIVES 10 9)))
+
+
+
+(setq ex-net '((m3 (in0 clk) (out1 out2)
+                   ((o1 (is1) id (in0))
+                    (o2 (is2) id (clk))
+                    (o3 (is3 is4) fd1 (is1 is2))    
+                    ; oi2 is ok here because out2 does not depend on
+                    ; oi2.  Out2 depends only on fd1's internal state
+                    ; before update.
+                    (o4 (out1) id (is3))
+                    (o5 (out2) id (is4)))
+                   o3)))
+
+(arg-types-simple-okp 'm3 '(boolp clk) ex-net)
+(arg-types-simple-okp 'm3 '(clk boolp) ex-net)
+(arg-types-simple-okp 'm3 '(boolp boolp) ex-net)
+(netlist-type-table-simple ex-net)
+(netlist-type-check-simple-okp ex-net)
+
+(netlist-loadings-and-drives-simple ex-net) 
+  = '((M3 (LOADINGS 1 1) (DRIVES 10 10)))
+
+
+(setq ex-net '((m1 (in0) (out0)
+                   ((o1 (is1) id (in0))
+                    (o2 (is2) id (is1))
+                    (o3 (is3) id (is2))
+                    (o4 (out0) id (is3)))
+                   nil)))
+
+(arg-types-simple-okp 'm1 '(boolp) ex-net)
+(arg-types-simple-okp 'm1 '(clk) ex-net)
+(arg-types-simple-okp 'm1 '(parametric) ex-net)
+(netlist-type-table-simple ex-net)
+(netlist-type-check-simple-okp ex-net)
+
+(netlist-state-types-simple ex-net)
+
+; in the following, the first is ok and the other 2 are not
+(list (apply-state-simple-okp 'm1 nil ex-net)
+      (apply-state-simple-okp 'm1 t ex-net)
+      (apply-state-simple-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS OUT0) (DRIVES IN0)))
+
+
+(setq test-net '((test () (a b)
+                       ((inv1 (a) b-not   (b))
+                        (inv2 (b) b-not   (a)))
+                       nil)))
+
+(netlist-syntax-simple-okp test-net 10 nil)
+(out-depends-simple 0 'test '() test-net nil)
+(netlist-state-input-simple-okp test-net (dependency-table test-net))
+
+
+
+(setq netlist '((m2 (clk en0 en1 sel0 sel1 d0 d1) (q)
+                    ((occ0 (q0) m1     (clk en0 sel0 d0 q))
+                     (occ1 (q1) m1     (clk en1 sel1 d1 q))
+                     (wire (q)  t-wire (q0 q1)))
+                    (occ0 occ1))
+                (m1 (clk en sel d q) (q)
+                    ((mux   (b)    b-if  (sel d q))
+                     (latch (a an) fd1   (b clk))
+                     (tbuf  (q)    t-buf (en a)))
+                    latch)))
+
+
+(setq args '((a) (b) (c) (d) (e)))
+
+(out-depends-simple 0 'm1 args netlist module-database)
+
+
+(setq args-if2 '((c) (v0 v1) (x0) (v0 w0) (y0 y1)))
+(out-depends-simple 0 'b-if2 args-if2 nil module-database)
+
+
+(setq args-core6
+      '((c) (a0) (a1) (b0) (b1) (zero)
+        (mpg-0) (mpg-1) (mpg-2) (mpg-3) (mpg-4) (mpg-5) (mpg-6)
+        (op-0) (op-1) (op-2) (op-3)))
+
+(output-dependencies-simple (index 'core-alu 6) args-core6 test)
+
+
+
+(setq args-core108
+      '((c) (a0) (a1) (a2) (a3) (b0) (b1) (b2) (b3) (zero) 
+        (mpg-0) (mpg-1) (mpg-2) (mpg-3) (mpg-4) (mpg-5) (mpg-6)
+        (op-0) (op-1) (op-2) (op-3)))
+
+(setq arg-types-core108
+      '(boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp))
+
+(setq netlist-4 (core-alu$netlist (make-tree 4)))
+(setq module-database (dependency-table netlist-4))
+
+(output-dependencies-simple (index 'core-alu 108) args-core108 netlist-4)
+(netlist-syntax-simple-okp netlist-4 20 nil)
+
+(netlist-type-table-simple netlist-4)
+(arg-types-simple-okp (index 'core-alu 108) arg-types-core108 netlist-4)
+(netlist-type-check-simple-okp netlist-4)
+
+(netlist-loadings-and-drives-simple netlist-4)
+= (LIST (LIST (INDEX 'CORE-ALU 108) 
+             '(LOADINGS 5 6 4 4 7 3 3 3 5 5 4 4 4 4 4 4 4 8 7 6 7) 
+             '(DRIVES 10 10 10 9 9 9 9)) 
+       (LIST (INDEX 'TV-ALU-HELP 108) 
+             '(LOADINGS 3 4 4 4 4 3 3 3 3 4 4 4 4 4 4 4) 
+             '(DRIVES 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 6) 
+             '(LOADINGS 2 4 4 3 3 2 2 2 2 2 2 2) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 1) 
+             '(LOADINGS 1 4 3 1 1 1 1 1 1 1) 
+             '(DRIVES 7 8 10)) 
+       '(ALU-CELL (LOADINGS 1 4 3 1 1 1 1 1 1 1) 
+                  (DRIVES 7 8 10)) 
+       '(P-CELL (LOADINGS 1 1 1 1 1 1) 
+                (DRIVES 10)) 
+       '(G-CELL (LOADINGS 1 1 1 1 1 1) 
+                (DRIVES 10)) 
+       (LIST (INDEX 'V-BUF 7) 
+             '(LOADINGS 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10)) 
+       '(T-CARRY (LOADINGS 1 1 1) (DRIVES 10)) 
+       '(CARRY-OUT-HELP (LOADINGS 2 2 2 2 2 2 2) 
+                        (DRIVES 10)) 
+       '(OVERFLOW-HELP (LOADINGS 1 2 2 2 2 2 2 2) 
+                       (DRIVES 10)) 
+       (LIST (INDEX 'TV-SHIFT-OR-BUF 108) 
+             '(LOADINGS 1 1 2 2 2 1 1 4 3 2 3) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-IF 108) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-IF 6) 
+             '(LOADINGS 4 1 1 1 1) 
+             '(DRIVES 10 10)) 
+       (LIST (INDEX 'TV-IF 1) 
+             '(LOADINGS 2 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'TV-ZEROP 108) 
+             '(LOADINGS 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-OR 108) 
+             '(LOADINGS 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-NOR 6) 
+             '(LOADINGS 1 1) 
+             '(DRIVES 10)) 
+       '(B-BUF (LOADINGS 1) (DRIVES 10))) 
+
+
+
+(setq args-16
+      '((C-in) (a0) (a1) (a2) (a3) (a4) (a5) (a6) (a7) (a8) (a9) (a10)
+        (a11) (a12) (a13) (a14) (a15) (b0) (b1) (b2) (b3) (b4) (b5) (b6) (b7)
+        (b8) (b9) (b10) (b11) (b12) (b13) (b14) (b15) zero (mpg0) (mpg1)
+        (mpg2) (mpg3) (mpg4) (mpg5) (mpg6) (op0) (op1) (op2) (op3)))
+
+(setq arg-types-16
+      '(boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp))
+
+(setq netlist-16 (core-alu$netlist (make-tree 16)))
+
+(netlist-syntax-simple-okp netlist-16 30 nil)
+
+(output-dependencies-simple (index 'core-alu 1826150832) args-16 netlist-16)
+
+(netlist-type-table-simple netlist-16)
+(arg-types-simple-okp (index 'core-alu 1826150832) arg-types-16 netlist-16)
+(netlist-type-check-simple-okp netlist-16)
+
+(netlist-loadings-and-drives-simple netlist-16)
+= (LIST (LIST (INDEX 'CORE-ALU 1826150832) 
+             '(LOADINGS 7 6 4 4 4 4 4 4 4 4 4 4 4 4 4 4 7 3 3 3 3 3 
+                        3 3 3 3 3 3 3 3 3 3 5 5 2 2 2 2 2 2 2 8 7 6 
+                        7) 
+             '(DRIVES 10 10 10 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9)) 
+       (LIST (INDEX 'TV-ALU-HELP 1826150832) 
+             '(LOADINGS 5 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 3 3 3 3 3 
+                        3 3 3 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 27864) 
+             '(LOADINGS 4 4 4 4 4 4 4 4 4 3 3 3 3 3 3 3 3 1 1 1 1 1 
+                        1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 108) 
+             '(LOADINGS 3 4 4 4 4 3 3 3 3 4 4 4 4 4 4 4) 
+             '(DRIVES 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 6) 
+             '(LOADINGS 2 4 4 3 3 2 2 2 2 2 2 2) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 1) 
+             '(LOADINGS 1 4 3 1 1 1 1 1 1 1) 
+             '(DRIVES 7 8 10)) 
+       '(ALU-CELL (LOADINGS 1 4 3 1 1 1 1 1 1 1) 
+                  (DRIVES 7 8 10)) 
+       '(P-CELL (LOADINGS 1 1 1 1 1 1) 
+                (DRIVES 10)) 
+       '(G-CELL (LOADINGS 1 1 1 1 1 1) 
+                (DRIVES 10)) 
+       (LIST (INDEX 'V-BUF 7) 
+             '(LOADINGS 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10)) 
+       '(T-CARRY (LOADINGS 1 1 1) (DRIVES 10)) 
+       '(CARRY-OUT-HELP (LOADINGS 2 2 2 2 2 2 2) 
+                        (DRIVES 10)) 
+       '(OVERFLOW-HELP (LOADINGS 1 2 2 2 2 2 2 2) 
+                       (DRIVES 10)) 
+       (LIST (INDEX 'TV-SHIFT-OR-BUF 1826150832) 
+             '(LOADINGS 1 1 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 1 1 4 3 2 
+                        3) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10)) 
+       (LIST (INDEX 'TV-IF 1826150832) 
+             '(LOADINGS 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                        1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10)) 
+       (LIST (INDEX 'TV-IF 27864) 
+             '(LOADINGS 2 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-IF 108) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-IF 6) 
+             '(LOADINGS 4 1 1 1 1) 
+             '(DRIVES 10 10)) 
+       (LIST (INDEX 'TV-IF 1) 
+             '(LOADINGS 2 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'TV-ZEROP 1826150832) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-OR 1826150832) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-NOR 27864) 
+             '(LOADINGS 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-OR 108) 
+             '(LOADINGS 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-NOR 6) 
+             '(LOADINGS 1 1) 
+             '(DRIVES 10)) 
+       '(B-BUF (LOADINGS 1) (DRIVES 10))) 
+
+
+
+
+(setq netlist-32 (core-alu$netlist (make-tree 32)))
+
+(top-level-predicate netlist-32)
+
+
+(output-dependencies-simple (caar netlist-32)
+                            (listify (module-inputs (car netlist-32)))
+                            netlist-32)
+
+(netlist-loadings-and-drives-simple netlist-32)
+= (LIST (LIST (INDEX 'CORE-ALU 7843258104655491936) 
+             '(LOADINGS 8 6 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 
+                        4 4 4 4 4 4 4 4 4 4 7 3 3 3 3 3 3 3 3 3 3 3 
+                        3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 5 5 
+                        4 4 4 4 4 4 4 8 7 6 7) 
+             '(DRIVES 10 10 10 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 
+                      9 9 9 9 9 9 9 9 9 9 9 9 9 9)) 
+       (LIST (INDEX 'TV-ALU-HELP 
+                    7843258104655491936) 
+             '(LOADINGS 6 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 
+                        4 4 4 4 4 4 4 4 4 4 4 3 3 3 3 3 3 3 3 3 3 3 
+                        3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 4 
+                        4 4 4 4 4 4) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 1826150832) 
+             '(LOADINGS 5 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 3 3 3 3 3 
+                        3 3 3 3 3 3 3 3 3 3 3 2 2 2 2 2 2 2) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 27864) 
+             '(LOADINGS 4 4 4 4 4 4 4 4 4 3 3 3 3 3 3 3 3 1 1 1 1 1 
+                        1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 108) 
+             '(LOADINGS 3 4 4 4 4 3 3 3 3 4 4 4 4 4 4 4) 
+             '(DRIVES 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 6) 
+             '(LOADINGS 2 4 4 3 3 2 2 2 2 2 2 2) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-ALU-HELP 1) 
+             '(LOADINGS 1 4 3 1 1 1 1 1 1 1) 
+             '(DRIVES 7 8 10)) 
+       '(ALU-CELL (LOADINGS 1 4 3 1 1 1 1 1 1 1) 
+                  (DRIVES 7 8 10)) 
+       '(P-CELL (LOADINGS 1 1 1 1 1 1) 
+                (DRIVES 10)) 
+       '(G-CELL (LOADINGS 1 1 1 1 1 1) 
+                (DRIVES 10)) 
+       (LIST (INDEX 'V-BUF 7) 
+             '(LOADINGS 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10)) 
+       '(T-CARRY (LOADINGS 1 1 1) (DRIVES 10)) 
+       '(CARRY-OUT-HELP (LOADINGS 2 2 2 2 2 2 2) 
+                        (DRIVES 10)) 
+       '(OVERFLOW-HELP (LOADINGS 1 2 2 2 2 2 2 2) 
+                       (DRIVES 10)) 
+       (LIST (INDEX 'TV-SHIFT-OR-BUF 
+                    7843258104655491936) 
+             '(LOADINGS 1 1 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+                        2 2 2 2 2 2 2 2 2 2 2 1 1 4 3 2 3) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10)) 
+       (LIST (INDEX 'TV-IF 7843258104655491936) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                        1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                        1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10 10)) 
+       (LIST (INDEX 'TV-IF 1826150832) 
+             '(LOADINGS 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                        1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 
+                      10)) 
+       (LIST (INDEX 'TV-IF 27864) 
+             '(LOADINGS 2 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10 10 10 10 10)) 
+       (LIST (INDEX 'TV-IF 108) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10 10 10 10)) 
+       (LIST (INDEX 'TV-IF 6) 
+             '(LOADINGS 4 1 1 1 1) 
+             '(DRIVES 10 10)) 
+       (LIST (INDEX 'TV-IF 1) 
+             '(LOADINGS 2 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'TV-ZEROP 7843258104655491936) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                        1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-NOR 7843258104655491936) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                        1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-OR 1826150832) 
+             '(LOADINGS 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-NOR 27864) 
+             '(LOADINGS 1 1 1 1 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-OR 108) 
+             '(LOADINGS 1 1 1 1) 
+             '(DRIVES 10)) 
+       (LIST (INDEX 'T-NOR 6) 
+             '(LOADINGS 1 1) 
+             '(DRIVES 10)) 
+       '(B-BUF (LOADINGS 1) (DRIVES 10))) 
+
+
+
+
+(defn dummy (x) 0)
+
+(defn netlist-syntax-simple-okp2 (netlist token-size)
+  (if (nlistp netlist)
+
+      (equal netlist nil)
+
+      (if (module-syntax-simple-okp netlist token-size nil)
+          (netlist-syntax-simple-okp2 (cdr netlist) token-size)
+          (and (dummy (caar netlist)) f))))
+
+
+
+|#
+
+
+#|
+
+(setq ex-net '((m1 (in1 in2 clk) (out1 out2 out3 out4)
+                   ((o1 (out1 out2 out3 out4)
+                        fd11
+                        (in1 in2 clk)))
+                   o1)
+               (fd11 (in1 in2 clk)
+                     (out1 out2 out3 out4)
+                     ((o1 (out1 out2) fd1 (in1 clk))
+                      (o2 (out3 out4) fd1 (in2 clk)))
+                     (o1 o2))))
+
+(netlist-state-types-simple ex-net)
+
+; in the following, the first 4 are ok and the remaining 6 are not
+(list (apply-state-simple-okp 'm1 (list f f) ex-net)
+      (apply-state-simple-okp 'm1 (list f t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f) ex-net)
+      (apply-state-simple-okp 'm1 (list t t) ex-net)
+      (apply-state-simple-okp 'm1 (list t (x)) ex-net)
+      (apply-state-simple-okp 'm1 (list (x) f) ex-net)
+      (apply-state-simple-okp 'm1 (list t f t) ex-net)
+      (apply-state-simple-okp 'm1 (list f) ex-net)
+      (apply-state-simple-okp 'm1 nil ex-net)
+      (apply-state-simple-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS 1 1 2) 
+       (DRIVES 10 10 10 10)) 
+   (FD11 (LOADINGS 1 1 2) 
+         (DRIVES 10 10 10 10))) 
+
+
+(setq ex-net
+      '((m1 (in1 in2 in3 in4 clk) (out1 out2 out3 out4)
+            ((o1 (out1 w1) fd1 (in1 clk))
+             (o2 (out2 w2) fd1 (in2 clk))
+             (o3 (out3 w3) fd1 (in3 clk))
+             (o4 (out4 w4) fd1 (in4 clk)))
+            (o1 o2 o3 o4))))
+
+(netlist-state-types-simple ex-net)
+
+; in the following the first 4 are ok and the remaining 6 are not
+(list (apply-state-simple-okp 'm1 (list f f f f) ex-net)
+      (apply-state-simple-okp 'm1 (list f t f t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f t f) ex-net)
+      (apply-state-simple-okp 'm1 (list t t t t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f (x) t) ex-net)
+      (apply-state-simple-okp 'm1 (list (x) t t t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f t f t) ex-net)
+      (apply-state-simple-okp 'm1 (list f t f) ex-net)
+      (apply-state-simple-okp 'm1 nil ex-net)
+      (apply-state-simple-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS 1 1 1 1 4) 
+       (DRIVES 10 10 10 10))) 
+
+
+(setq ex-net
+      '((m1 (in1 in2 in3 in4 clk) (out1 out2)
+            ((o1 (is1 w1) fd1 (in1 clk))
+             (o2 (is2 w2) fd1 (in2 clk))
+             (o3 (out1) b-and (is1 is2))
+             (o4 (is3 w3) fd1 (in3 clk))
+             (o5 (is4 w4) fd1 (in4 clk))
+             (o6 (out2) b-and (is3 is4)))
+            (o1 o2 o4 o5))))
+
+(netlist-state-types-simple ex-net)
+
+; in the following the first 4 are ok and the remaining 6 are not
+(list (apply-state-simple-okp 'm1 (list f f f f) ex-net)
+      (apply-state-simple-okp 'm1 (list f t f t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f t f) ex-net)
+      (apply-state-simple-okp 'm1 (list t t t t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f (x) t) ex-net)
+      (apply-state-simple-okp 'm1 (list (x) t t t) ex-net)
+      (apply-state-simple-okp 'm1 (list t f t f t) ex-net)
+      (apply-state-simple-okp 'm1 (list f t f) ex-net)
+      (apply-state-simple-okp 'm1 nil ex-net)
+      (apply-state-simple-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS 1 1 1 1 4) 
+       (DRIVES 10 10))) 
+
+
+(setq ex-net
+      '((m1
+         (read-a0 read-a1 read-a2 read-a3
+          write-b0 write-b1 write-b2 write-b3
+          wen
+          d0  d1  d2  d3  d4  d5  d6  d7
+          d8  d9  d10 d11 d12 d13 d14 d15
+          d16 d17 d18 d19 d20 d21 d22 d23
+          d24 d25 d26 d27 d28 d29 d30 d31)
+         (o0  o1  o2  o3  o4  o5  o6  o7
+          o8  o9  o10 o11 o12 o13 o14 o15
+          o16 o17 o18 o19 o20 o21 o22 o23
+          o24 o25 o26 o27 o28 o29 o30 o31)
+         ((o1
+           (o0  o1  o2  o3  o4  o5  o6  o7
+            o8  o9  o10 o11 o12 o13 o14 o15
+            o16 o17 o18 o19 o20 o21 o22 o23
+            o24 o25 o26 o27 o28 o29 o30 o31)
+           dp-ram-16x32
+           (read-a0 read-a1 read-a2 read-a3
+            write-b0 write-b1 write-b2 write-b3
+            wen
+            d0  d1  d2  d3  d4  d5  d6  d7
+            d8  d9  d10 d11 d12 d13 d14 d15
+            d16 d17 d18 d19 d20 d21 d22 d23
+            d24 d25 d26 d27 d28 d29 d30 d31)))
+         o1)))
+
+(netlist-state-types-simple ex-net)
+
+; in the following, the first 2 are ok and the remaining 5 are not
+(list (apply-state-simple-okp 'm1 (make-ram-state (make-tree 16) 32 t) ex-net)
+      (apply-state-simple-okp 'm1 (make-ram-state (make-tree 16) 32 f) ex-net)
+      (apply-state-simple-okp 'm1 (make-ram-state (make-tree 8) 32 f) ex-net)
+      (apply-state-simple-okp 'm1 (make-ram-state (make-tree 16) 8 f) ex-net)
+      (apply-state-simple-okp
+       'm1 (list (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (apply-state-simple-okp 'm1 (x) ex-net)
+      (apply-state-simple-okp 'm1 nil ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+               2 2 2 2 2 2)))
+
+
+(setq ex-net
+      '((m1
+         (clk
+          read-a0 read-a1 read-a2 read-a3
+          write-b0 write-b1 write-b2 write-b3
+          wen
+          d0  d1  d2  d3  d4  d5  d6  d7
+          d8  d9  d10 d11 d12 d13 d14 d15
+          d16 d17 d18 d19 d20 d21 d22 d23
+          d24 d25 d26 d27 d28 d29 d30 d31)
+         (o0  o1  o2  o3  o4  o5  o6  o7
+          o8  o9  o10 o11 o12 o13 o14 o15
+          o16 o17 o18 o19 o20 o21 o22 o23
+          o24 o25 o26 o27 o28 o29 o30 o31)
+         ((o0 (is w2) fd1 (d0 clk))
+          (o1
+           (o0  o1  o2  o3  o4  o5  o6  o7
+            o8  o9  o10 o11 o12 o13 o14 o15
+            o16 o17 o18 o19 o20 o21 o22 o23
+            o24 o25 o26 o27 o28 o29 o30 o31)
+           dp-ram-16x32
+           (read-a0 read-a1 read-a2 read-a3
+            write-b0 write-b1 write-b2 write-b3
+            wen
+            is  d1  d2  d3  d4  d5  d6  d7
+            d8  d9  d10 d11 d12 d13 d14 d15
+            d16 d17 d18 d19 d20 d21 d22 d23
+            d24 d25 d26 d27 d28 d29 d30 d31)))
+         (o0 o1))))
+
+(netlist-state-types-simple ex-net)
+
+; in the following, the first 4 are ok and remaining 7 are not
+(list (apply-state-simple-okp
+       'm1 (list f (make-ram-state (make-tree 16) 32 f)) ex-net)
+      (apply-state-simple-okp
+       'm1 (list f (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list t (make-ram-state (make-tree 16) 32 f)) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list t (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list t (make-ram-state (make-tree 15) 32 t)) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list t (make-ram-state (make-tree 16) 33 t)) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list f (make-ram-state (make-tree 16) 32 t) t) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (apply-state-simple-okp 
+       'm1 (list t) ex-net)
+      (apply-state-simple-okp 
+       'm1 (x) ex-net)
+      (apply-state-simple-okp 
+       'm1 nil ex-net))
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS 1 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+               2 2 2 2 2 2)))
+
+
+(setq ex-net
+      '((m1 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             in0
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31
+             clk)
+            (out0)
+            ((o1 (is1) m5 (in0))
+             (o2 (is2) m3 (is1 clk))
+             (o3 (is3) m4 (in0 is2))
+             (o4 (wen) m5 (is3))
+             (o5
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31 out0)
+              m2
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31
+               clk)))
+            (o2 o3 o5))
+        (m2 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             wen
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31
+             clk)
+            (o0  o1  o2  o3  o4  o5  o6  o7
+             o8  o9  o10 o11 o12 o13 o14 o15
+             o16 o17 o18 o19 o20 o21 o22 o23
+             o24 o25 o26 o27 o28 o29 o30 o31 out0)
+            ((o1
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31)
+              m6
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31))
+             (o2 (out0) m3 (o31 clk)))
+            (o1 o2))
+        (m3 (in0 clk) (out0)
+            ((o1 (out0) m7 (clk in0)))
+            o1)
+        (m4 (in1 in2) (out0)
+            ((o1 (is1) m5 (in1))
+             (o2 (is2 is3 is4 is5) fd11 (is1 in2 clk))
+             (o3 (out0) b-and4 (is2 is3 is4 is5)))
+            o2)
+        (m5 (in0) (out0)
+            ((o1 (out0) b-not (in0)))
+            nil)
+        (m6 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             wen
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31)
+            (o0  o1  o2  o3  o4  o5  o6  o7
+             o8  o9  o10 o11 o12 o13 o14 o15
+             o16 o17 o18 o19 o20 o21 o22 o23
+             o24 o25 o26 o27 o28 o29 o30 o31)
+            ((o-1
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31)
+              dp-ram-16x32
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31)))
+            o-1)
+        (m7 (clk in0) (out0)
+            ((o1 (out0 w) fd1 (in0 clk)))
+            o1)
+        (fd11 (in1 in2 clk)
+              (out1 out2 out3 out4)
+              ((o1 (out1 out2) fd1 (in1 clk))
+               (o2 (out3 out4) fd1 (in2 clk)))
+              (o1 o2))))
+
+(setq state
+      (list t (list t f) (list (make-ram-state (make-tree 16) 32 t) f)))
+
+(netlist-state-types-simple ex-net) ; repeat with flaws in net
+(apply-state-simple-okp 'm1 state ex-net) ; repeat with flaws in state
+
+(netlist-loadings-and-drives-simple ex-net) 
+ '((M1 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2) 
+       (DRIVES 10)) 
+   (M2 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+               2 2 2 2 2 1 10)) 
+   (M3 (LOADINGS 1 1) (DRIVES 10)) 
+   (M4 (LOADINGS 2 1) (DRIVES 10)) 
+   (M5 (LOADINGS 2) (DRIVES 10)) 
+   (M6 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1) 
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+               2 2 2 2 2 2)) 
+   (M7 (LOADINGS 1 1) (DRIVES 10)) 
+   (FD11 (LOADINGS 1 1 2) 
+         (DRIVES 10 10 10 10)))
+
+
+(defn list-set-equal (x y)
+  (if (or (nlistp x) (nlistp y))
+      (and (nlistp x) (nlistp y))
+      (if (set-equal (car x) (car y))
+          (list-set-equal (cdr x) (cdr y))
+          f)))
+
+|#
+#|
+(setq ex-net1
+      '((m1 (in0) (out1 out2)
+            ((o1 (out1) b-not (in0))
+             (o2 (out2) id (out1)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net1)
+  = '((M1 (LOADINGS 2) (DRIVES 10 OUT1)))
+
+
+(setq ex-net2
+      '((m1 (in1 in2) (out1 out2)
+            ((o1 (is1) id (in1))
+             (o2 (out1) b-and (is1 in2))
+             (o3 (out2) b-or (is1 in2)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net2)
+  = '((M1 (LOADINGS 2 2) (DRIVES 10 10)))
+
+
+(setq ex-net3
+      '((m1 (in0) (out1 out2)
+            ((o1 (io1) id (in0))
+             (o2 (out1) id (io1))
+             (o3 (out2) id (io1)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net3)
+  = '((M1 (LOADINGS (OUT2 OUT1)) 
+       (DRIVES IN0 IN0)))
+
+
+(setq ex-net4
+      '((m1 (in0) (out1 out2)
+            ((o1 (out1) id (in0))
+             (o2 (out2) id (out1)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net4)
+  =  '((M1 (LOADINGS (OUT2 OUT1)) 
+       (DRIVES IN0 IN0)))
+
+
+(setq ex-net5
+      '((m1 (in0) (out1 out2)
+            ((o1 (out1) id (in0))
+             (o2 (out2) id (in0)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net5)
+  =  '((M1 (LOADINGS (OUT2 OUT1)) 
+       (DRIVES IN0 IN0)))
+
+
+(setq ex-net6
+      '((m1 () (out0)
+            ((o1 (out0) vdd nil))
+            nil)))
+
+'((M1 (LOADINGS) (DRIVES 50)))
+
+
+(setq ex-net7
+      '((m1 () (out0)
+            ((o1 (out0) vss nil))
+            nil)))
+
+'((M1 (LOADINGS) (DRIVES 50)))
+
+
+(setq ex-net8
+      '((m1 (a b) (c d)
+            ((o1 (c) b-and (a b))
+             (o2 (d) id (c)))
+            nil)))
+
+ '((M1 (LOADINGS 1 1) (DRIVES 10 C)))
+
+
+(setq ex-net9
+      '((m1 (in0) (out1 out2 out3 out4)
+            ((o1 (out1) id (in0))
+             (o2 (out2) b-not (out1))
+             (o3 (out3) id (in0))
+             (o4 (out4) b-not (in0)))
+            nil)))
+
+ '((M1 (LOADINGS (4 OUT3 OUT1)) 
+       (DRIVES IN0 10 IN0 10)))
+
+
+(setq ex-net10
+      '((m1 (in0) (out0)
+            ((o1 (a) id (in0))
+             (o2 (b) id (in0))
+             (o3 (out0) b-and (a b)))
+            nil)))
+
+'((M1 (LOADINGS 2) (DRIVES 10)))
+
+
+(setq ex-net11
+      '((m1 (in0) (out0)
+            ((o1 (a) id (in0))
+             (o2 (out0) b-and (in0 a)))
+            nil)))
+
+'((M1 (LOADINGS 2) (DRIVES 10)))
+
+
+(setq ex-net12
+      '((m1 (in0 in1 in2) (out0 out1 out2 out3)
+            ((o1 (out1) id (in1))
+             (o2 (out0) b-or (in0 out1))
+             (o3 (out2) b-not (in1))
+             (o4 (out3) b-and (in1 in2)))
+            nil)))
+
+ '((M1 (LOADINGS 1 (4 OUT1) 1) 
+       (DRIVES 10 IN1 10 10)))
+
+
+(setq ex-net13
+      '((m1 (in0 in1 in2) (out0 out1 out2 out3)
+            ((o1 (out1) id (in1))
+             (o2 (out0) b-or (in0 out1))
+             (o3 (out2) b-not (out1))
+             (o4 (out3) b-and (out1 in2)))
+            nil)))
+
+ '((M1 (LOADINGS 1 (4 OUT1) 1) 
+       (DRIVES 10 IN1 10 10)))
+
+
+(setq ex-net14
+      '((m1 (in0 clk) (out1 out2 out3)
+            ((o1 (out1) b-not (in0))
+             (o2 (is1) id (out1))
+             (o3 (out2 w1) fd1 (is1 clk))
+             (o4 (out3 w2) b-nbuf (is1)))
+            o3)))
+             
+'((M1 (LOADINGS 2 1) (DRIVES 8 10 9)))
+
+
+(setq ex-net15
+      '((m1 (in1 in2) (out1 out2)
+            ((o1 (is1) b-and (in1 in2))
+             (o2 (out1) b-not-b4ip (is1))
+             (o3 (out2) b-not (is1)))
+            nil)))
+
+'((M1 (LOADINGS 1 1) (DRIVES 40 10)))
+
+
+(setq ex-net16
+      '((m1 (in1 in2) (out1 out2 out3)
+            ((o1 (out1) b-and (in1 in2))
+             (o2 (out2) b-not-b4ip (out1))
+             (o3 (out3) b-not (out1)))
+            nil)))
+
+'((M1 (LOADINGS 1 1) (DRIVES 0 40 10)))
+
+
+(setq ex-net17
+      '((m1 (in1 in2) (out1 out2)
+            ((o1 (is1) b-and (in1 in2))
+             (o2 (out1) b-not-b4ip (is1))
+             (o3 (out2) b-not-ivap (is1)))
+            nil)))
+
+F
+
+
+(setq ex-net18
+      '((m1 (in1 in2) (out1 out2 out3)
+            ((o1 (out1) b-and (in1 in2))
+             (o2 (out2) b-not-b4ip (out1))
+             (o3 (out3) b-not-ivap (out1)))
+            nil)))
+
+F
+
+
+(setq ex-net19
+      '((m1 (a b c d) (x)
+            ((o1 (x) b-and (a b)))
+            nil)))
+
+'((M1 (LOADINGS 1 1 0 0) (DRIVES 10)))
+
+|#
+#|
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) id (a))
+             (o2 (c) id (a))
+             (o3 (d) id (a)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net)
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) id (a))
+             (o2 (c) id (b))
+             (o3 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net)
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (a))
+             (o3 (d) id (a)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net)
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (a))
+             (o3 (d) id (b)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net)
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (b))
+             (o3 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net)
+
+
+(setq ex-net
+      '((m1 (a) (c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (b))
+             (o3 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives-simple ex-net)
+
+
+(setq ex-net '((m3 (in0 clk) (out1 out2)
+                   ((o3 (is3 is4) fd1 (is1 is2))
+                    (o1 (is1) id (in0))
+                    (o2 (is2) id (clk))
+                    (o4 (out1) id (is3))
+                    (o5 (out2) id (is4)))
+                   o3)))
+
+(netlist-loadings-and-drives-simple ex-net)
+ = '((M3 (LOADINGS 1 1) (DRIVES 10 10)))
+
+|#

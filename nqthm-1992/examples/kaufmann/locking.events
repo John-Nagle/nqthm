@@ -1,0 +1,190 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+;; See CLI Internal Note 216 for explanation.  I thank Stan Letovsky
+;; for suggesting this example and for taking the lead in formalizing
+;; the problem for the Boyer-Moore theorem prover.
+
+(boot-strap nqthm)
+
+(prove-lemma append-associativity (rewrite)
+  (equal (append (append x y) z)
+         (append x (append y z))))
+
+(defn length (lst)
+  (if (listp lst)
+      (add1 (length (cdr lst)))
+    0))
+
+(add-shell make-op nil op?
+           ((op-type (none-of) zero)
+            (tid (one-of numberp) zero)))
+
+(add-shell make-obj nil obj?
+           ((lock-tid (one-of numberp falsep) zero)
+            (waiters (none-of) zero)))
+
+;; oops -- another basic lemma needed
+(prove-lemma length-append (rewrite)
+  (equal (length (append x y))
+         (plus (length x) (length y))))
+
+(defn server (tranq x)
+  (let ((current (car tranq)))
+    (cond ((nlistp tranq)
+           ())
+          ((and (equal (op-type current) 'write)
+                (equal (tid current) (lock-tid x)))
+           (cons current
+                 (server (append (waiters x) (cdr tranq))
+                         (make-obj f nil))))
+          ((falsep (lock-tid x))
+           (if (equal (op-type current) 'read)
+               (cons current (server (cdr tranq)
+                                     (make-obj (tid current) (waiters x))))
+             (cons current (server (cdr tranq) x))))
+          (t (server (cdr tranq)
+                     (make-obj (lock-tid x)
+                               (append (waiters x) (list current)))))))
+  ((ord-lessp (cons (add1 (plus (length (waiters x)) (length tranq)))
+                    (length tranq)))))
+
+(defn find-write (tid tranq)
+  (if (listp tranq)
+      (or (and (op? (car tranq))
+               ;; aha!  Forgot the following -- see explanation below.
+               (equal (op-type (car tranq)) 'write)
+               (equal tid (tid (car tranq))))
+          (find-write tid (cdr tranq)))
+    f))
+
+#|
+I was trying to prove a lemma (later not needed) which generated
+the following goal:
+
+(IMPLIES (AND (LISTP TRANQ)
+              (OP? (CAR TRANQ))
+              (EQUAL TID (TID (CAR TRANQ))))
+         (IMPLIES (FIND-WRITE TID TRANQ)
+                  (EQUAL (GOOD-TRANQ (REMOVE-WRITE TID TRANQ))
+                         (GOOD-TRANQ TRANQ))))
+
+Inspection of this goal lead me to realize that when removing
+or finding a WRITE operation, one needs to check not only the
+TID but also that the operation is really a WRITE!  I then fixed
+the definition of REMOVE-WRITE (as indicated below), and later
+realized I needed to make a similar change to the definition of
+FIND-WRITE (see above).
+|#
+
+(defn remove-write (tid tranq)
+  (if (listp tranq)
+      (if (and (op? (car tranq))
+               ;; aha!!! I forgot the following.  See comment above.
+               (equal (op-type (car tranq)) 'write)
+               (equal tid (tid (car tranq))))
+          (cdr tranq)
+        (cons (car tranq)
+              (remove-write tid (cdr tranq))))
+    nil))
+
+(prove-lemma good-tranq-helper (rewrite)
+  ;; This lemma helps with getting the definition of
+  ;; GOOD-TRANQ accepted.
+  (not (lessp (length tranq)
+              (length (remove-write tid tranq)))))
+
+(defn good-tranq (tranq)
+  (if (listp tranq)
+      (and (op? (car tranq))
+           (if (equal (op-type (car tranq)) 'read)
+               (and (find-write (tid (car tranq)) (cdr tranq))
+                    (good-tranq (remove-write (tid (car tranq))
+                                              (cdr tranq))))
+             (good-tranq (cdr tranq))))
+    t)
+  ((lessp (length tranq))))
+
+(defn good-trace (trace tid)
+  ;; Trace is a list of ops; the tid flag says whether a read is pending
+  ;; with the indicated tid (and is f if not).  *** Notice that
+  ;; there can be "no-ops", i.e. ops other than 'read and 'write,
+  ;; and hence the read and its matching write can be separated.
+  (if (listp trace)
+      (and (op? (car trace))
+           (if tid
+               (case (op-type (car trace))
+                     (read f)
+                     (write (and (equal (tid (car trace)) tid)
+                                 (good-trace (cdr trace) f)))
+                     (otherwise (good-trace (cdr trace) tid)))
+             (case (op-type (car trace))
+                   (read (good-trace (cdr trace) (tid (car trace))))
+                   ;; *** at one point I had F for the WRITE case,
+                   ;; but this was the only case that failed in
+                   ;; the main proof once I fixed everything else.
+                   ;; Actually, though, if there is a write when
+                   ;; there's no pending read, it's a no-op and
+                   ;; not any sort of error!  So, I'll comment out
+                   ;; the following line:
+                   ;; (write f)
+                   (otherwise (good-trace (cdr trace) f)))))
+    (if tid
+        f
+      t)))
+
+;; *** The simplification in the case below where tid is F is perhaps
+;; the key to the whole proof.  Once I made this change, the only
+;; remaining fix was the one in the definition shown above, and that
+;; was easy to locate by inspection of the output of the main lemma,
+;; SERVER-SAFETY-MAIN-LEMMA.
+
+(defn good-tranq-tid (x y tid)
+  ;; This says that (append x y) is a good-tranq except that when tid
+  ;; is not F, it says that (append x (remove-write tid y)) is a good-tranq
+  ;; and that the appropriate write exists in y.
+  ;; Also, I've noticed during the proof that it's an invariant of the system
+  ;; that the waiters list is empty when there's no lock on.  So, I add this
+  ;; in.
+
+  (if tid
+      (and (find-write tid y)
+           (good-tranq (append x (remove-write tid y))))
+    (and (equal x nil)
+         (good-tranq y))))
+
+(prove-lemma server-safety-main-lemma nil
+  (implies (and (obj? x)
+                (good-tranq-tid (waiters x) tranq (lock-tid x)))
+           (good-trace (server tranq x) (lock-tid x))))
+
+(prove-lemma server-safety (rewrite)
+             (implies (good-tranq tranq)
+                      (good-trace (server tranq (make-obj f nil))
+                                  f))
+             ((use (server-safety-main-lemma
+                    (x (make-obj f nil))))))
+

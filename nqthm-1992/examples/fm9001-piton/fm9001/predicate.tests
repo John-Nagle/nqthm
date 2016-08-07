@@ -1,0 +1,4920 @@
+(defn net-with-syntax-errors () ; netlist is not proper list
+  (list*
+   '(m1 (in1) (out1)            ; length bad (no state); occ o1 not proper list
+        ((o1 (out1) b-not (in1) . end)))
+   '(m2 (in1) (out1)            ; bad annotation; bad occ length
+        ((o1 (out1) b-not (in1) nil an-annotation))
+        nil m2-is-the-same-as-m1)
+   '(m3 (in1) (out1)            ; ok with annotation
+        ((o1 (out1) b-not (in1) ((in1 . the-input) (out1 . the-output))))
+        nil ((in1 . the-input) (out1 . the-output)))
+   '(m3-1 (in1) (out1)          ; module and occ o1 wrong length
+          ((o1 (out1) b-not (in1) (in1 . the-input) (out1 . the-output)))
+          nil (in1 . the-input) (out1 . the-output))
+   '(m4 (d) (d)                 ; module not proper list and name duplicated;
+                                ; bad occ annotation; occ o1 has wrong
+                                ; number of inputs and outputs
+        ((o1 (d) m7 (d) an-annotation))
+        nil . an-annotation)
+   '(5 (in1) (01)               ; bad module name; bad output name
+       ((o1 (01) b-not (in1)))
+       nil)
+   (list (index 6 1) '(in1) '(out1) ; bad module name; no occurrences
+         nil
+         nil)
+   '(m4 (in1) (out1)            ; bad occ name; occ outputs not proper list;
+                                ; occ function is unknown
+        ((01 (out1 . x) not-a-module (in1)))
+        nil)
+   '(b-not (in1 in1 . x) (out1) ; module name is primitive; inputs not
+                                ; proper list; duplicate input, and
+                                ; thus signal, names;
+                                ; occ o1 has wrong number of outputs
+           ((o1 (out1 is1) b-nand (in1 in1)))
+           nil)
+   '(m7 (in1 in2 in4 te ti clk) (out1 out2 out3 out3 out4)
+                                ; duplicate output name; duplicate
+                                ; state name; output out4 not in
+                                ; signals; in3 not in signals; state
+                                ; o3 not an occurrence; duplicate occ
+                                ; name; is1 duplicate signal; occ o1
+                                ; inputs not proper list; first occ o2
+                                ; has wrong number of inputs; 
+        ((o1 (out1 is1) fd1s (in1 clk te ti . x))
+         (o2 (out2 is1) fd1s (in2 clk te))
+         (o2 (out3 is1) fd1s (in3 clk te ti)))
+        (o1 o2 o2 o3))
+   '(m7-2 (a clk) (x)           ; state list of length 1
+          ((o1 (x y) fd1 (a clk)))
+          (o1))
+   '(m8 (bus x a en pi) (bus c) ; bus is output twice
+        ((o1 (bus) pullup (x))
+         (o2 (bus zi po) ttl-bidirect (bus a en pi))
+         (o3 (b) id (bus))
+         (o4 (c) pullup (b)))
+        nil)
+   '(m9 (bus a en pi) (bus c)   ; occs not proper list;
+                                ; bus not in signals.
+        ((o1 (b c po) ttl-bidirect (bus a en pi)) . x)
+        nil)
+   'end))                       ; netlist not proper list
+
+#|
+(top-level-predicate (net-with-syntax-errors))
+ (NET-ERROR 'NETLIST-SYNTAX-ERRORS
+  (LIST
+   (NET-ERROR
+    '(MODULE M1)
+    (LIST
+     (NET-ERROR 'MODULE-FORM
+                (LIST (NET-ERROR 'BAD-MODULE-LENGTH 4)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+          (LIST (NET-ERROR '(OCCURRENCE O1)
+                           (LIST (NET-ERROR 'OCCURRENCE-FORM
+                                            (LIST (NET-ERROR 'NOT-PROPER-LIST
+                                                             'END)))))))))
+   (NET-ERROR
+    '(MODULE M2)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+          (NET-ERROR '(OCCURRENCE O1)
+                     (LIST (NET-ERROR 'OCCURRENCE-FORM
+                                      (LIST (NET-ERROR 'BAD-OCCURRENCE-LENGTH
+                                                       6)))))))
+     (NET-ERROR 'MODULE-ANNOTATION
+                (NET-ERROR 'NOT-ALIST
+                           'M2-IS-THE-SAME-AS-M1))))
+   (NET-ERROR
+    '(MODULE M3-1)
+    (LIST
+     (NET-ERROR 'MODULE-FORM
+                (LIST (NET-ERROR 'BAD-MODULE-LENGTH 7)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+          (NET-ERROR '(OCCURRENCE O1)
+                     (LIST (NET-ERROR 'OCCURRENCE-FORM
+                                      (LIST (NET-ERROR 'BAD-OCCURRENCE-LENGTH
+                                                       6)))))))))
+   (NET-ERROR
+    '(MODULE M4)
+    (LIST
+     (NET-ERROR 'MODULE-FORM
+                (LIST (NET-ERROR 'NOT-PROPER-LIST
+                                 'AN-ANNOTATION)))
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'DUPLICATE-MODULE-DEFNS
+                                 'M4)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+                 '(OCCURRENCE O1)
+                 (LIST (NET-ERROR 'OCCURRENCE-FUNCTION
+                                  (LIST (NET-ERROR 'WRONG-NUMBER-OF-INPUTS
+                                                   '(OCC-FUNCTION M7
+                                                                  (EXPECTED 6)
+                                                                  (GOT 1)))
+                                        (NET-ERROR 'WRONG-NUMBER-OF-OUTPUTS
+                                                   '(OCC-FUNCTION M7
+                                                                  (EXPECTED 5)
+                                                                  (GOT 1)))))
+                       (NET-ERROR 'OCCURRENCE-ANNOTATION
+                                  (NET-ERROR 'NOT-ALIST
+                                             'AN-ANNOTATION))))))))
+   (NET-ERROR
+    '(MODULE 5)
+    (LIST
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'BAD-NAME 5)))
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'BAD-NAMES '(1))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+        (NET-ERROR '(OCCURRENCE O1)
+                   (LIST (NET-ERROR 'OCCURRENCE-OUTPUTS
+                                    (LIST (NET-ERROR 'BAD-NAMES '(1))))))))))
+   (NET-ERROR (LIST 'MODULE (INDEX 6 1))
+              (LIST (NET-ERROR 'MODULE-NAME
+                               (LIST (NET-ERROR 'BAD-NAME (INDEX 6 1))))
+                    (NET-ERROR 'MODULE-OCCURRENCES
+                               (LIST (NET-ERROR 'NO-OCCURRENCES NIL)
+                                     (NET-ERROR 'OUTPUTS-NOT-IN-SIGNALS
+                                                '(OUT1))))))
+   (NET-ERROR
+    '(MODULE M4)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+         (NET-ERROR '(OCCURRENCE 1)
+                    (LIST (NET-ERROR 'OCCURRENCE-NAME
+                                     (NET-ERROR 'BAD-NAME 1))
+                          (NET-ERROR 'OCCURRENCE-OUTPUTS
+                                     (LIST (NET-ERROR 'NOT-PROPER-LIST 'X)))
+                          (NET-ERROR 'UNKNOWN-OCCURRENCE-FUNCTION
+                                     'NOT-A-MODULE)))))))
+   (NET-ERROR
+    '(MODULE B-NOT)
+    (LIST
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'MODULE-NAME-SAME-AS-PRIMITIVE
+                                 'B-NOT)))
+     (NET-ERROR 'MODULE-INPUTS
+                (LIST (NET-ERROR 'DUPLICATES '(IN1))
+                      (NET-ERROR 'NOT-PROPER-LIST 'X)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+                '(OCCURRENCE O1)
+                (LIST (NET-ERROR 'OCCURRENCE-FUNCTION
+                                 (LIST (NET-ERROR 'WRONG-NUMBER-OF-OUTPUTS
+                                                  '(OCC-FUNCTION B-NAND
+                                                                 (EXPECTED 1)
+                                                                 (GOT 2)))))))
+       (NET-ERROR 'DUPLICATES-IN-SIGNALS
+                  '(IN1))))))
+   (NET-ERROR
+    '(MODULE M7)
+    (LIST
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'DUPLICATES '(OUT3))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR '(OCCURRENCE O1)
+                  (LIST (NET-ERROR 'OCCURRENCE-INPUTS
+                                   (LIST (NET-ERROR 'NOT-PROPER-LIST 'X)))))
+       (NET-ERROR
+                '(OCCURRENCE O2)
+                (LIST (NET-ERROR 'OCCURRENCE-FUNCTION
+                                 (LIST (NET-ERROR 'WRONG-NUMBER-OF-INPUTS
+                                                  '(OCC-FUNCTION FD1S
+                                                                 (EXPECTED 4)
+                                                                 (GOT 3)))))))
+       (NET-ERROR 'OUTPUTS-NOT-IN-SIGNALS
+                  '(OUT4))
+       (NET-ERROR 'NON-DEPENDS-NOT-IN-SIGNALS
+                  '(IN3))
+       (NET-ERROR 'STATES-NOT-IN-OCC-NAMES
+                  '(O3))
+       (NET-ERROR 'DUPLICATES-IN-SIGNALS
+                  '(IS1))
+       (NET-ERROR 'DUPLICATES-IN-OCC-NAMES
+                  '(O2))))
+     (NET-ERROR 'MODULE-STATENAMES
+                (LIST (NET-ERROR 'DUPLICATES '(O2))))))
+   (NET-ERROR '(MODULE M7-2)
+              (LIST (NET-ERROR 'MODULE-STATENAMES
+                               (LIST (NET-ERROR 'LIST-OF-LENGTH-1-NOT-ALLOWED
+                                                '(O1))))))
+   (NET-ERROR '(MODULE M8)
+              (LIST (NET-ERROR 'MODULE-OCCURRENCES
+                               (LIST (NET-ERROR 'DUPLICATES-IN-SIGNALS
+                                                '(BUS))))))
+   (NET-ERROR '(MODULE M9)
+              (LIST (NET-ERROR 'MODULE-OCCURRENCES
+                               (LIST (NET-ERROR 'NOT-PROPER-LIST 'X)
+                                     (NET-ERROR 'IO-SIGNALS-NOT-IN-OUTPUTS
+                                                '(BUS))))))
+   (NET-ERROR 'NOT-PROPER-LIST 'END)))
+
+
+
+(lsi-top-level-predicate (net-with-syntax-errors) 64 255)
+ (NET-ERROR
+  'LSI-NETLIST-SYNTAX-ERRORS
+  (LIST
+   (NET-ERROR
+    '(MODULE M1)
+    (LIST
+     (NET-ERROR 'MODULE-FORM
+                (LIST (NET-ERROR 'BAD-MODULE-LENGTH 4)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+          (LIST (NET-ERROR '(OCCURRENCE O1)
+                           (LIST (NET-ERROR 'OCCURRENCE-FORM
+                                            (LIST (NET-ERROR 'NOT-PROPER-LIST
+                                                             'END)))))))))
+   (NET-ERROR
+    '(MODULE M2)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+          (NET-ERROR '(OCCURRENCE O1)
+                     (LIST (NET-ERROR 'OCCURRENCE-FORM
+                                      (LIST (NET-ERROR 'BAD-OCCURRENCE-LENGTH
+                                                       6)))))))
+     (NET-ERROR 'MODULE-ANNOTATION
+                (NET-ERROR 'NOT-ALIST
+                           'M2-IS-THE-SAME-AS-M1))))
+   (NET-ERROR
+    '(MODULE M3-1)
+    (LIST
+     (NET-ERROR 'MODULE-FORM
+                (LIST (NET-ERROR 'BAD-MODULE-LENGTH 7)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+          (NET-ERROR '(OCCURRENCE O1)
+                     (LIST (NET-ERROR 'OCCURRENCE-FORM
+                                      (LIST (NET-ERROR 'BAD-OCCURRENCE-LENGTH
+                                                       6)))))))))
+   (NET-ERROR
+    '(MODULE M4)
+    (LIST
+     (NET-ERROR 'MODULE-FORM
+                (LIST (NET-ERROR 'NOT-PROPER-LIST
+                                 'AN-ANNOTATION)))
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'DUPLICATE-MODULE-DEFNS
+                                 'M4)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+                 '(OCCURRENCE O1)
+                 (LIST (NET-ERROR 'OCCURRENCE-FUNCTION
+                                  (LIST (NET-ERROR 'WRONG-NUMBER-OF-INPUTS
+                                                   '(OCC-FUNCTION M7
+                                                                  (EXPECTED 6)
+                                                                  (GOT 1)))
+                                        (NET-ERROR 'WRONG-NUMBER-OF-OUTPUTS
+                                                   '(OCC-FUNCTION M7
+                                                                  (EXPECTED 5)
+                                                                  (GOT 1)))))
+                       (NET-ERROR 'OCCURRENCE-ANNOTATION
+                                  (NET-ERROR 'NOT-ALIST
+                                             'AN-ANNOTATION))))))))
+   (NET-ERROR
+    '(MODULE 5)
+    (LIST
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM 5)))
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                 (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                  1)))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+        '(OCCURRENCE O1)
+        (LIST
+         (NET-ERROR 'OCCURRENCE-OUTPUTS
+          (LIST
+           (NET-ERROR 'OCC-OUTPUTS
+                      (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                       (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                        1)))))))))))))
+   (NET-ERROR (LIST 'MODULE (INDEX 6 1))
+              (LIST (NET-ERROR 'MODULE-NAME
+                               (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                (INDEX 6 1))))
+                    (NET-ERROR 'MODULE-OCCURRENCES
+                               (LIST (NET-ERROR 'NO-OCCURRENCES NIL)
+                                     (NET-ERROR 'OUTPUTS-NOT-IN-SIGNALS
+                                                '(OUT1))))))
+   (NET-ERROR
+    '(MODULE M4)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+        '(OCCURRENCE 1)
+        (LIST
+         (NET-ERROR 'OCCURRENCE-NAME
+                    (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM 1)))
+         (NET-ERROR 'OCCURRENCE-OUTPUTS
+                  (LIST (NET-ERROR 'OCC-OUTPUTS
+                                   (LIST (NET-ERROR 'NOT-PROPER-LIST 'X)))))
+         (NET-ERROR 'UNKNOWN-OCCURRENCE-FUNCTION
+                    'NOT-A-MODULE)))))))
+   (NET-ERROR
+    '(MODULE B-NOT)
+    (LIST
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'MODULE-NAME-SAME-AS-PRIMITIVE
+                                 'B-NOT)))
+     (NET-ERROR 'MODULE-INPUTS
+                (LIST (NET-ERROR 'DUPLICATES '(IN1))
+                      (NET-ERROR 'NOT-PROPER-LIST 'X)))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+                '(OCCURRENCE O1)
+                (LIST (NET-ERROR 'OCCURRENCE-FUNCTION
+                                 (LIST (NET-ERROR 'WRONG-NUMBER-OF-OUTPUTS
+                                                  '(OCC-FUNCTION B-NAND
+                                                                 (EXPECTED 1)
+                                                                 (GOT 2)))))))
+       (NET-ERROR 'DUPLICATES-IN-SIGNALS
+                  '(IN1))))))
+   (NET-ERROR
+    '(MODULE M7)
+    (LIST
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'DUPLICATES '(OUT3))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR '(OCCURRENCE O1)
+                  (LIST (NET-ERROR 'OCCURRENCE-INPUTS
+                                   (LIST (NET-ERROR 'NOT-PROPER-LIST 'X)))))
+       (NET-ERROR
+                '(OCCURRENCE O2)
+                (LIST (NET-ERROR 'OCCURRENCE-FUNCTION
+                                 (LIST (NET-ERROR 'WRONG-NUMBER-OF-INPUTS
+                                                  '(OCC-FUNCTION FD1S
+                                                                 (EXPECTED 4)
+                                                                 (GOT 3)))))))
+       (NET-ERROR 'OUTPUTS-NOT-IN-SIGNALS
+                  '(OUT4))
+       (NET-ERROR 'NON-DEPENDS-NOT-IN-SIGNALS
+                  '(IN3))
+       (NET-ERROR 'STATES-NOT-IN-OCC-NAMES
+                  '(O3))
+       (NET-ERROR 'DUPLICATES-IN-SIGNALS
+                  '(IS1))
+       (NET-ERROR 'DUPLICATES-IN-OCC-NAMES
+                  '(O2))))
+     (NET-ERROR 'MODULE-STATENAMES
+                (LIST (NET-ERROR 'DUPLICATES '(O2))))))
+   (NET-ERROR '(MODULE M7-2)
+              (LIST (NET-ERROR 'MODULE-STATENAMES
+                               (LIST (NET-ERROR 'LIST-OF-LENGTH-1-NOT-ALLOWED
+                                                '(O1))))))
+   (NET-ERROR
+    '(MODULE M8)
+    (LIST
+     (NET-ERROR 'MODULE-INPUTS
+                (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                 (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                  'BUS)))))
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                 (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                  'BUS)))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+        '(OCCURRENCE O1)
+        (LIST
+         (NET-ERROR 'OCCURRENCE-OUTPUTS
+          (LIST
+            (NET-ERROR 'OCC-OUTPUTS
+                       (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                        (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                         'BUS)))))))))
+       (NET-ERROR
+        '(OCCURRENCE O2)
+        (LIST
+         (NET-ERROR 'OCCURRENCE-OUTPUTS
+          (LIST
+            (NET-ERROR 'OCC-OUTPUTS
+                       (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                        (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                         'BUS)))))))
+         (NET-ERROR 'OCCURRENCE-INPUTS
+                    (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                     (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                      'BUS)))))))
+       (NET-ERROR
+        '(OCCURRENCE O3)
+        (LIST
+            (NET-ERROR 'OCCURRENCE-INPUTS
+                       (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                        (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                         'BUS)))))))
+       (NET-ERROR 'DUPLICATES-IN-SIGNALS
+                  '(BUS))))))
+   (NET-ERROR
+    '(MODULE M9)
+    (LIST
+     (NET-ERROR 'MODULE-INPUTS
+                (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                 (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                  'BUS)))))
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                 (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                  'BUS)))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+        '(OCCURRENCE O1)
+        (LIST
+            (NET-ERROR 'OCCURRENCE-INPUTS
+                       (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                        (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                         'BUS)))))))
+       (NET-ERROR 'NOT-PROPER-LIST 'X)
+       (NET-ERROR 'IO-SIGNALS-NOT-IN-OUTPUTS
+                  '(BUS))))))
+   (NET-ERROR 'NOT-PROPER-LIST 'END)))
+
+|#
+
+
+(defn net-with-lsi-syntax-errors ()
+                                ; above should also be lsi syntax
+                                ; errors
+  (list
+   '(m1-is-a-module-whose-name-contains-more-than-sixty-four-characters
+                                ; module name too long; all input and
+                                ; output names are lsi keywords; bad
+                                ; occ output (~ not allowed in names)
+     (hm_input clk_line pin dummy) (nc)
+     ((occ1 (nc nc~) fd1s (hm_input clk_line pin dummy)))
+     nil)
+   (list (index 'm 2)           ; module and output names not litatoms; input
+                                ; name does not begin with a letter
+                                ; and contains illegal char (43)
+         (list (pack '(49 65 43 . 0)) 'in2)
+         (list (index 'out 1) (index 'out 2))
+         (list (list 'occ1 (list (index 'out 1) (index 'out 2))
+                     'm3 (list (pack '(49 65 43 . 0)) 'in2)))
+         nil)
+   '(m3 (in1 in2) (out1 out2)   ; occ name in1 is input
+        ((in1 (out1) b-not (in1))
+         (out2 (out2) b-not (in2))) ; this is ok
+        nil)
+   (list (pack '(77 52)) '(in1 clk te ti) '(out1 out2)
+                                ; module name is not standard litatom;
+                                ; occ name out1 same as one of
+                                ; multiple outputs; occ name is1 is
+                                ; signal name; occ o4 output o3
+                                ; duplicates an occ name; fd1s is bad
+                                ; occ name because it is also used as
+                                ; occ function; iva cannot be a
+                                ; signal name because it is the
+                                ; lsi-name of an occ function (b-not)
+                                ; in the module 
+         '((out1 (out1 is1) fd1s (in1 clk te ti))
+           (is1 (is2 is3) fd1s (ti clk te in1))
+           (o3 (iva is5) fd1s (is2 clk te is3))
+           (fd1s (is6) b-not (is5))
+           (o4 (out2 o3) fd1s (iva clk te is6)))
+         nil)))
+
+#|
+(netlist-syntax-ok (net-with-lsi-syntax-errors))
+ T
+
+(lsi-top-level-predicate (net-with-lsi-syntax-errors) 64 255)
+ (NET-ERROR
+  'LSI-NETLIST-SYNTAX-ERRORS
+  (LIST
+   (NET-ERROR
+   '(MODULE
+           M1-IS-A-MODULE-WHOSE-NAME-CONTAINS-MORE-THAN-SIXTY-FOUR-CHARACTERS)
+   (LIST
+    (NET-ERROR 'MODULE-NAME
+     (LIST
+      (NET-ERROR
+      '(BAD-LSI-NAME
+          M1-IS-A-MODULE-WHOSE-NAME-CONTAINS-MORE-THAN-SIXTY-FOUR-CHARACTERS)
+      (LIST (NET-ERROR 'NAME-TOO-LONG
+                       '((NAME-LENGTH 66)
+                         (MAX-ALLOWED-LENGTH 64)))))))
+    (NET-ERROR 'MODULE-INPUTS
+               (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                 'HM_INPUT)
+                                      (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                 'CLK_LINE)
+                                      (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                 'PIN)
+                                      (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                 'DUMMY)))))
+    (NET-ERROR 'MODULE-OUTPUTS
+               (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                 'NC)))))
+    (NET-ERROR 'MODULE-OCCURRENCES
+     (LIST
+      (NET-ERROR
+       '(OCCURRENCE OCC1)
+       (LIST
+        (NET-ERROR 'OCCURRENCE-OUTPUTS
+         (LIST
+          (NET-ERROR 'OCC-OUTPUTS
+           (LIST
+            (NET-ERROR 'BAD-LSI-NAMES
+                    (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD 'NC)
+                          (NET-ERROR '(BAD-LSI-NAME NC~)
+                                     (LIST (NET-ERROR 'ILLEGAL-CHARS-IN-NAME
+                                                      '(126))))))))))
+        (NET-ERROR 'OCCURRENCE-INPUTS
+                   (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                    (LIST (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                     'HM_INPUT)
+                                          (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                     'CLK_LINE)
+                                          (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                     'PIN)
+                                          (NET-ERROR 'LSI-NAME-IS-KEYWORD
+                                                     'DUMMY)))))))))))
+   (NET-ERROR
+    (LIST 'MODULE (INDEX 'M 2))
+    (LIST
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                 (INDEX 'M 2))))
+     (NET-ERROR 'MODULE-INPUTS
+      (LIST
+       (NET-ERROR 'BAD-LSI-NAMES
+                (LIST (NET-ERROR (LIST 'BAD-LSI-NAME
+                                       (PACK '(49 65 43 . 0)))
+                                 (LIST (NET-ERROR 'NAME-BEGINS-WITH-NONLETTER
+                                                  49)
+                                       (NET-ERROR 'ILLEGAL-CHARS-IN-NAME
+                                                  '(43))))))))
+     (NET-ERROR 'MODULE-OUTPUTS
+                (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                 (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                  (INDEX 'OUT 1))
+                                       (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                  (INDEX 'OUT 2))))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+        '(OCCURRENCE OCC1)
+        (LIST
+         (NET-ERROR 'OCCURRENCE-OUTPUTS
+          (LIST
+           (NET-ERROR 'OCC-OUTPUTS
+                      (LIST (NET-ERROR 'BAD-LSI-NAMES
+                                       (LIST (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                        (INDEX 'OUT 1))
+                                             (NET-ERROR 'LSI-NAME-NOT-LITATOM
+                                                        (INDEX 'OUT 2))))))))
+         (NET-ERROR 'OCCURRENCE-INPUTS
+          (LIST
+           (NET-ERROR 'BAD-LSI-NAMES
+                (LIST (NET-ERROR (LIST 'BAD-LSI-NAME
+                                       (PACK '(49 65 43 . 0)))
+                                 (LIST (NET-ERROR 'NAME-BEGINS-WITH-NONLETTER
+                                                  49)
+                                       (NET-ERROR 'ILLEGAL-CHARS-IN-NAME
+                                                  '(43))))))))))))))
+   (NET-ERROR
+    '(MODULE M3)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+       (LIST (NET-ERROR '(OCCURRENCE IN1)
+                        (LIST (NET-ERROR 'OCCURRENCE-NAME
+                                         (LIST (NET-ERROR 'OCC-NAME-IS-SIGNAL
+                                                          'IN1)))))))))
+   (NET-ERROR
+    (LIST 'MODULE (PACK '(77 52)))
+    (LIST
+     (NET-ERROR 'MODULE-NAME
+                (LIST (NET-ERROR (LIST 'BAD-LSI-NAME (PACK '(77 52)))
+                                 (LIST (NET-ERROR 'NOT-STANDARD-LITATOM
+                                                  '(LAST-CDR NIL))))))
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+           '(OCCURRENCE OUT1)
+           (LIST (NET-ERROR 'OCCURRENCE-NAME
+                            (LIST (NET-ERROR 'OCC-NAME-IS-SAME-AS-OUTPUT-NAME
+                                             'OUT1)))))
+       (NET-ERROR '(OCCURRENCE IS1)
+                  (LIST (NET-ERROR 'OCCURRENCE-NAME
+                                   (LIST (NET-ERROR 'OCC-NAME-IS-SIGNAL
+                                                    'IS1)))))
+       (NET-ERROR '(OCCURRENCE O4)
+                  (LIST (NET-ERROR 'OCCURRENCE-OUTPUTS
+                                   (LIST (NET-ERROR 'OCC-OUTPUTS-IN-OCC-NAMES
+                                                    '(O3))))))
+       (NET-ERROR 'SIGNAL-OCC-FN-OVERLAP
+                  '(IVA))
+       (NET-ERROR 'OCC-NAME-OCC-FN-OVERLAP
+                  '(FD1S))))))))
+
+|#
+
+
+(defn test-net1 ()
+  '((m1 (clk) (q)  ; ok
+        ((o1 (q qn) fd1 (q clk)))
+        o1)
+    (m2 (q clk) (q)
+        ((o1 (q qn) fd1 (q clk)))
+        o1)
+    (m3 (x a en pi) (x y)
+        ((o1 (x zi po) ttl-bidirect (x a en pi))
+         (o2 (y) id (x)))
+        nil)
+    (m4 (x a en pi) (x y)
+        ((o1 (y) id (x))
+         (o2 (x zi po) ttl-bidirect (x a en pi)))
+        nil)
+    (m5 (a b c) (d)  ; ok
+        ((o1 (i1) t-wire (a b))
+         (o2 (d) t-wire (i1 c)))
+        nil)
+    (m6 (a b c) (d)  ; ok
+        ((o1 (i1) id (a))
+         (o2 (i2) id (b))
+         (o3 (i3) t-wire (i1 i2))
+         (o4 (d) t-wire (i3 c)))
+        nil)
+    (m7 (a b) (c d e)
+        ((o1 (c) id (a))
+         (o2 (d) t-wire (a b))
+         (o3 (e) id (b)))
+        nil)
+    (m8 (a b c) (d e)
+        ((o1 (d) t-wire (a b))
+         (o2 (e) t-wire (b c)))
+        nil)
+    (m9 (a b) (c d)
+        ((o1 (i1) b-not (b))
+         (o2 (c) id (i1))
+         (o3 (d) t-wire (i1 a)))
+        nil)
+    (m10 (a b) (c d)
+         ((o1 (i1) b-and (a b))
+          (o2 (c) t-wire (a i1))
+          (o3 (d) t-wire (i1 b)))
+         nil)
+    (m11 (a b c) (d e)
+         ((o1 (i1) b-or (a b))
+          (o2 (i2) t-wire (a i1))
+          (o3 (d) t-wire (i2 c))
+          (o4 (e) t-wire (i1 b)))
+         nil)
+    (m12 (a b c d) (e f)  ; ok
+         ((o1 (e) m13 (a b))
+          (o2 (f) m13 (c d)))
+         nil)
+    (m13 (a b) (c)
+         ((o1 (is1) b-not (a))
+          (o2 (c) t-wire (is1 b)))
+         nil)
+    (m14 (i1 e1 i2 e2 io) (io)
+         ((o1 (x) t-buf (e1 i1))
+          (o2 (itemp) t-buf (e2 i2))
+          (o3 (y) t-wire (itemp io))
+          (o4 (z) t-wire (x y))
+          (o5 (io) pullup (z)))
+         nil)
+    (m15 (i1 e1 i2 e2 i3) (out)  ; ok
+         ((o1 (z) m16 (i1 e1 i2 e2 i3))
+          (o2 (out) pullup (z)))
+         nil)
+    (m16 (i1 e1 i2 e2 io) (io)  ; ok
+         ((o1 (x) t-buf (e1 i1))
+          (o2 (itemp) t-buf (e2 i2))
+          (o3 (y) t-wire (itemp io))
+          (o4 (io) t-wire (x y)))
+         nil)
+    (m17 (i1 e1 i2 e2 io) (io)
+         ((o1 (x y) m20 (i1 e1 i2 e2 io))
+          (o2 (z) t-wire (x y))
+          (o3 (io) pullup (z)))
+         nil)
+    (m18 (i1 e1 i2 e2 i3) (out)  ; ok
+         ((o1 (z) m19 (i1 e1 i2 e2 i3))
+          (o2 (out) pullup (z)))
+         nil)
+    (m19 (i1 e1 i2 e2 io) (io)  ; ok
+         ((o1 (x y) m20 (i1 e1 i2 e2 io))
+          (o2 (io) t-wire (x y)))
+         nil)
+    (m20 (i1 e1 i2 e2 io) (x y)  ; ok
+         ((o1 (x) t-buf (e1 i1))
+          (o2 (is) t-buf (e2 i2))
+          (o3 (y) t-wire (is io)))
+         nil)
+    (m21 (max min) (x)  ; ok
+         ((o1 (x) t-wire (max min)))
+         nil)
+    (m22 (a b) (min)  ; ok
+         ((o1 (min) t-wire (a b)))
+         nil)
+    (m23 (a b c d) (x)  ; ok
+         ((o1 (i1) t-wire (a b))
+          (o2 (i2) t-wire (c d))
+          (o3 (x) t-wire (i1 i2)))
+         nil)
+    (m24 (a b c) (d e)
+         ((o1 (i1) b-not (b))
+          (o2 (d) t-wire (a i1))
+          (o3 (e) t-wire (i1 c)))
+         nil)
+    (m25 (a b c) (d e f)
+         ((o1 (i1) b-not (b))
+          (o2 (d) t-wire (a i1))
+          (o3 (e) t-wire (i1 c))
+          (o4 (f) id (i1)))
+         nil)
+    (m26 (a b e) (x)
+         ((o1 (i1) t-buf (e a))
+          (o2 (x) t-buf (i1 b)))
+         nil)
+    (m27 (a b e) (x)  ; ok
+         ((o1 (i1) t-buf (e a))
+          (o2 (i2) pullup (i1))
+          (o3 (x) t-buf (i2 b)))
+         nil)
+    (m28 (a b c) (x y)
+         ((o1 (x y) m29 (a b b c)))
+         nil)
+    (m29 (a b c d) (x y)  ; ok
+         ((o1 (x) t-wire (a b))
+          (o2 (y) t-wire (c d)))
+         nil)
+    (m30 (a b c) (d e)
+         ((o1 (d) t-wire (a c))
+          (o2 (is1) id (a))
+          (o3 (e) t-wire (is1 b)))
+         nil)
+    (m31 (a) (b)
+         ((o1 (b) t-wire (a a)))
+         nil)
+    (m32 (a) (b)
+         ((o1 (is1) id (a))
+          (o2 (is2) id (a))
+          (o3 (b) t-wire (is1 is2)))
+         nil)
+    (m33 (a b c) (x y)
+         ((o1 (x y) m34 (a b b c)))
+         nil)
+    (m34 (a b c d) (x y)  ; ok
+         ((o1 (x) t-wire (a b))
+          (o2 (y) t-wire (c d)))
+         nil)
+    (m35 (x a en pi) (x y)  ; ok
+         ((o1 (x zi po) ttl-bidirect (x a en pi))
+          (o2 (y) pullup (x)))
+         nil)
+    (m36 (x a en pi) (x y)  ; ok
+         ((o1 (y) pullup (x))
+          (o2 (x zi po) ttl-bidirect (x a en pi)))
+         nil)
+    (m37 (x) (x)
+         ((o1 (x) id (x)))
+         nil)
+    (m38 (x en pi) (x y)
+         ((o1 (i1) pullup (x))
+          (o2 (i2 zi po) ttl-bidirect (x i1 en pi))
+          (o3 (x) id (i2))
+          (o4 (y) pullup (i2)))
+         nil)
+    (m39 (io x) (io)  ; ok
+         ((o1 (io) t-wire (io x)))
+         nil)
+    (m40 (io e) (io)
+         ((o1 (i1) pullup (io))
+          (o2 (i2) t-buf (e i1))
+          (o3 (io) t-wire (io i2)))
+         nil)
+    (m41 (io a) (io)
+         ((o1 (i1) b-not (a))
+          (o2 (io) t-wire (io i1)))
+         nil)
+    (m42 (bus-in a en pi) (bus-out c)  ; ok
+         ((o1 (bus-temp) pullup (bus-in))
+          (o2 (bus-out c) m43 (bus-temp a en pi)))
+         nil)
+    (m43 (bus a en pi) (bus c)
+         ((o1 (bus zi po) ttl-bidirect (bus a en pi))
+          (o2 (b) id (bus))
+          (o3 (c) pullup (b)))
+         nil)
+    (m44 (bus-in a en pi) (bus-out c)  ; ok
+         ((o1 (bus-temp) pullup (bus-in))
+          (o2 (bus-out c) m45 (bus-temp a en pi)))
+         nil)
+    (m45 (bus a en pi) (bus c)  ; ok
+         ((o1 (bus zi po) ttl-bidirect (bus a en pi))
+          (o2 (c) pullup (bus)))
+         nil)
+    (m46 (a en) (x)
+         ((o1 (i1) t-buf (en a))
+          (o2 (x) b-not (i1)))
+         nil)
+    (m47 (bus a en pi) (bus c)
+         ((o1 (b c po) ttl-bidirect (bus a en pi))
+          (o2 (bus) pullup (b)))
+         nil)
+    (m48 (bus a pi) (bus)
+         ((o1 (i1 i2) ttl-input (bus pi))
+          (o2 (bus) t-buf (i1 a)))
+         nil)
+    (m49 (a en i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 i11) (x)  ; ok
+         ((o1 (x) m50 (a en i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 i11)))
+         nil)
+    (m50 (a en i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 i11) (x)
+         ((o0 (is0) t-buf (en a)) ; drives 10
+          (o1  (is1)  t-wire (is0  i1))
+          (o2  (is2)  t-wire (is1  i2))
+          (o3  (is3)  t-wire (is2  i3))
+          (o4  (is4)  t-wire (is3  i4))
+          (o5  (is5)  t-wire (is4  i5))
+          (o6  (is6)  t-wire (is5  i6))
+          (o7  (is7)  t-wire (is6  i7))
+          (o8  (is8)  t-wire (is7  i8))
+          (o9  (is9)  t-wire (is8  i9))
+          (o10 (is10) t-wire (is9  i10))
+          (o11 (x)    t-wire (is10 i11)))
+         nil)
+    ))
+
+
+#|
+(top-level-predicate (test-net1))
+ (NET-ERROR 'NETLIST-ERRORS
+  (LIST
+   (NET-ERROR '(MODULE M2)
+              (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(IO-SIGNAL Q)
+                                                '((INPUT-TYPE BOOLP)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M3)
+              (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                               (LIST (CONS 'Y (IO-OUT 'X))))))
+   (NET-ERROR '(MODULE M4)
+              (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                               '((Y . X)))))
+   (NET-ERROR '(MODULE M7)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                '(A B))))))
+   (NET-ERROR '(MODULE M8)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(B))))))
+   (NET-ERROR '(MODULE M9)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                '(I1))))
+                    (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL I1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M10)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                '(B A))
+                                     (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(I1))))
+                    (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL I1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M11)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                '(B A))
+                                     (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(I1))))
+                    (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL I1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M13)
+              (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL IS1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M14)
+              (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(IO-SIGNAL IO)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M17)
+              (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(IO-SIGNAL IO)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M24)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(I1))))
+                    (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL I1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M25)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                '(I1))
+                                     (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(I1))))
+                    (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL I1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR
+             '(MODULE M26)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(SIGNAL I1)
+                                               '((INPUT-TYPE BOOLP)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   (NET-ERROR '(MODULE M28)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(B))))))
+   (NET-ERROR '(MODULE M30)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(A))))))
+   (NET-ERROR '(MODULE M31)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(A))))))
+   (NET-ERROR '(MODULE M32)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(A))))))
+   (NET-ERROR '(MODULE M33)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                '(B))))))
+   (NET-ERROR '(MODULE M37)
+              (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                               (LIST (CONS (IO-OUT 'X) 'X)))
+                    (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(IO-SIGNAL X)
+                                                '((INPUT-TYPE FREE)
+                                                  (OUTPUT-TYPE FREE)))))))
+   (NET-ERROR '(MODULE M38)
+              (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                               (LIST (CONS (IO-OUT 'X) 'I2)))))
+   (NET-ERROR '(MODULE M40)
+              (LIST (NET-ERROR 'T-WIRE-ERRORS
+                               (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                '(IO))))))
+   (NET-ERROR '(MODULE M41)
+              (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(SIGNAL I1)
+                                                '((INPUT-TYPE TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR '(MODULE M43)
+              (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                               (LIST (CONS 'B (IO-OUT 'BUS))))))
+   (NET-ERROR
+             '(MODULE M46)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(SIGNAL I1)
+                                               '((INPUT-TYPE BOOLP)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   (NET-ERROR '(MODULE M47)
+              (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                               (LIST (NET-ERROR '(IO-SIGNAL BUS)
+                                                '((INPUT-TYPE TTL-TRI-STATE)
+                                                  (OUTPUT-TYPE BOOLP)))))))
+   (NET-ERROR
+             '(MODULE M48)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(IO-SIGNAL BUS)
+                                               '((INPUT-TYPE TTL)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   (NET-ERROR
+           '(MODULE M50)
+           (LIST (NET-ERROR 'BAD-DRIVES
+                            (LIST (NET-ERROR '(SIGNAL IS0)
+                                             '((DRIVE 10) (LOADING 11)))))))))
+
+
+(netlist-database (test-net1) F)
+ (LIST
+  '(M1 (DELAYS ((147 1171) (55 1343)))
+       (DRIVES 9)
+       (INPUT-TYPES CLK)
+       (INPUTS CLK)
+       (LOADINGS 1)
+       (OUT-DEPENDS NIL)
+       (OUTPUT-TYPES BOOLP)
+       (OUTPUTS Q)
+       (STATE-TYPES . BOOLP)
+       (STATES . O1)
+       (GATES . 7)
+       (PADS . 0)
+       (PRIMITIVES . 1)
+       (TRANSISTORS . 26))
+  (LIST 'M2
+      (NET-ERROR '(MODULE M2)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(IO-SIGNAL Q)
+                                                   '((INPUT-TYPE BOOLP)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS ((147 1024) (55 1288)))
+      '(DRIVES 10)
+      (LIST 'INPUT-TYPES (UNKNOWN) 'CLK)
+      '(INPUTS Q CLK)
+      '(LOADINGS 1 1)
+      '(OUT-DEPENDS NIL)
+      (LIST 'OUTPUT-TYPES (UNKNOWN))
+      '(OUTPUTS Q)
+      '(STATE-TYPES . BOOLP)
+      '(STATES . O1)
+      '(GATES . 7)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 26))
+  (LIST 'M3
+        (NET-ERROR '(MODULE M3)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    (LIST (CONS 'Y (IO-OUT 'X))))))
+        (LIST 'DELAYS
+              '(((61 PS-PF) 1633)
+                ((41 PS-PF) 2253)
+                EN A)
+              (IO-OUT 'X))
+        (LIST 'DRIVES '(8 MA) (IO-OUT 'X))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS X A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE TTL-TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  (LIST 'M4
+        (NET-ERROR '(MODULE M4)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    '((Y . X)))))
+        '(DELAYS (((61 PS-PF) 1633)
+                  ((41 PS-PF) 2253)
+                  EN A)
+                 X)
+        '(DRIVES (8 MA) X)
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS X A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (X))
+        '(OUTPUT-TYPES TTL-TRI-STATE TTL-TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M5 (DELAYS (OR A B C))
+       (DRIVES (MIN A B C))
+       (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+       (INPUTS A B C)
+       (LOADINGS 2 2 1)
+       (OUT-DEPENDS (A B C))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS D)
+       (GATES . 0)
+       (PADS . 0)
+       (PRIMITIVES . 0)
+       (TRANSISTORS . 0))
+  '(M6 (DELAYS (OR A B C))
+       (DRIVES (MIN A B C))
+       (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+       (INPUTS A B C)
+       (LOADINGS 2 2 1)
+       (OUT-DEPENDS (A B C))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS D)
+       (GATES . 0)
+       (PADS . 0)
+       (PRIMITIVES . 0)
+       (TRANSISTORS . 0))
+  (LIST 'M7
+      (NET-ERROR '(MODULE M7)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(A B))))))
+      '(DELAYS A (OR A B) B)
+      '(DRIVES A (MIN A B) B)
+      '(INPUT-TYPES TRI-STATE TRI-STATE)
+      '(INPUTS A B)
+      '(LOADINGS 1 1)
+      '(OUT-DEPENDS (A) (A B) (B))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+      '(OUTPUTS C D E)
+      '(GATES . 0)
+      '(PADS . 0)
+      '(PRIMITIVES . 0)
+      '(TRANSISTORS . 0))
+  (LIST 'M8
+        (NET-ERROR '(MODULE M8)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(B))))))
+        '(DELAYS (OR A B) (OR B C))
+        '(DRIVES (MIN A B) (MIN B C))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 1 2 1)
+        '(OUT-DEPENDS (A B) (B C))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS D E)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M9
+      (NET-ERROR '(MODULE M9)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      (LIST 'DELAYS
+            '((70 305) (57 255) B)
+            (LIST 'OR (UNKNOWN) 'A))
+      (LIST 'DRIVES
+            9
+            (LIST 'MIN (UNKNOWN) 'A))
+      '(INPUT-TYPES TRI-STATE BOOLP)
+      '(INPUTS A B)
+      '(LOADINGS 1 2)
+      '(OUT-DEPENDS (B) (B A))
+      (LIST 'OUTPUT-TYPES
+            (UNKNOWN)
+            'TRI-STATE)
+      '(OUTPUTS C D)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M10
+      (NET-ERROR '(MODULE M10)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(B A))
+                                        (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR A ((144 710) (54 815) A B))
+               (OR ((144 710) (54 815) A B) B))
+      '(DRIVES (MIN 8 A) (MIN 8 B))
+      '(INPUT-TYPES BOOLP BOOLP)
+      '(INPUTS A B)
+      '(LOADINGS 2 2)
+      '(OUT-DEPENDS (A B) (A B))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+      '(OUTPUTS C D)
+      '(GATES . 2)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 6))
+  (LIST 'M11
+      (NET-ERROR '(MODULE M11)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(B A))
+                                        (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR A ((143 761) (58 993) A B) C)
+               (OR ((143 761) (58 993) A B) B))
+      '(DRIVES (MIN 7 A C) (MIN 7 B))
+      '(INPUT-TYPES BOOLP BOOLP TRI-STATE)
+      '(INPUTS A B C)
+      '(LOADINGS 3 2 1)
+      '(OUT-DEPENDS (A B C) (A B))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+      '(OUTPUTS D E)
+      '(GATES . 2)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 6))
+  '(M12 (DELAYS (OR ((70 305) (57 255) A) B)
+                (OR ((70 305) (57 255) C) D))
+        (DRIVES (MIN 9 B) (MIN 9 D))
+        (INPUT-TYPES BOOLP TRI-STATE BOOLP TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 2 1 2 1)
+        (OUT-DEPENDS (A B) (C D))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS E F)
+        (GATES . 2)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 6))
+  (LIST 'M13
+      (NET-ERROR '(MODULE M13)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL IS1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR ((70 305) (57 255) A) B))
+      '(DRIVES (MIN 9 B))
+      '(INPUT-TYPES BOOLP TRI-STATE)
+      '(INPUTS A B)
+      '(LOADINGS 2 1)
+      '(OUT-DEPENDS (A B))
+      '(OUTPUT-TYPES TRI-STATE)
+      '(OUTPUTS C)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M14
+      (NET-ERROR '(MODULE M14)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(IO-SIGNAL IO)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR ((146 605) (57 842) I1 E1)
+                   ((146 751) (57 899) I2 E2)
+                   IO))
+      '(DRIVES (MIN 7 IO))
+      (LIST 'INPUT-TYPES
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            (UNKNOWN))
+      '(INPUTS I1 E1 I2 E2 IO)
+      '(LOADINGS 2 2 2 2 3)
+      '(OUT-DEPENDS (I1 E1 I2 E2 IO))
+      (LIST 'OUTPUT-TYPES (UNKNOWN))
+      '(OUTPUTS IO)
+      '(GATES . 6)
+      '(PADS . 0)
+      '(PRIMITIVES . 2)
+      '(TRANSISTORS . 24))
+  '(M15 (DELAYS (OR ((146 605) (57 842) I1 E1)
+                    ((146 751) (57 899) I2 E2)
+                    I3))
+        (DRIVES (MIN 7 I3))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 I3)
+        (LOADINGS 2 2 2 2 3)
+        (OUT-DEPENDS (I1 E1 I2 E2 I3))
+        (OUTPUT-TYPES BOOLP)
+        (OUTPUTS OUT)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M16 (DELAYS (OR ((146 459) (57 785) I1 E1)
+                    ((146 605) (57 842) I2 E2)
+                    IO))
+        (DRIVES (MIN 8 IO))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 IO)
+        (LOADINGS 2 2 2 2 2)
+        (OUT-DEPENDS (I1 E1 I2 E2 IO))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS IO)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  (LIST 'M17
+      (NET-ERROR '(MODULE M17)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(IO-SIGNAL IO)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR ((146 605) (57 842) I1 E1)
+                   ((146 751) (57 899) I2 E2)
+                   IO))
+      '(DRIVES (MIN 7 IO))
+      (LIST 'INPUT-TYPES
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            (UNKNOWN))
+      '(INPUTS I1 E1 I2 E2 IO)
+      '(LOADINGS 2 2 2 2 3)
+      '(OUT-DEPENDS (I1 E1 I2 E2 IO))
+      (LIST 'OUTPUT-TYPES (UNKNOWN))
+      '(OUTPUTS IO)
+      '(GATES . 6)
+      '(PADS . 0)
+      '(PRIMITIVES . 2)
+      '(TRANSISTORS . 24))
+  '(M18 (DELAYS (OR ((146 605) (57 842) I1 E1)
+                    ((146 751) (57 899) I2 E2)
+                    I3))
+        (DRIVES (MIN 7 I3))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 I3)
+        (LOADINGS 2 2 2 2 3)
+        (OUT-DEPENDS (I1 E1 I2 E2 I3))
+        (OUTPUT-TYPES BOOLP)
+        (OUTPUTS OUT)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M19 (DELAYS (OR ((146 459) (57 785) I1 E1)
+                    ((146 605) (57 842) I2 E2)
+                    IO))
+        (DRIVES (MIN 8 IO))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 IO)
+        (LOADINGS 2 2 2 2 2)
+        (OUT-DEPENDS (I1 E1 I2 E2 IO))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS IO)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M20 (DELAYS ((146 313) (57 728) I1 E1)
+                (OR ((146 459) (57 785) I2 E2) IO))
+        (DRIVES 10 (MIN 9 IO))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 IO)
+        (LOADINGS 2 2 2 2 1)
+        (OUT-DEPENDS (I1 E1) (I2 E2 IO))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS X Y)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M21 (DELAYS (OR MAX MIN))
+        (DRIVES (MIN MAX MIN))
+        (INPUT-TYPES TRI-STATE TRI-STATE)
+        (INPUTS MAX MIN)
+        (LOADINGS 1 1)
+        (OUT-DEPENDS (MAX MIN))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  '(M22 (DELAYS (OR A B))
+        (DRIVES (MIN A B))
+        (INPUT-TYPES TRI-STATE TRI-STATE)
+        (INPUTS A B)
+        (LOADINGS 1 1)
+        (OUT-DEPENDS (A B))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS MIN)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  '(M23 (DELAYS (OR A B C D))
+        (DRIVES (MIN A B C D))
+        (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 2 2 2 2)
+        (OUT-DEPENDS (A B C D))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M24
+      (NET-ERROR '(MODULE M24)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR A ((70 375) (57 312) B))
+               (OR ((70 375) (57 312) B) C))
+      '(DRIVES (MIN 8 A) (MIN 8 C))
+      '(INPUT-TYPES TRI-STATE BOOLP TRI-STATE)
+      '(INPUTS A B C)
+      '(LOADINGS 1 2 1)
+      '(OUT-DEPENDS (A B) (B C))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+      '(OUTPUTS D E)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M25
+      (NET-ERROR '(MODULE M25)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(I1))
+                                        (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      (LIST 'DELAYS
+            (LIST 'OR 'A (UNKNOWN))
+            (LIST 'OR (UNKNOWN) 'C)
+            '((70 375) (57 312) B))
+      (LIST 'DRIVES
+            (LIST 'MIN (UNKNOWN) 'A)
+            (LIST 'MIN (UNKNOWN) 'C)
+            8)
+      '(INPUT-TYPES TRI-STATE BOOLP TRI-STATE)
+      '(INPUTS A B C)
+      '(LOADINGS 1 2 1)
+      '(OUT-DEPENDS (A B) (B C) (B))
+      (LIST 'OUTPUT-TYPES
+            'TRI-STATE
+            'TRI-STATE
+            (UNKNOWN))
+      '(OUTPUTS D E F)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M26
+   (NET-ERROR
+             '(MODULE M26)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(SIGNAL I1)
+                                               '((INPUT-TYPE BOOLP)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   '(DELAYS ((146 313)
+             (57 728)
+             B
+             (RANGE 605 842 A E)))
+   '(DRIVES 10)
+   '(INPUT-TYPES BOOLP BOOLP BOOLP)
+   '(INPUTS A B E)
+   '(LOADINGS 2 2 2)
+   '(OUT-DEPENDS (B A E))
+   '(OUTPUT-TYPES TRI-STATE)
+   '(OUTPUTS X)
+   '(GATES . 6)
+   '(PADS . 0)
+   '(PRIMITIVES . 2)
+   '(TRANSISTORS . 24))
+  '(M27 (DELAYS ((146 313)
+                 (57 728)
+                 B
+                 (RANGE 751 899 A E)))
+        (DRIVES 10)
+        (INPUT-TYPES BOOLP BOOLP BOOLP)
+        (INPUTS A B E)
+        (LOADINGS 2 2 2)
+        (OUT-DEPENDS (B A E))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  (LIST 'M28
+        (NET-ERROR '(MODULE M28)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(B))))))
+        '(DELAYS (OR A B) (OR B C))
+        '(DRIVES (MIN A B) (MIN B C))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 1 2 1)
+        '(OUT-DEPENDS (A B) (B C))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  '(M29 (DELAYS (OR A B) (OR C D))
+        (DRIVES (MIN A B) (MIN C D))
+        (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (A B) (C D))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS X Y)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M30
+        (NET-ERROR '(MODULE M30)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(A))))))
+        '(DELAYS (OR A C) (OR A B))
+        '(DRIVES (MIN A C) (MIN A B))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 2 1 1)
+        '(OUT-DEPENDS (A C) (A B))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS D E)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M31
+        (NET-ERROR '(MODULE M31)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(A))))))
+        (LIST 'DELAYS
+              (LIST 'OR (UNKNOWN) 'A))
+        (LIST 'DRIVES
+              (LIST 'MIN (UNKNOWN) 'A))
+        '(INPUT-TYPES TRI-STATE)
+        '(INPUTS A)
+        '(LOADINGS 2)
+        '(OUT-DEPENDS (A))
+        '(OUTPUT-TYPES TRI-STATE)
+        '(OUTPUTS B)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M32
+        (NET-ERROR '(MODULE M32)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(A))))))
+        (LIST 'DELAYS
+              (LIST 'OR (UNKNOWN) 'A))
+        (LIST 'DRIVES
+              (LIST 'MIN (UNKNOWN) 'A))
+        '(INPUT-TYPES TRI-STATE)
+        '(INPUTS A)
+        '(LOADINGS 2)
+        '(OUT-DEPENDS (A))
+        '(OUTPUT-TYPES TRI-STATE)
+        '(OUTPUTS B)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M33
+        (NET-ERROR '(MODULE M33)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(B))))))
+        '(DELAYS (OR A B) (OR B C))
+        '(DRIVES (MIN A B) (MIN B C))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 1 2 1)
+        '(OUT-DEPENDS (A B) (B C))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  '(M34 (DELAYS (OR A B) (OR C D))
+        (DRIVES (MIN A B) (MIN C D))
+        (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (A B) (C D))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS X Y)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M35
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN A)
+              (IO-OUT 'X))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'X))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS X A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M36 (DELAYS (((61 PS-PF) 1633)
+                 ((41 PS-PF) 2253)
+                 EN A)
+                X)
+        (DRIVES (8 MA) X)
+        (INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        (INPUTS X A EN PI)
+        (LOADINGS (13 PF) 1 1 1)
+        (OUT-DEPENDS (EN A) (X))
+        (OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        (OUTPUTS X Y)
+        (GATES . 0)
+        (PADS . 1)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 0))
+  (LIST 'M37
+       (NET-ERROR '(MODULE M37)
+                  (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                   (LIST (CONS (IO-OUT 'X) 'X)))
+                        (NET-ERROR 'IO-TYPE-CONFLICTS
+                                   (LIST (NET-ERROR '(IO-SIGNAL X)
+                                                    '((INPUT-TYPE FREE)
+                                                      (OUTPUT-TYPE FREE)))))))
+       '(DELAYS X)
+       '(DRIVES X)
+       (LIST 'INPUT-TYPES (UNKNOWN))
+       '(INPUTS X)
+       '(LOADINGS 0)
+       '(OUT-DEPENDS (X))
+       (LIST 'OUTPUT-TYPES (UNKNOWN))
+       '(OUTPUTS X)
+       '(GATES . 0)
+       '(PADS . 0)
+       '(PRIMITIVES . 0)
+       '(TRANSISTORS . 0))
+  (LIST 'M38
+        (NET-ERROR '(MODULE M38)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    (LIST (CONS (IO-OUT 'X) 'I2)))))
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN X)
+              (IO-OUT 'X))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'X))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP PARAMETRIC)
+        '(INPUTS X EN PI)
+        '(LOADINGS (23 PF) 1 1)
+        '(OUT-DEPENDS (EN X) (EN X))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M39 (DELAYS (OR IO X))
+        (DRIVES (MIN IO X))
+        (INPUT-TYPES TRI-STATE TRI-STATE)
+        (INPUTS IO X)
+        (LOADINGS 1 1)
+        (OUT-DEPENDS (IO X))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS IO)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M40
+      (NET-ERROR '(MODULE M40)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(IO))))))
+      '(DELAYS (OR IO ((146 459) (57 785) IO E)))
+      '(DRIVES (MIN 9 IO))
+      '(INPUT-TYPES TRI-STATE BOOLP)
+      '(INPUTS IO E)
+      '(LOADINGS 4 2)
+      '(OUT-DEPENDS (IO E))
+      '(OUTPUT-TYPES TRI-STATE)
+      '(OUTPUTS IO)
+      '(GATES . 3)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 12))
+  (LIST 'M41
+      (NET-ERROR '(MODULE M41)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR IO ((70 305) (57 255) A)))
+      '(DRIVES (MIN 9 IO))
+      '(INPUT-TYPES TRI-STATE BOOLP)
+      '(INPUTS IO A)
+      '(LOADINGS 1 2)
+      '(OUT-DEPENDS (IO A))
+      '(OUTPUT-TYPES TRI-STATE)
+      '(OUTPUTS IO)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  '(M42 (DELAYS (((61 PS-PF) 2243)
+                 ((41 PS-PF) 2663)
+                 EN A)
+                BUS-OUT)
+        (DRIVES (7 MA) BUS-OUT)
+        (INPUT-TYPES TRI-STATE BOOLP BOOLP PARAMETRIC)
+        (INPUTS BUS-IN A EN PI)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (EN A) (EN A))
+        (OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        (OUTPUTS BUS-OUT C)
+        (GATES . 0)
+        (PADS . 1)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 0))
+  (LIST 'M43
+        (NET-ERROR '(MODULE M43)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    (LIST (CONS 'B (IO-OUT 'BUS))))))
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN A)
+              (IO-OUT 'BUS))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'BUS))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS BUS A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS BUS C)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M44 (DELAYS (((61 PS-PF) 2243)
+                 ((41 PS-PF) 2663)
+                 EN A)
+                BUS-OUT)
+        (DRIVES (7 MA) BUS-OUT)
+        (INPUT-TYPES TRI-STATE BOOLP BOOLP PARAMETRIC)
+        (INPUTS BUS-IN A EN PI)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (EN A) (EN A))
+        (OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        (OUTPUTS BUS-OUT C)
+        (GATES . 0)
+        (PADS . 1)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 0))
+  (LIST 'M45
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN A)
+              (IO-OUT 'BUS))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'BUS))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS BUS A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS BUS C)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  (LIST 'M46
+   (NET-ERROR
+             '(MODULE M46)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(SIGNAL I1)
+                                               '((INPUT-TYPE BOOLP)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   '(DELAYS ((70 235)
+             (57 198)
+             (RANGE 605 842 A EN)))
+   '(DRIVES 10)
+   '(INPUT-TYPES BOOLP BOOLP)
+   '(INPUTS A EN)
+   '(LOADINGS 2 2)
+   '(OUT-DEPENDS (A EN))
+   '(OUTPUT-TYPES BOOLP)
+   '(OUTPUTS X)
+   '(GATES . 4)
+   '(PADS . 0)
+   '(PRIMITIVES . 2)
+   '(TRANSISTORS . 15))
+  (LIST 'M47
+     (NET-ERROR '(MODULE M47)
+                (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                 (LIST (NET-ERROR '(IO-SIGNAL BUS)
+                                                  '((INPUT-TYPE TTL-TRI-STATE)
+                                                    (OUTPUT-TYPE BOOLP)))))))
+     '(DELAYS (((61 PS-PF) 2243)
+               ((41 PS-PF) 2663)
+               EN A)
+              ((43 633) (20 638) EN A BUS))
+     '(DRIVES (7 MA) 10)
+     (LIST 'INPUT-TYPES
+           (UNKNOWN)
+           'BOOLP
+           'BOOLP
+           'PARAMETRIC)
+     '(INPUTS BUS A EN PI)
+     '(LOADINGS (3 PF) 1 1 1)
+     '(OUT-DEPENDS (EN A) (EN A BUS))
+     (LIST 'OUTPUT-TYPES
+           (UNKNOWN)
+           'BOOLP)
+     '(OUTPUTS BUS C)
+     '(GATES . 0)
+     '(PADS . 1)
+     '(PRIMITIVES . 1)
+     '(TRANSISTORS . 0))
+  (LIST 'M48
+   (NET-ERROR
+             '(MODULE M48)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(IO-SIGNAL BUS)
+                                               '((INPUT-TYPE TTL)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   '(DELAYS ((146 313)
+             (57 728)
+             A
+             (RANGE 678 719 BUS)))
+   '(DRIVES 10)
+   (LIST 'INPUT-TYPES
+         (UNKNOWN)
+         'BOOLP
+         'PARAMETRIC)
+   '(INPUTS BUS A PI)
+   '(LOADINGS (3 PF) 2 1)
+   '(OUT-DEPENDS (A BUS))
+   (LIST 'OUTPUT-TYPES (UNKNOWN))
+   '(OUTPUTS BUS)
+   '(GATES . 3)
+   '(PADS . 1)
+   '(PRIMITIVES . 2)
+   '(TRANSISTORS . 12))
+  '(M49 (DELAYS (OR ((146 1919) (57 1355) A EN)
+                    I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+        (DRIVES (MIN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+        (INPUT-TYPES BOOLP BOOLP TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                     TRI-STATE TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                     TRI-STATE TRI-STATE)
+        (INPUTS A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11)
+        (LOADINGS 2 2 11 10 9 8 7 6 5 4 3 2 1)
+        (OUT-DEPENDS (A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 3)
+        (PADS . 0)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 12))
+  (LIST 'M50
+   (NET-ERROR
+             '(MODULE M50)
+             (LIST (NET-ERROR 'BAD-DRIVES
+                              (LIST (NET-ERROR '(SIGNAL IS0)
+                                               '((DRIVE 10) (LOADING 11)))))))
+   '(DELAYS (OR ((146 1919) (57 1355) A EN)
+                I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+   '(DRIVES (MIN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+   '(INPUT-TYPES BOOLP BOOLP TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                 TRI-STATE TRI-STATE TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                 TRI-STATE)
+   '(INPUTS A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11)
+   '(LOADINGS 2 2 11 10 9 8 7 6 5 4 3 2 1)
+   '(OUT-DEPENDS (A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+   '(OUTPUT-TYPES TRI-STATE)
+   '(OUTPUTS X)
+   '(GATES . 3)
+   '(PADS . 0)
+   '(PRIMITIVES . 1)
+   '(TRANSISTORS . 12)))
+
+(netlist-database (test-net1) T)
+ (LIST
+  '(M1 (DELAYS ((147 1171) (55 1343)))
+       (DRIVES 9)
+       (INPUT-TYPES CLK)
+       (INPUTS CLK)
+       (LOADINGS 1)
+       (OUT-DEPENDS NIL)
+       (OUTPUT-TYPES BOOLP)
+       (OUTPUTS Q)
+       (STATE-TYPES . BOOLP)
+       (STATES . O1)
+       (GATES . 7)
+       (PADS . 0)
+       (PRIMITIVES . 1)
+       (TRANSISTORS . 26))
+  (LIST 'M2
+      (NET-ERROR '(MODULE M2)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(IO-SIGNAL Q)
+                                                   '((INPUT-TYPE BOOLP)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS ((147 1024) (55 1288)))
+      '(DRIVES 10)
+      (LIST 'INPUT-TYPES (UNKNOWN) 'CLK)
+      '(INPUTS Q CLK)
+      '(LOADINGS 1 1)
+      '(OUT-DEPENDS NIL)
+      (LIST 'OUTPUT-TYPES (UNKNOWN))
+      '(OUTPUTS Q)
+      '(STATE-TYPES . BOOLP)
+      '(STATES . O1)
+      '(GATES . 7)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 26))
+  (LIST 'M3
+        (NET-ERROR '(MODULE M3)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    (LIST (CONS 'Y (IO-OUT 'X))))))
+        (LIST 'DELAYS
+              '(((61 PS-PF) 1633)
+                ((41 PS-PF) 2253)
+                EN A)
+              (IO-OUT 'X))
+        (LIST 'DRIVES '(8 MA) (IO-OUT 'X))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS X A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE TTL-TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  (LIST 'M4
+        (NET-ERROR '(MODULE M4)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    '((Y . X)))))
+        '(DELAYS (((61 PS-PF) 1633)
+                  ((41 PS-PF) 2253)
+                  EN A)
+                 X)
+        '(DRIVES (8 MA) X)
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS X A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (X))
+        '(OUTPUT-TYPES TTL-TRI-STATE TTL-TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M5 (DELAYS (OR A B C))
+       (DRIVES (MIN A B C))
+       (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+       (INPUTS A B C)
+       (LOADINGS 2 2 1)
+       (OUT-DEPENDS (A B C))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS D)
+       (GATES . 0)
+       (PADS . 0)
+       (PRIMITIVES . 0)
+       (TRANSISTORS . 0))
+  '(M6 (DELAYS (OR A B C))
+       (DRIVES (MIN A B C))
+       (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+       (INPUTS A B C)
+       (LOADINGS 2 2 1)
+       (OUT-DEPENDS (A B C))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS D)
+       (GATES . 0)
+       (PADS . 0)
+       (PRIMITIVES . 0)
+       (TRANSISTORS . 0))
+  (LIST 'M7
+      (NET-ERROR '(MODULE M7)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(A B))))))
+      '(DELAYS A (OR A B) B)
+      '(DRIVES A (MIN A B) B)
+      '(INPUT-TYPES TRI-STATE TRI-STATE)
+      '(INPUTS A B)
+      '(LOADINGS 1 1)
+      '(OUT-DEPENDS (A) (A B) (B))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+      '(OUTPUTS C D E)
+      '(GATES . 0)
+      '(PADS . 0)
+      '(PRIMITIVES . 0)
+      '(TRANSISTORS . 0))
+  (LIST 'M8
+        (NET-ERROR '(MODULE M8)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(B))))))
+        '(DELAYS (OR A B) (OR B C))
+        '(DRIVES (MIN A B) (MIN B C))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 1 2 1)
+        '(OUT-DEPENDS (A B) (B C))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS D E)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M9
+      (NET-ERROR '(MODULE M9)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      (LIST 'DELAYS
+            '((70 305) (57 255) B)
+            (LIST 'OR (UNKNOWN) 'A))
+      (LIST 'DRIVES
+            9
+            (LIST 'MIN (UNKNOWN) 'A))
+      '(INPUT-TYPES TRI-STATE BOOLP)
+      '(INPUTS A B)
+      '(LOADINGS 1 2)
+      '(OUT-DEPENDS (B) (B A))
+      (LIST 'OUTPUT-TYPES
+            (UNKNOWN)
+            'TRI-STATE)
+      '(OUTPUTS C D)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M10
+      (NET-ERROR '(MODULE M10)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(B A))
+                                        (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR A ((144 710) (54 815) A B))
+               (OR ((144 710) (54 815) A B) B))
+      '(DRIVES (MIN 8 A) (MIN 8 B))
+      '(INPUT-TYPES BOOLP BOOLP)
+      '(INPUTS A B)
+      '(LOADINGS 2 2)
+      '(OUT-DEPENDS (A B) (A B))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+      '(OUTPUTS C D)
+      '(GATES . 2)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 6))
+  (LIST 'M11
+      (NET-ERROR '(MODULE M11)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(B A))
+                                        (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR A ((143 761) (58 993) A B) C)
+               (OR ((143 761) (58 993) A B) B))
+      '(DRIVES (MIN 7 A C) (MIN 7 B))
+      '(INPUT-TYPES BOOLP BOOLP TRI-STATE)
+      '(INPUTS A B C)
+      '(LOADINGS 3 2 1)
+      '(OUT-DEPENDS (A B C) (A B))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+      '(OUTPUTS D E)
+      '(GATES . 2)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 6))
+  '(M12 (DELAYS (OR ((70 305) (57 255) A) B)
+                (OR ((70 305) (57 255) C) D))
+        (DRIVES (MIN 9 B) (MIN 9 D))
+        (INPUT-TYPES BOOLP TRI-STATE BOOLP TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 2 1 2 1)
+        (OUT-DEPENDS (A B) (C D))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS E F)
+        (GATES . 2)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 6))
+  (LIST 'M13
+      (NET-ERROR '(MODULE M13)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL IS1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR ((70 305) (57 255) A) B))
+      '(DRIVES (MIN 9 B))
+      '(INPUT-TYPES BOOLP TRI-STATE)
+      '(INPUTS A B)
+      '(LOADINGS 2 1)
+      '(OUT-DEPENDS (A B))
+      '(OUTPUT-TYPES TRI-STATE)
+      '(OUTPUTS C)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M14
+      (NET-ERROR '(MODULE M14)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(IO-SIGNAL IO)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR ((146 605) (57 842) I1 E1)
+                   ((146 751) (57 899) I2 E2)
+                   IO))
+      '(DRIVES (MIN 7 IO))
+      (LIST 'INPUT-TYPES
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            (UNKNOWN))
+      '(INPUTS I1 E1 I2 E2 IO)
+      '(LOADINGS 2 2 2 2 3)
+      '(OUT-DEPENDS (I1 E1 I2 E2 IO))
+      (LIST 'OUTPUT-TYPES (UNKNOWN))
+      '(OUTPUTS IO)
+      '(GATES . 6)
+      '(PADS . 0)
+      '(PRIMITIVES . 2)
+      '(TRANSISTORS . 24))
+  '(M15 (DELAYS (OR ((146 605) (57 842) I1 E1)
+                    ((146 751) (57 899) I2 E2)
+                    I3))
+        (DRIVES (MIN 7 I3))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 I3)
+        (LOADINGS 2 2 2 2 3)
+        (OUT-DEPENDS (I1 E1 I2 E2 I3))
+        (OUTPUT-TYPES BOOLP)
+        (OUTPUTS OUT)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M16 (DELAYS (OR ((146 459) (57 785) I1 E1)
+                    ((146 605) (57 842) I2 E2)
+                    IO))
+        (DRIVES (MIN 8 IO))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 IO)
+        (LOADINGS 2 2 2 2 2)
+        (OUT-DEPENDS (I1 E1 I2 E2 IO))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS IO)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  (LIST 'M17
+      (NET-ERROR '(MODULE M17)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(IO-SIGNAL IO)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR ((146 605) (57 842) I1 E1)
+                   ((146 751) (57 899) I2 E2)
+                   IO))
+      '(DRIVES (MIN 7 IO))
+      (LIST 'INPUT-TYPES
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            'BOOLP
+            (UNKNOWN))
+      '(INPUTS I1 E1 I2 E2 IO)
+      '(LOADINGS 2 2 2 2 3)
+      '(OUT-DEPENDS (I1 E1 I2 E2 IO))
+      (LIST 'OUTPUT-TYPES (UNKNOWN))
+      '(OUTPUTS IO)
+      '(GATES . 6)
+      '(PADS . 0)
+      '(PRIMITIVES . 2)
+      '(TRANSISTORS . 24))
+  '(M18 (DELAYS (OR ((146 605) (57 842) I1 E1)
+                    ((146 751) (57 899) I2 E2)
+                    I3))
+        (DRIVES (MIN 7 I3))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 I3)
+        (LOADINGS 2 2 2 2 3)
+        (OUT-DEPENDS (I1 E1 I2 E2 I3))
+        (OUTPUT-TYPES BOOLP)
+        (OUTPUTS OUT)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M19 (DELAYS (OR ((146 459) (57 785) I1 E1)
+                    ((146 605) (57 842) I2 E2)
+                    IO))
+        (DRIVES (MIN 8 IO))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 IO)
+        (LOADINGS 2 2 2 2 2)
+        (OUT-DEPENDS (I1 E1 I2 E2 IO))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS IO)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M20 (DELAYS ((146 313) (57 728) I1 E1)
+                (OR ((146 459) (57 785) I2 E2) IO))
+        (DRIVES 10 (MIN 9 IO))
+        (INPUT-TYPES BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+        (INPUTS I1 E1 I2 E2 IO)
+        (LOADINGS 2 2 2 2 1)
+        (OUT-DEPENDS (I1 E1) (I2 E2 IO))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS X Y)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  '(M21 (DELAYS (OR MAX MIN))
+        (DRIVES (MIN MAX MIN))
+        (INPUT-TYPES TRI-STATE TRI-STATE)
+        (INPUTS MAX MIN)
+        (LOADINGS 1 1)
+        (OUT-DEPENDS (MAX MIN))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  '(M22 (DELAYS (OR A B))
+        (DRIVES (MIN A B))
+        (INPUT-TYPES TRI-STATE TRI-STATE)
+        (INPUTS A B)
+        (LOADINGS 1 1)
+        (OUT-DEPENDS (A B))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS MIN)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  '(M23 (DELAYS (OR A B C D))
+        (DRIVES (MIN A B C D))
+        (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 2 2 2 2)
+        (OUT-DEPENDS (A B C D))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M24
+      (NET-ERROR '(MODULE M24)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR A ((70 375) (57 312) B))
+               (OR ((70 375) (57 312) B) C))
+      '(DRIVES (MIN 8 A) (MIN 8 C))
+      '(INPUT-TYPES TRI-STATE BOOLP TRI-STATE)
+      '(INPUTS A B C)
+      '(LOADINGS 1 2 1)
+      '(OUT-DEPENDS (A B) (B C))
+      '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+      '(OUTPUTS D E)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M25
+      (NET-ERROR '(MODULE M25)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(I1))
+                                        (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                   '(I1))))
+                       (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      (LIST 'DELAYS
+            (LIST 'OR 'A (UNKNOWN))
+            (LIST 'OR (UNKNOWN) 'C)
+            '((70 375) (57 312) B))
+      (LIST 'DRIVES
+            (LIST 'MIN (UNKNOWN) 'A)
+            (LIST 'MIN (UNKNOWN) 'C)
+            8)
+      '(INPUT-TYPES TRI-STATE BOOLP TRI-STATE)
+      '(INPUTS A B C)
+      '(LOADINGS 1 2 1)
+      '(OUT-DEPENDS (A B) (B C) (B))
+      (LIST 'OUTPUT-TYPES
+            'TRI-STATE
+            'TRI-STATE
+            (UNKNOWN))
+      '(OUTPUTS D E F)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  (LIST 'M26
+   (NET-ERROR
+             '(MODULE M26)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(SIGNAL I1)
+                                               '((INPUT-TYPE BOOLP)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   '(DELAYS ((146 (RANGE 918 1155))
+             (57 (RANGE 1333 1570))
+             B A E))
+   '(DRIVES 10)
+   '(INPUT-TYPES BOOLP BOOLP BOOLP)
+   '(INPUTS A B E)
+   '(LOADINGS 2 2 2)
+   '(OUT-DEPENDS (B A E))
+   '(OUTPUT-TYPES TRI-STATE)
+   '(OUTPUTS X)
+   '(GATES . 6)
+   '(PADS . 0)
+   '(PRIMITIVES . 2)
+   '(TRANSISTORS . 24))
+  '(M27 (DELAYS ((146 (RANGE 1064 1212))
+                 (57 (RANGE 1479 1627))
+                 B A E))
+        (DRIVES 10)
+        (INPUT-TYPES BOOLP BOOLP BOOLP)
+        (INPUTS A B E)
+        (LOADINGS 2 2 2)
+        (OUT-DEPENDS (B A E))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 6)
+        (PADS . 0)
+        (PRIMITIVES . 2)
+        (TRANSISTORS . 24))
+  (LIST 'M28
+        (NET-ERROR '(MODULE M28)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(B))))))
+        '(DELAYS (OR A B) (OR B C))
+        '(DRIVES (MIN A B) (MIN B C))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 1 2 1)
+        '(OUT-DEPENDS (A B) (B C))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  '(M29 (DELAYS (OR A B) (OR C D))
+        (DRIVES (MIN A B) (MIN C D))
+        (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (A B) (C D))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS X Y)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M30
+        (NET-ERROR '(MODULE M30)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(A))))))
+        '(DELAYS (OR A C) (OR A B))
+        '(DRIVES (MIN A C) (MIN A B))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 2 1 1)
+        '(OUT-DEPENDS (A C) (A B))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS D E)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M31
+        (NET-ERROR '(MODULE M31)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(A))))))
+        (LIST 'DELAYS
+              (LIST 'OR (UNKNOWN) 'A))
+        (LIST 'DRIVES
+              (LIST 'MIN (UNKNOWN) 'A))
+        '(INPUT-TYPES TRI-STATE)
+        '(INPUTS A)
+        '(LOADINGS 2)
+        '(OUT-DEPENDS (A))
+        '(OUTPUT-TYPES TRI-STATE)
+        '(OUTPUTS B)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M32
+        (NET-ERROR '(MODULE M32)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(A))))))
+        (LIST 'DELAYS
+              (LIST 'OR (UNKNOWN) 'A))
+        (LIST 'DRIVES
+              (LIST 'MIN (UNKNOWN) 'A))
+        '(INPUT-TYPES TRI-STATE)
+        '(INPUTS A)
+        '(LOADINGS 2)
+        '(OUT-DEPENDS (A))
+        '(OUTPUT-TYPES TRI-STATE)
+        '(OUTPUTS B)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  (LIST 'M33
+        (NET-ERROR '(MODULE M33)
+                   (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                    (LIST (NET-ERROR 'DUPLICATE-T-WIRE-INPUTS
+                                                     '(B))))))
+        '(DELAYS (OR A B) (OR B C))
+        '(DRIVES (MIN A B) (MIN B C))
+        '(INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE)
+        '(INPUTS A B C)
+        '(LOADINGS 1 2 1)
+        '(OUT-DEPENDS (A B) (B C))
+        '(OUTPUT-TYPES TRI-STATE TRI-STATE)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 0)
+        '(PRIMITIVES . 0)
+        '(TRANSISTORS . 0))
+  '(M34 (DELAYS (OR A B) (OR C D))
+        (DRIVES (MIN A B) (MIN C D))
+        (INPUT-TYPES TRI-STATE TRI-STATE TRI-STATE TRI-STATE)
+        (INPUTS A B C D)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (A B) (C D))
+        (OUTPUT-TYPES TRI-STATE TRI-STATE)
+        (OUTPUTS X Y)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M35
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN A)
+              (IO-OUT 'X))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'X))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS X A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M36 (DELAYS (((61 PS-PF) 1633)
+                 ((41 PS-PF) 2253)
+                 EN A)
+                X)
+        (DRIVES (8 MA) X)
+        (INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        (INPUTS X A EN PI)
+        (LOADINGS (13 PF) 1 1 1)
+        (OUT-DEPENDS (EN A) (X))
+        (OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        (OUTPUTS X Y)
+        (GATES . 0)
+        (PADS . 1)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 0))
+  (LIST 'M37
+       (NET-ERROR '(MODULE M37)
+                  (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                   (LIST (CONS (IO-OUT 'X) 'X)))
+                        (NET-ERROR 'IO-TYPE-CONFLICTS
+                                   (LIST (NET-ERROR '(IO-SIGNAL X)
+                                                    '((INPUT-TYPE FREE)
+                                                      (OUTPUT-TYPE FREE)))))))
+       '(DELAYS X)
+       '(DRIVES X)
+       (LIST 'INPUT-TYPES (UNKNOWN))
+       '(INPUTS X)
+       '(LOADINGS 0)
+       '(OUT-DEPENDS (X))
+       (LIST 'OUTPUT-TYPES (UNKNOWN))
+       '(OUTPUTS X)
+       '(GATES . 0)
+       '(PADS . 0)
+       '(PRIMITIVES . 0)
+       '(TRANSISTORS . 0))
+  (LIST 'M38
+        (NET-ERROR '(MODULE M38)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    (LIST (CONS (IO-OUT 'X) 'I2)))))
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN X)
+              (IO-OUT 'X))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'X))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP PARAMETRIC)
+        '(INPUTS X EN PI)
+        '(LOADINGS (23 PF) 1 1)
+        '(OUT-DEPENDS (EN X) (EN X))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS X Y)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M39 (DELAYS (OR IO X))
+        (DRIVES (MIN IO X))
+        (INPUT-TYPES TRI-STATE TRI-STATE)
+        (INPUTS IO X)
+        (LOADINGS 1 1)
+        (OUT-DEPENDS (IO X))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS IO)
+        (GATES . 0)
+        (PADS . 0)
+        (PRIMITIVES . 0)
+        (TRANSISTORS . 0))
+  (LIST 'M40
+      (NET-ERROR '(MODULE M40)
+                 (LIST (NET-ERROR 'T-WIRE-ERRORS
+                                  (LIST (NET-ERROR 'T-WIRE-INS-USED-ELSEWHERE
+                                                   '(IO))))))
+      '(DELAYS (OR IO ((146 459) (57 785) IO E)))
+      '(DRIVES (MIN 9 IO))
+      '(INPUT-TYPES TRI-STATE BOOLP)
+      '(INPUTS IO E)
+      '(LOADINGS 4 2)
+      '(OUT-DEPENDS (IO E))
+      '(OUTPUT-TYPES TRI-STATE)
+      '(OUTPUTS IO)
+      '(GATES . 3)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 12))
+  (LIST 'M41
+      (NET-ERROR '(MODULE M41)
+                 (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                  (LIST (NET-ERROR '(SIGNAL I1)
+                                                   '((INPUT-TYPE TRI-STATE)
+                                                     (OUTPUT-TYPE BOOLP)))))))
+      '(DELAYS (OR IO ((70 305) (57 255) A)))
+      '(DRIVES (MIN 9 IO))
+      '(INPUT-TYPES TRI-STATE BOOLP)
+      '(INPUTS IO A)
+      '(LOADINGS 1 2)
+      '(OUT-DEPENDS (IO A))
+      '(OUTPUT-TYPES TRI-STATE)
+      '(OUTPUTS IO)
+      '(GATES . 1)
+      '(PADS . 0)
+      '(PRIMITIVES . 1)
+      '(TRANSISTORS . 3))
+  '(M42 (DELAYS (((61 PS-PF) 2243)
+                 ((41 PS-PF) 2663)
+                 EN A)
+                BUS-OUT)
+        (DRIVES (7 MA) BUS-OUT)
+        (INPUT-TYPES TRI-STATE BOOLP BOOLP PARAMETRIC)
+        (INPUTS BUS-IN A EN PI)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (EN A) (EN A))
+        (OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        (OUTPUTS BUS-OUT C)
+        (GATES . 0)
+        (PADS . 1)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 0))
+  (LIST 'M43
+        (NET-ERROR '(MODULE M43)
+                   (LIST (NET-ERROR 'RENAMED-IO-SIGNALS
+                                    (LIST (CONS 'B (IO-OUT 'BUS))))))
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN A)
+              (IO-OUT 'BUS))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'BUS))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS BUS A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS BUS C)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  '(M44 (DELAYS (((61 PS-PF) 2243)
+                 ((41 PS-PF) 2663)
+                 EN A)
+                BUS-OUT)
+        (DRIVES (7 MA) BUS-OUT)
+        (INPUT-TYPES TRI-STATE BOOLP BOOLP PARAMETRIC)
+        (INPUTS BUS-IN A EN PI)
+        (LOADINGS 1 1 1 1)
+        (OUT-DEPENDS (EN A) (EN A))
+        (OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        (OUTPUTS BUS-OUT C)
+        (GATES . 0)
+        (PADS . 1)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 0))
+  (LIST 'M45
+        (LIST 'DELAYS
+              '(((61 PS-PF) 2243)
+                ((41 PS-PF) 2663)
+                EN A)
+              (IO-OUT 'BUS))
+        (LIST 'DRIVES '(7 MA) (IO-OUT 'BUS))
+        '(INPUT-TYPES TTL-TRI-STATE BOOLP BOOLP PARAMETRIC)
+        '(INPUTS BUS A EN PI)
+        '(LOADINGS (3 PF) 1 1 1)
+        '(OUT-DEPENDS (EN A) (EN A))
+        '(OUTPUT-TYPES TTL-TRI-STATE BOOLP)
+        '(OUTPUTS BUS C)
+        '(GATES . 0)
+        '(PADS . 1)
+        '(PRIMITIVES . 1)
+        '(TRANSISTORS . 0))
+  (LIST 'M46
+   (NET-ERROR
+             '(MODULE M46)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(SIGNAL I1)
+                                               '((INPUT-TYPE BOOLP)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   '(DELAYS ((70 (RANGE 840 1077))
+             (57 (RANGE 803 1040))
+             A EN))
+   '(DRIVES 10)
+   '(INPUT-TYPES BOOLP BOOLP)
+   '(INPUTS A EN)
+   '(LOADINGS 2 2)
+   '(OUT-DEPENDS (A EN))
+   '(OUTPUT-TYPES BOOLP)
+   '(OUTPUTS X)
+   '(GATES . 4)
+   '(PADS . 0)
+   '(PRIMITIVES . 2)
+   '(TRANSISTORS . 15))
+  (LIST 'M47
+     (NET-ERROR '(MODULE M47)
+                (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                                 (LIST (NET-ERROR '(IO-SIGNAL BUS)
+                                                  '((INPUT-TYPE TTL-TRI-STATE)
+                                                    (OUTPUT-TYPE BOOLP)))))))
+     '(DELAYS (((61 PS-PF) 2243)
+               ((41 PS-PF) 2663)
+               EN A)
+              ((43 633) (20 638) EN A BUS))
+     '(DRIVES (7 MA) 10)
+     (LIST 'INPUT-TYPES
+           (UNKNOWN)
+           'BOOLP
+           'BOOLP
+           'PARAMETRIC)
+     '(INPUTS BUS A EN PI)
+     '(LOADINGS (3 PF) 1 1 1)
+     '(OUT-DEPENDS (EN A) (EN A BUS))
+     (LIST 'OUTPUT-TYPES
+           (UNKNOWN)
+           'BOOLP)
+     '(OUTPUTS BUS C)
+     '(GATES . 0)
+     '(PADS . 1)
+     '(PRIMITIVES . 1)
+     '(TRANSISTORS . 0))
+  (LIST 'M48
+   (NET-ERROR
+             '(MODULE M48)
+             (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                              (LIST (NET-ERROR '(IO-SIGNAL BUS)
+                                               '((INPUT-TYPE TTL)
+                                                 (OUTPUT-TYPE TRI-STATE)))))))
+   '(DELAYS ((146 (RANGE 991 1032))
+             (57 (RANGE 1406 1447))
+             A BUS))
+   '(DRIVES 10)
+   (LIST 'INPUT-TYPES
+         (UNKNOWN)
+         'BOOLP
+         'PARAMETRIC)
+   '(INPUTS BUS A PI)
+   '(LOADINGS (3 PF) 2 1)
+   '(OUT-DEPENDS (A BUS))
+   (LIST 'OUTPUT-TYPES (UNKNOWN))
+   '(OUTPUTS BUS)
+   '(GATES . 3)
+   '(PADS . 1)
+   '(PRIMITIVES . 2)
+   '(TRANSISTORS . 12))
+  '(M49 (DELAYS (OR ((146 1919) (57 1355) A EN)
+                    I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+        (DRIVES (MIN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+        (INPUT-TYPES BOOLP BOOLP TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                     TRI-STATE TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                     TRI-STATE TRI-STATE)
+        (INPUTS A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11)
+        (LOADINGS 2 2 11 10 9 8 7 6 5 4 3 2 1)
+        (OUT-DEPENDS (A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+        (OUTPUT-TYPES TRI-STATE)
+        (OUTPUTS X)
+        (GATES . 3)
+        (PADS . 0)
+        (PRIMITIVES . 1)
+        (TRANSISTORS . 12))
+  (LIST 'M50
+   (NET-ERROR
+             '(MODULE M50)
+             (LIST (NET-ERROR 'BAD-DRIVES
+                              (LIST (NET-ERROR '(SIGNAL IS0)
+                                               '((DRIVE 10) (LOADING 11)))))))
+   '(DELAYS (OR ((146 1919) (57 1355) A EN)
+                I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+   '(DRIVES (MIN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+   '(INPUT-TYPES BOOLP BOOLP TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                 TRI-STATE TRI-STATE TRI-STATE TRI-STATE TRI-STATE TRI-STATE
+                 TRI-STATE)
+   '(INPUTS A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11)
+   '(LOADINGS 2 2 11 10 9 8 7 6 5 4 3 2 1)
+   '(OUT-DEPENDS (A EN I1 I2 I3 I4 I5 I6 I7 I8 I9 I10 I11))
+   '(OUTPUT-TYPES TRI-STATE)
+   '(OUTPUTS X)
+   '(GATES . 3)
+   '(PADS . 0)
+   '(PRIMITIVES . 1)
+   '(TRANSISTORS . 12)))
+
+|#
+
+#|
+
+(top-level-predicate 0)
+ (NET-ERROR 'NETLIST-SYNTAX-ERRORS
+            (LIST (NET-ERROR 'NOT-PROPER-LIST 0)))
+|#
+
+
+#|
+
+(defn make-ram-state (structure width bit-value)
+  (if (listp structure)
+      (cons (make-ram-state (car structure) width bit-value)
+          (make-ram-state (cdr structure) width bit-value))
+    (ram (make-list width bit-value))))
+
+(disable make-ram-state)
+
+|#
+
+#|
+(setq d2 '((d2 (in0) 
+               (out0) 
+               ((g (out0) b-and (in0 out0)))
+               nil)))
+
+(netlist-syntax-ok d2)
+ T
+(lsi-netlist-syntax-ok (lisp-netlist d2) 10 50)
+ T
+(out-depends 0 'd2 '((a)) nil d2)
+ (NET-ERROR 'NETLIST-ERRORS
+            (LIST (NET-ERROR '(MODULE D2)
+                             (LIST (NET-ERROR 'UNBOUND-OUTPUT-DEPENDENCIES
+                                              (LIST (NET-ERROR '(OUTPUT OUT0)
+                                                               '(OUT0))))))))
+
+
+(setq ex-net
+      '((m1 (clk)
+            (out1 out2)
+            ((o1 (out1 out2) fd1 (out1 clk)))
+            o1)))
+
+(top-level-predicate ex-net)
+ T
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 1) (DRIVES 9 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((147 1171) (55 1343))
+               ((145 1432) (53 1447)))))
+
+
+(setq ex-net '((m3 (in0 clk) (out1 out2)
+                   ((o1 (oi1) b-not (in0))
+                    (o2 (out1) b-not (in0))
+                    (o5 (out2 waste) fd1 (oi2 clk))
+                                ; oi2 is ok here because out2 does
+                                ; not depend on oi2.  Out2 depends
+                                ; only on fd1's internal state
+                                ; before update.
+                    (o4 (ii1) b-and (out2 oi1))
+                    (o3 (oi2) b-and (in0 ii1)))
+                   o5)))
+
+(netlist-syntax-ok ex-net)
+ T
+(lsi-netlist-syntax-ok (lisp-netlist ex-net) 10 50)
+ T
+(out-depends 0 'm3 '((new-in) (new-clk)) nil ex-net)
+ '((NEW-IN) NIL)
+
+(list (arg-types-okp 'm3 '(boolp clk) ex-net)    ; T
+      (arg-types-okp 'm3 '(clk boolp) ex-net)    ; F
+      (arg-types-okp 'm3 '(boolp boolp) ex-net)) ; F
+
+(netlist-type-table ex-net)
+ '((M3 (INPUT-TYPES BOOLP CLK)
+       (OUTPUT-TYPES BOOLP BOOLP)))
+
+(netlist-state-types ex-net)
+ '((M3 (STATE-TYPES . BOOLP)))
+
+; in following, first 2 T, remaining 3 F
+(list (state-okp 'm3 f ex-net)
+      (state-okp 'm3 t ex-net)
+      (state-okp 'm3 (x) ex-net)
+      (state-okp 'm3 (list t) ex-net)
+      (state-okp 'm3 nil ex-net))
+
+(netlist-loadings-and-drives ex-net) 
+ '((M3 (LOADINGS 5 1) (DRIVES 10 9)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M3 (DELAYS ((70 235) (57 198) IN0)
+               ((147 1171) (55 1343)))))
+
+
+(setq ex-net '((m3 (in0 clk) (out1 out2)
+                   ((o1 (is1) id (in0))
+                    (o2 (is2) id (clk))
+                    (o3 (is3 is4) fd1 (is1 is2))    
+                                ; oi2 is ok here because out2 does
+                                ; not depend on oi2.  Out2 depends
+                                ; only on fd1's internal state
+                                ; before update.
+                    (o4 (out1) id (is3))
+                    (o5 (out2) id (is4)))
+                   o3)))
+
+(list (arg-types-okp 'm3 '(boolp clk) ex-net)    ; T
+      (arg-types-okp 'm3 '(clk boolp) ex-net)    ; F
+      (arg-types-okp 'm3 '(boolp boolp) ex-net)) ; F
+
+(netlist-type-table ex-net)
+ '((M3 (INPUT-TYPES BOOLP CLK)
+       (OUTPUT-TYPES BOOLP BOOLP)))
+
+(netlist-loadings-and-drives ex-net) 
+ '((M3 (LOADINGS 1 1) (DRIVES 10 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M3 (DELAYS ((147 1024) (55 1288))
+               ((145 1432) (53 1447)))))
+
+
+(setq ex-net '((m1 (in0) (out0)
+                   ((o1 (is1) id (in0))
+                    (o2 (is2) id (is1))
+                    (o3 (is3) id (is2))
+                    (o4 (out0) id (is3)))
+                   nil)))
+
+; all of following T
+(list (arg-types-okp 'm1 '(boolp) ex-net)
+      (arg-types-okp 'm1 '(clk) ex-net)
+      (arg-types-okp 'm1 '(parametric) ex-net)
+      (arg-types-okp 'm1 '(ttl) ex-net))
+
+(netlist-type-table ex-net)
+ '((M1 (INPUT-TYPES FREE)
+       (OUTPUT-TYPES (IN0))))
+
+(netlist-state-types ex-net)
+ NIL
+
+; in following, first T, other 2 F
+(list (state-okp 'm1 nil ex-net)
+      (state-okp 'm1 t ex-net)
+      (state-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives ex-net) 
+ '((M1 (LOADINGS 0) (DRIVES IN0)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS IN0)))
+
+
+(setq test-net '((test () (a b)
+                       ((inv1 (a) b-not   (b))
+                        (inv2 (b) b-not   (a)))
+                       nil)))
+
+(netlist-syntax-ok test-net)
+ T
+(lsi-netlist-syntax-ok (lisp-netlist test-net) 10 50)
+ T
+(out-depends 0 'test '() nil test-net)
+ (NET-ERROR 'NETLIST-ERRORS
+    (LIST (NET-ERROR '(MODULE TEST)
+                     (LIST (NET-ERROR 'UNBOUND-OUTPUT-DEPENDENCIES
+                                      (LIST (NET-ERROR '(OUTPUT A) '(B))))))))
+
+;?? (netlist-state-input-okp test-net (dependency-table test-net))
+
+
+
+(setq netlist '((m2 (clk en0 en1 sel0 sel1 d0 d1) (q)
+                    ((occ0 (q0) m1     (clk en0 sel0 d0 q))
+                     (occ1 (q1) m1     (clk en1 sel1 d1 q))
+                     (wire (q)  t-wire (q0 q1)))
+                    (occ0 occ1))
+                (m1 (clk en sel d q) (q)
+                    ((mux   (b)    b-if  (sel d q))
+                     (latch (a an) fd1   (b clk))
+                     (tbuf  (q)    t-buf (en a)))
+                    latch)))
+
+(netlist-syntax-ok netlist)
+ T
+(top-level-predicate netlist)
+ (NET-ERROR 'NETLIST-ERRORS
+  (LIST
+   (NET-ERROR
+           '(MODULE M1)
+           (LIST (NET-ERROR 'IO-TYPE-CONFLICTS
+                            (LIST (NET-ERROR '(IO-SIGNAL Q)
+                                             '((INPUT-TYPE BOOLP)
+                                               (OUTPUT-TYPE TRI-STATE)))))))))
+
+(setq args '((a) (b) (c) (d) (e)))
+(dependency-table netlist)
+ '((M2 (OUT-DEPENDS (EN0 EN1)))
+   (M1 (OUT-DEPENDS (EN))))
+
+(out-depends 0 'm1 args nil netlist)
+ '((B))
+
+
+(setq netlist '((m2 (clk en0 en1 sel0 sel1 d0 d1) (q)
+                    ((occ0 (q0) m1     (clk en0 sel0 d0 q))
+                     (occ1 (q1) m1     (clk en1 sel1 d1 q))
+                     (wire (q)  t-wire (q0 q1)))
+                    (occ0 occ1))
+                (m1 (clk en sel d q) (q)
+                    ((qpullup (qb) pullup (q))
+                     (mux   (b)    b-if  (sel d qb))
+                     (latch (a an) fd1   (b clk))
+                     (tbuf  (q)    t-buf (en a)))
+                    latch)))
+
+(top-level-predicate netlist)
+ T
+(netlist-database netlist F)
+ '((M2 (DELAYS (OR ((146 1043)
+                    (57 1013)
+                    (RANGE 1318 1398)
+                    EN0)
+                   ((146 1043)
+                    (57 1013)
+                    (RANGE 1318 1398)
+                    EN1)))
+       (DRIVES 5)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP)
+       (INPUTS CLK EN0 EN1 SEL0 SEL1 D0 D1)
+       (LOADINGS 2 2 2 2 2 1 1)
+       (OUT-DEPENDS (EN0 EN1))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES BOOLP BOOLP)
+       (STATES OCC0 OCC1)
+       (GATES . 28)
+       (PADS . 0)
+       (PRIMITIVES . 6)
+       (TRANSISTORS . 100))
+   (M1 (DELAYS ((146 313)
+                (57 728)
+                (RANGE 1318 1398)
+                EN))
+       (DRIVES 10)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP TRI-STATE)
+       (INPUTS CLK EN SEL D Q)
+       (LOADINGS 1 2 2 1 2)
+       (OUT-DEPENDS (EN))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES . BOOLP)
+       (STATES . LATCH)
+       (GATES . 14)
+       (PADS . 0)
+       (PRIMITIVES . 3)
+       (TRANSISTORS . 50)))
+
+(netlist-database netlist T)
+ '((M2 (DELAYS (OR ((146 (RANGE 2361 2441))
+                    (57 (RANGE 2331 2411))
+                    EN0)
+                   ((146 (RANGE 2361 2441))
+                    (57 (RANGE 2331 2411))
+                    EN1)))
+       (DRIVES 5)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP)
+       (INPUTS CLK EN0 EN1 SEL0 SEL1 D0 D1)
+       (LOADINGS 2 2 2 2 2 1 1)
+       (OUT-DEPENDS (EN0 EN1))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES BOOLP BOOLP)
+       (STATES OCC0 OCC1)
+       (GATES . 28)
+       (PADS . 0)
+       (PRIMITIVES . 6)
+       (TRANSISTORS . 100))
+   (M1 (DELAYS ((146 (RANGE 1631 1711))
+                (57 (RANGE 2046 2126))
+                EN))
+       (DRIVES 10)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP TRI-STATE)
+       (INPUTS CLK EN SEL D Q)
+       (LOADINGS 1 2 2 1 2)
+       (OUT-DEPENDS (EN))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES . BOOLP)
+       (STATES . LATCH)
+       (GATES . 14)
+       (PADS . 0)
+       (PRIMITIVES . 3)
+       (TRANSISTORS . 50)))
+
+
+(setq netlist '((m2 (clk en0 en1 sel0 sel1 d0 d1 q) (q)
+                    ((occ0 (q0) m1     (clk en0 sel0 d0 q))
+                     (occ1 (q1) m1     (clk en1 sel1 d1 q))
+                     (wire (q)  t-wire (q0 q1)))
+                    (occ0 occ1))
+                (m1 (clk en sel d q) (q)
+                    ((qpullup (qb) pullup (q))
+                     (mux   (b)    b-if  (sel d qb))
+                     (latch (a an) fd1   (b clk))
+                     (tbuf  (q)    t-buf (en a)))
+                    latch)))
+
+(top-level-predicate netlist)
+ T
+(netlist-database netlist F)
+ '((M2 (DELAYS (OR ((146 459)
+                    (57 785)
+                    (RANGE 1318 1398)
+                    EN0)
+                   ((146 459)
+                    (57 785)
+                    (RANGE 1318 1398)
+                    EN1)))
+       (DRIVES 9)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+       (INPUTS CLK EN0 EN1 SEL0 SEL1 D0 D1 Q)
+       (LOADINGS 2 2 2 2 2 1 1 4)
+       (OUT-DEPENDS (EN0 EN1))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES BOOLP BOOLP)
+       (STATES OCC0 OCC1)
+       (GATES . 28)
+       (PADS . 0)
+       (PRIMITIVES . 6)
+       (TRANSISTORS . 100))
+   (M1 (DELAYS ((146 313)
+                (57 728)
+                (RANGE 1318 1398)
+                EN))
+       (DRIVES 10)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP TRI-STATE)
+       (INPUTS CLK EN SEL D Q)
+       (LOADINGS 1 2 2 1 2)
+       (OUT-DEPENDS (EN))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES . BOOLP)
+       (STATES . LATCH)
+       (GATES . 14)
+       (PADS . 0)
+       (PRIMITIVES . 3)
+       (TRANSISTORS . 50)))
+
+(netlist-database netlist T)
+ '((M2 (DELAYS (OR ((146 (RANGE 1777 1857))
+                    (57 (RANGE 2103 2183))
+                    EN0)
+                   ((146 (RANGE 1777 1857))
+                    (57 (RANGE 2103 2183))
+                    EN1)))
+       (DRIVES 9)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP TRI-STATE)
+       (INPUTS CLK EN0 EN1 SEL0 SEL1 D0 D1 Q)
+       (LOADINGS 2 2 2 2 2 1 1 4)
+       (OUT-DEPENDS (EN0 EN1))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES BOOLP BOOLP)
+       (STATES OCC0 OCC1)
+       (GATES . 28)
+       (PADS . 0)
+       (PRIMITIVES . 6)
+       (TRANSISTORS . 100))
+   (M1 (DELAYS ((146 (RANGE 1631 1711))
+                (57 (RANGE 2046 2126))
+                EN))
+       (DRIVES 10)
+       (INPUT-TYPES CLK BOOLP BOOLP BOOLP TRI-STATE)
+       (INPUTS CLK EN SEL D Q)
+       (LOADINGS 1 2 2 1 2)
+       (OUT-DEPENDS (EN))
+       (OUTPUT-TYPES TRI-STATE)
+       (OUTPUTS Q)
+       (STATE-TYPES . BOOLP)
+       (STATES . LATCH)
+       (GATES . 14)
+       (PADS . 0)
+       (PRIMITIVES . 3)
+       (TRANSISTORS . 50)))
+
+(setq args-if2 '((c) (v0 v1) (x0) (v0 w0) (y0 y1)))
+; ?? (out-depends 0 'b-if2 args-if2 nil nil)
+
+
+
+(setq args-16
+      '((C-in) (a0) (a1) (a2) (a3) (a4) (a5) (a6) (a7) (a8) (a9) (a10)
+        (a11) (a12) (a13) (a14) (a15) (b0) (b1) (b2) (b3) (b4) (b5) (b6) (b7)
+        (b8) (b9) (b10) (b11) (b12) (b13) (b14) (b15) zero (mpg0) (mpg1)
+        (mpg2) (mpg3) (mpg4) (mpg5) (mpg6) (op0) (op1) (op2) (op3)))
+
+(setq arg-types-16
+      '(boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp))
+
+(setq netlist-16 (core-alu$netlist (make-tree 16)))
+
+(netlist-syntax-ok netlist-16)
+(lsi-netlist-syntax-ok (lisp-netlist netlist-16) 30 255)
+
+(output-dependencies (index 'core-alu 16) args-16 netlist-16)
+
+(netlist-type-table netlist-16)
+(arg-types-okp (index 'core-alu 16) arg-types-16 netlist-16)
+
+(netlist-loadings-and-drives netlist-16)
+(netlist-properties netlist-16 '(delays) F)
+
+
+(setq args-core32
+      '((c)
+        (a0)  (a1)  (a2)  (a3)  (a4)  (a5)  (a6)  (a7)  (a8)  (a9)  (a10)
+        (a11) (a12) (a13) (a14) (a15) (a16) (a17) (a18) (a19) (a20) (a21)
+        (a22) (a23) (a24) (a25) (a26) (a27) (a28) (a29) (a30) (a31)
+        (b0)  (b1)  (b2)  (b3)  (b4)  (b5)  (b6)  (b7)  (b8)  (b9)  (b10)
+        (b11) (b12) (b13) (b14) (b15) (b16) (b17) (b18) (b19) (b20) (b21)
+        (b22) (b23) (b24) (b25) (b26) (b27) (b28) (b29) (b30) (b31)
+        (zero) 
+        (mpg-0) (mpg-1) (mpg-2) (mpg-3) (mpg-4) (mpg-5) (mpg-6)
+        (op-0) (op-1) (op-2) (op-3)))
+
+(setq arg-types-core32
+      '(boolp boolp boolp boolp boolp boolp boolp boolp boolp 
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp boolp boolp boolp boolp
+        boolp boolp boolp boolp boolp))
+
+(setq netlist-32 (core-alu$netlist (make-tree 32)))
+(top-level-predicate netlist-32)
+ T
+(setq module-database (dependency-table netlist-32))
+
+(output-dependencies (index 'core-alu 32) args-core32 netlist-32)
+(netlist-syntax-ok netlist-32)
+(lsi-netlist-syntax-ok (lisp-netlist netlist-32) 20 200)
+
+(netlist-type-table netlist-32)
+(arg-types-okp (index 'core-alu 32) arg-types-core32 netlist-32)
+
+(netlist-loadings-and-drives netlist-32)
+
+|#
+
+
+#|
+
+(setq ex-net '((m1 (in1 in2 clk) (out1 out2 out3 out4)
+                   ((o1 (out1 out2 out3 out4)
+                        fd11
+                        (in1 in2 clk)))
+                   o1)
+               (fd11 (in1 in2 clk)
+                     (out1 out2 out3 out4)
+                     ((o1 (out1 out2) fd1 (in1 clk))
+                      (o2 (out3 out4) fd1 (in2 clk)))
+                     (o1 o2))))
+
+(netlist-state-types ex-net)
+ '((M1 (STATE-TYPES BOOLP BOOLP))
+   (FD11 (STATE-TYPES BOOLP BOOLP)))
+
+(state-type-requirement 0 'm1 ex-net)
+ '(BOOLP BOOLP)
+
+(state-type-requirement 0 'fd11 ex-net)
+ '(BOOLP BOOLP)
+
+; in following, first 4 T, remaining 6 F
+(list (state-okp 'm1 (list f f) ex-net)
+      (state-okp 'm1 (list f t) ex-net)
+      (state-okp 'm1 (list t f) ex-net)
+      (state-okp 'm1 (list t t) ex-net)
+      (state-okp 'm1 (list t (x)) ex-net)
+      (state-okp 'm1 (list (x) f) ex-net)
+      (state-okp 'm1 (list t f t) ex-net)
+      (state-okp 'm1 (list f) ex-net)
+      (state-okp 'm1 nil ex-net)
+      (state-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 1 1 2)
+       (DRIVES 10 10 10 10))
+   (FD11 (LOADINGS 1 1 2)
+         (DRIVES 10 10 10 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((147 1024) (55 1288))
+               ((145 1432) (53 1447))
+               ((147 1024) (55 1288))
+               ((145 1432) (53 1447))))
+   (FD11 (DELAYS ((147 1024) (55 1288))
+                 ((145 1432) (53 1447))
+                 ((147 1024) (55 1288))
+                 ((145 1432) (53 1447)))))
+
+
+(setq ex-net
+      '((m1 (in1 in2 in3 in4 clk) (out1 out2 out3 out4)
+            ((o1 (out1 w1) fd1 (in1 clk))
+             (o2 (out2 w2) fd1 (in2 clk))
+             (o3 (out3 w3) fd1 (in3 clk))
+             (o4 (out4 w4) fd1 (in4 clk)))
+            (o1 o2 o3 o4))))
+
+(netlist-state-types ex-net)
+ '((M1 (STATE-TYPES BOOLP BOOLP BOOLP BOOLP)))
+
+; in following first 4 T, remaining 6 F
+(list (state-okp 'm1 (list f f f f) ex-net)
+      (state-okp 'm1 (list f t f t) ex-net)
+      (state-okp 'm1 (list t f t f) ex-net)
+      (state-okp 'm1 (list t t t t) ex-net)
+      (state-okp 'm1 (list t f (x) t) ex-net)
+      (state-okp 'm1 (list (x) t t t) ex-net)
+      (state-okp 'm1 (list t f t f t) ex-net)
+      (state-okp 'm1 (list f t f) ex-net)
+      (state-okp 'm1 nil ex-net)
+      (state-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives ex-net) 
+ '((M1 (LOADINGS 1 1 1 1 4)
+       (DRIVES 10 10 10 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((147 1024) (55 1288))
+               ((147 1024) (55 1288))
+               ((147 1024) (55 1288))
+               ((147 1024) (55 1288)))))
+
+
+(setq ex-net
+      '((m1 (in1 in2 in3 in4 clk) (out1 out2)
+            ((o1 (is1 w1) fd1 (in1 clk))
+             (o2 (is2 w2) fd1 (in2 clk))
+             (o3 (out1) b-and (is1 is2))
+             (o4 (is3 w3) fd1 (in3 clk))
+             (o5 (is4 w4) fd1 (in4 clk))
+             (o6 (out2) b-and (is3 is4)))
+            (o1 o2 o4 o5))))
+
+(netlist-state-types ex-net)
+ '((M1 (STATE-TYPES BOOLP BOOLP BOOLP BOOLP)))
+
+; in following first 4 T, remaining 6 F
+(list (state-okp 'm1 (list f f f f) ex-net)
+      (state-okp 'm1 (list f t f t) ex-net)
+      (state-okp 'm1 (list t f t f) ex-net)
+      (state-okp 'm1 (list t t t t) ex-net)
+      (state-okp 'm1 (list t f (x) t) ex-net)
+      (state-okp 'm1 (list (x) t t t) ex-net)
+      (state-okp 'm1 (list t f t f t) ex-net)
+      (state-okp 'm1 (list f t f) ex-net)
+      (state-okp 'm1 nil ex-net)
+      (state-okp 'm1 (x) ex-net))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 1 1 1 1 4)
+       (DRIVES 10 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((144 (RANGE 1593 1765))
+                (54 (RANGE 1878 2050)))
+               ((144 (RANGE 1593 1765))
+                (54 (RANGE 1878 2050))))))
+
+
+(setq ex-net
+      '((m1
+         (read-a0 read-a1 read-a2 read-a3
+          write-b0 write-b1 write-b2 write-b3
+          wen
+          d0  d1  d2  d3  d4  d5  d6  d7
+          d8  d9  d10 d11 d12 d13 d14 d15
+          d16 d17 d18 d19 d20 d21 d22 d23
+          d24 d25 d26 d27 d28 d29 d30 d31)
+         (o0  o1  o2  o3  o4  o5  o6  o7
+          o8  o9  o10 o11 o12 o13 o14 o15
+          o16 o17 o18 o19 o20 o21 o22 o23
+          o24 o25 o26 o27 o28 o29 o30 o31)
+         ((o1
+           (o0  o1  o2  o3  o4  o5  o6  o7
+            o8  o9  o10 o11 o12 o13 o14 o15
+            o16 o17 o18 o19 o20 o21 o22 o23
+            o24 o25 o26 o27 o28 o29 o30 o31)
+           dp-ram-16x32
+           (read-a0 read-a1 read-a2 read-a3
+            write-b0 write-b1 write-b2 write-b3
+            wen
+            d0  d1  d2  d3  d4  d5  d6  d7
+            d8  d9  d10 d11 d12 d13 d14 d15
+            d16 d17 d18 d19 d20 d21 d22 d23
+            d24 d25 d26 d27 d28 d29 d30 d31)))
+         o1)))
+
+(netlist-state-types ex-net)
+ '((M1 (STATE-TYPES ADDRESSED-STATE 4
+                    (RAM '(BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP)))))
+
+; in following, first 2 T, remaining 5 F
+(list (state-okp 'm1 (make-ram-state (make-tree 16) 32 t) ex-net)
+      (state-okp 'm1 (make-ram-state (make-tree 16) 32 f) ex-net)
+      (state-okp 'm1 (make-ram-state (make-tree 8) 32 f) ex-net)
+      (state-okp 'm1 (make-ram-state (make-tree 16) 8 f) ex-net)
+      (state-okp 'm1 (list (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (state-okp 'm1 (x) ex-net)
+      (state-okp 'm1 nil ex-net))
+
+(netlist-loadings-and-drives ex-net) 
+ '((M1 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+               2)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3))))
+
+
+(setq ex-net
+      '((m1
+         (clk
+          read-a0 read-a1 read-a2 read-a3
+          write-b0 write-b1 write-b2 write-b3
+          wen
+          d0  d1  d2  d3  d4  d5  d6  d7
+          d8  d9  d10 d11 d12 d13 d14 d15
+          d16 d17 d18 d19 d20 d21 d22 d23
+          d24 d25 d26 d27 d28 d29 d30 d31)
+         (o0  o1  o2  o3  o4  o5  o6  o7
+          o8  o9  o10 o11 o12 o13 o14 o15
+          o16 o17 o18 o19 o20 o21 o22 o23
+          o24 o25 o26 o27 o28 o29 o30 o31)
+         ((o0 (is w2) fd1 (d0 clk))
+          (o1
+           (o0  o1  o2  o3  o4  o5  o6  o7
+            o8  o9  o10 o11 o12 o13 o14 o15
+            o16 o17 o18 o19 o20 o21 o22 o23
+            o24 o25 o26 o27 o28 o29 o30 o31)
+           dp-ram-16x32
+           (read-a0 read-a1 read-a2 read-a3
+            write-b0 write-b1 write-b2 write-b3
+            wen
+            is  d1  d2  d3  d4  d5  d6  d7
+            d8  d9  d10 d11 d12 d13 d14 d15
+            d16 d17 d18 d19 d20 d21 d22 d23
+            d24 d25 d26 d27 d28 d29 d30 d31)))
+         (o0 o1))))
+
+(netlist-state-types ex-net)
+ '((M1 (STATE-TYPES BOOLP
+                    (ADDRESSED-STATE 4
+                                     (RAM '(BOOLP BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP))))))
+
+; in following, first 4 T, remaining 7 F
+(list (state-okp 'm1 (list f (make-ram-state (make-tree 16) 32 f)) ex-net)
+      (state-okp 'm1 (list f (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (state-okp 'm1 (list t (make-ram-state (make-tree 16) 32 f)) ex-net)
+      (state-okp 'm1 (list t (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (state-okp 'm1 (list t (make-ram-state (make-tree 15) 32 t)) ex-net)
+      (state-okp 'm1 (list t (make-ram-state (make-tree 16) 33 t)) ex-net)
+      (state-okp 'm1 (list f (make-ram-state (make-tree 16) 32 t) t) ex-net)
+      (state-okp 'm1 (list (make-ram-state (make-tree 16) 32 t)) ex-net)
+      (state-okp 'm1 (list t) ex-net)
+      (state-okp 'm1 (x) ex-net)
+      (state-okp 'm1 nil ex-net))
+
+(netlist-loadings-and-drives ex-net) 
+ '((M1 (LOADINGS 1
+                 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                 1 1 1 1 1 1 1 1 1 1 1)
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+               2)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3))))
+
+|#
+
+(defn test-net2 ()
+      '((m1 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             in0
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31
+             clk)
+            (out0)
+            ((o1 (is1) m5 (in0))
+             (o2 (is2) m3 (is1 clk))
+             (o3 (is3) m4 (in0 is2))
+             (o4 (wen) m8 (clk is1 is3))
+             (o5
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31 out0)
+              m2
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31
+               clk)))
+            (o2 o3 o5))
+        (m2 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             wen
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31
+             clk)
+            (o0  o1  o2  o3  o4  o5  o6  o7
+             o8  o9  o10 o11 o12 o13 o14 o15
+             o16 o17 o18 o19 o20 o21 o22 o23
+             o24 o25 o26 o27 o28 o29 o30 o31 out0)
+            ((o1
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31)
+              m6
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31))
+             (o2 (out0) m3 (o31 clk)))
+            (o1 o2))
+        (m3 (in0 clk) (out0)
+            ((o1 (out0) m7 (clk in0)))
+            o1)
+        (m4 (in1 in2) (out0)
+            ((o1 (is1) m5 (in1))
+             (o2 (is2 is3 is4 is5) fd11 (is1 in2 clk))
+             (o3 (out0) b-and4 (is2 is3 is4 is5)))
+            o2)
+        (m5 (in0) (out0)
+            ((o1 (out0) b-not (in0)))
+            nil)
+        (m6 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             wen
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31)
+            (o0  o1  o2  o3  o4  o5  o6  o7
+             o8  o9  o10 o11 o12 o13 o14 o15
+             o16 o17 o18 o19 o20 o21 o22 o23
+             o24 o25 o26 o27 o28 o29 o30 o31)
+            ((o-1
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31)
+              dp-ram-16x32
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31)))
+            o-1)
+        (m7 (clk in0) (out0)
+            ((o1 (out0 w) fd1 (in0 clk)))
+            o1)
+        (m8 (clk in1 in2) (o)
+            ((oc0 (is1) vdd ())
+             (oc1 (o) ram-enable-circuit (clk is1 in1 in2)))
+            nil)
+        (fd11 (in1 in2 clk)
+              (out1 out2 out3 out4)
+              ((o1 (out1 out2) fd1 (in1 clk))
+               (o2 (out3 out4) fd1 (in2 clk)))
+              (o1 o2))))
+
+#|
+(setq state
+      (list t (list t f) (list (make-ram-state (make-tree 16) 32 t) f)))
+
+(setq ex-net (test-net2))
+
+(netlist-state-types ex-net)
+ '((M1 (STATE-TYPES BOOLP
+                    (BOOLP BOOLP)
+                    ((ADDRESSED-STATE 4
+                                      (RAM '(BOOLP BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP BOOLP
+                                                   BOOLP BOOLP BOOLP)))
+                     BOOLP)))
+   (M2 (STATE-TYPES (ADDRESSED-STATE 4
+                                     (RAM '(BOOLP BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP BOOLP
+                                                  BOOLP BOOLP BOOLP)))
+                    BOOLP))
+   (M3 (STATE-TYPES . BOOLP))
+   (M4 (STATE-TYPES BOOLP BOOLP))
+   (M6 (STATE-TYPES ADDRESSED-STATE 4
+                    (RAM '(BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP BOOLP
+                                 BOOLP BOOLP BOOLP))))
+   (M7 (STATE-TYPES . BOOLP))
+   (FD11 (STATE-TYPES BOOLP BOOLP)))
+
+(state-okp 'm1 state ex-net) ; repeat with flaws in state
+
+(netlist-loadings-and-drives ex-net) 
+ '((M1 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1
+                 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 3)
+       (DRIVES 10))
+   (M2 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                 1 1 1 1 1 1 1 1 1 1 1 1)
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+               1 10))
+   (M3 (LOADINGS 1 1) (DRIVES 10))
+   (M4 (LOADINGS 2 1) (DRIVES 10))
+   (M5 (LOADINGS 2) (DRIVES 10))
+   (M6 (LOADINGS 2 2 2 2 2 2 2 2 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                 1 1 1 1 1 1 1 1 1 1 1)
+       (DRIVES 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+               2))
+   (M7 (LOADINGS 1 1) (DRIVES 10))
+   (M8 (LOADINGS 1 2 2) (DRIVES 10))
+   (FD11 (LOADINGS 1 1 2)
+         (DRIVES 10 10 10 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((147 1024) (55 1288))))
+   (M2 (DELAYS ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7535)
+                (21 7521)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((147 1024) (55 1288))))
+   (M3 (DELAYS ((147 1024) (55 1288))))
+   (M4 (DELAYS ((149 (RANGE 2434 2511))
+                (60 (RANGE 2370 2447)))))
+   (M5 (DELAYS ((70 235) (57 198) IN0)))
+   (M6 (DELAYS ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)
+               ((35 7500)
+                (21 7500)
+                READ-A0 READ-A1 READ-A2 READ-A3)))
+   (M7 (DELAYS ((147 1024) (55 1288))))
+   (M8 (DELAYS ((68 12000) (54 12000) CLK IN1 IN2)))
+   (FD11 (DELAYS ((147 1024) (55 1288))
+                 ((145 1432) (53 1447))
+                 ((147 1024) (55 1288))
+                 ((145 1432) (53 1447)))))
+|#
+
+(defn test-net3 ()
+      '((m1 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             in0
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31
+             clk)
+            (out0)
+            ((o1 (is1) m5 (in0))
+             (o2 (is2) m3 (is1 clk))
+             (o3 (is3) m4 (in0 is2))
+             (o4 (wen) m8 (clk is1 is3))
+             (o5
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31 out0)
+              m2
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31
+               clk)))
+            (o2 o3 o4 o5))
+        (m2 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             wen
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31
+             clk)
+            (o0  o1  o2  o3  o4  o5  o6  o7
+             o8  o9  o10 o11 o12 o13 o14 o15
+             o16 o17 o18 o19 o20 o21 o22 o23
+             o24 o25 o26 o27 o28 o29 o30 o31 out0)
+            ((o1
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31)
+              m6
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31))
+             (o2 (out0) m3 (o31 clk)))
+            o2)
+        (m3 (in0 clk) (out0)
+            ((o1 (out0) m7 (clk in0)))
+            nil)
+        (m4 (in1 in2) (out0)
+            ((o1 (is1) m5 (in1))
+             (o2 (is2 is3 is4 is5) fd11 (is1 in2 clk))
+             (o3 (out0) b-and4 (is2 is3 is4 is5)))
+            o2)
+        (m5 (in0) (out0)
+            ((o1 (out0) b-not (in0)))
+            o1)
+        (m6 (read-a0 read-a1 read-a2 read-a3
+             write-b0 write-b1 write-b2 write-b3
+             wen
+             d0  d1  d2  d3  d4  d5  d6  d7
+             d8  d9  d10 d11 d12 d13 d14 d15
+             d16 d17 d18 d19 d20 d21 d22 d23
+             d24 d25 d26 d27 d28 d29 d30 d31)
+            (o0  o1  o2  o3  o4  o5  o6  o7
+             o8  o9  o10 o11 o12 o13 o14 o15
+             o16 o17 o18 o19 o20 o21 o22 o23
+             o24 o25 o26 o27 o28 o29 o30 o31)
+            ((o-1
+              (o0  o1  o2  o3  o4  o5  o6  o7
+               o8  o9  o10 o11 o12 o13 o14 o15
+               o16 o17 o18 o19 o20 o21 o22 o23
+               o24 o25 o26 o27 o28 o29 o30 o31)
+              dp-ram-16x32
+              (read-a0 read-a1 read-a2 read-a3
+               write-b0 write-b1 write-b2 write-b3
+               wen
+               d0  d1  d2  d3  d4  d5  d6  d7
+               d8  d9  d10 d11 d12 d13 d14 d15
+               d16 d17 d18 d19 d20 d21 d22 d23
+               d24 d25 d26 d27 d28 d29 d30 d31)))
+            o1)
+        (m7 (clk in0) (out0)
+            ((o1 (out0 w) fd1 (in0 clk)))
+            o1)
+        (m8 (clk in1 in2) (o)
+            ((oc0 (is1) vdd ())
+             (oc1 (o) ram-enable-circuit (clk is1 in1 in2)))
+            nil)
+        (fd11 (in1 in2 clk)
+              (out1 out2 out3 out4)
+              ((o1 (out1 out2) fd1 (in1 clk))
+               (o2 (out3 out4) fd1 (in2 clk)))
+              (o1 o2))))
+
+#|
+
+(setq ex-net (test-net3))
+
+(netlist-state-types ex-net)
+ (NET-ERROR 'NETLIST-ERRORS
+          (LIST (NET-ERROR '(MODULE M1)
+                           (LIST (NET-ERROR 'BAD-STATE-TYPES
+                                            '((MODULE-STATES (O2 O3 O4 O5))
+                                              (COMPUTED-STATES (O5 O3 O1))))))
+                (NET-ERROR '(MODULE M2)
+                           (LIST (NET-ERROR 'BAD-STATE-TYPES
+                                            '((MODULE-STATES O2)
+                                              (COMPUTED-STATES (O1))))))
+                (NET-ERROR '(MODULE M3)
+                           (LIST (NET-ERROR 'BAD-STATE-TYPES
+                                            '((MODULE-STATES NIL)
+                                              (COMPUTED-STATES (O1))))))
+                (NET-ERROR '(MODULE M4)
+                           (LIST (NET-ERROR 'BAD-STATE-TYPES
+                                            '((MODULE-STATES O2)
+                                              (COMPUTED-STATES (O2 O1))))))
+                (NET-ERROR '(MODULE M5)
+                           (LIST (NET-ERROR 'BAD-STATE-TYPES
+                                            '((MODULE-STATES O1)
+                                              (COMPUTED-STATES NIL)))))
+                (NET-ERROR '(MODULE M6)
+                           (LIST (NET-ERROR 'BAD-STATE-TYPES
+                                            '((MODULE-STATES O1)
+                                              (COMPUTED-STATES (O-1))))))))
+
+
+(defn list-set-equal (x y)
+  (if (or (nlistp x) (nlistp y))
+      (and (nlistp x) (nlistp y))
+      (if (set-equal (car x) (car y))
+          (list-set-equal (cdr x) (cdr y))
+          f)))
+
+|#
+#|
+(setq ex-net1
+      '((m1 (in0) (out1 out2)
+            ((o1 (out1) b-not (in0))
+             (o2 (out2) id (out1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net1)
+ '((M1 (LOADINGS 2) (DRIVES 10 OUT1)))
+
+(netlist-properties ex-net1 '(delays) F)
+(netlist-properties ex-net1 '(delays) T)
+ '((M1 (DELAYS ((70 235) (57 198) IN0)
+               OUT1)))
+
+
+(setq ex-net2
+      '((m1 (in1 in2) (out1 out2)
+            ((o1 (is1) id (in1))
+             (o2 (out1) b-and (is1 in2))
+             (o3 (out2) b-or (is1 in2)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net2)
+ '((M1 (LOADINGS 2 2) (DRIVES 10 10)))
+
+(netlist-properties ex-net2 '(delays) F)
+(netlist-properties ex-net2 '(delays) T)
+ '((M1 (DELAYS ((144 422) (54 707) IN1 IN2)
+               ((143 332) (58 819) IN1 IN2))))
+
+
+(setq ex-net3
+      '((m1 (in0) (out1 out2)
+            ((o1 (io1) id (in0))
+             (o2 (out1) id (io1))
+             (o3 (out2) id (io1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net3)
+ '((M1 (LOADINGS 0) (DRIVES IN0 IN0)))
+
+(netlist-properties ex-net3 '(delays) F)
+(netlist-properties ex-net3 '(delays) T)
+ '((M1 (DELAYS IN0 IN0)))
+
+
+(setq ex-net4
+      '((m1 (in0) (out1 out2)
+            ((o1 (out1) id (in0))
+             (o2 (out2) id (out1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net4)
+ '((M1 (LOADINGS 0) (DRIVES IN0 IN0)))
+
+(netlist-properties ex-net4 '(delays) F)
+(netlist-properties ex-net4 '(delays) T)
+ '((M1 (DELAYS IN0 IN0)))
+
+
+(setq ex-net5
+      '((m1 (in0) (out1 out2)
+            ((o1 (out1) id (in0))
+             (o2 (out2) id (in0)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net5)
+ '((M1 (LOADINGS 0) (DRIVES IN0 IN0)))
+
+(netlist-properties ex-net5 '(delays) F)
+(netlist-properties ex-net5 '(delays) T)
+ '((M1 (DELAYS IN0 IN0)))
+
+
+(setq ex-net6
+      '((m1 () (out0)
+            ((o1 (out0) vdd nil))
+            nil)))
+
+(netlist-loadings-and-drives ex-net6)
+ '((M1 (LOADINGS) (DRIVES 50)))
+
+(netlist-properties ex-net6 '(delays) F)
+(netlist-properties ex-net6 '(delays) T)
+ '((M1 (DELAYS ((0 0) (0 0)))))
+
+
+(setq ex-net7
+      '((m1 () (out0)
+            ((o1 (out0) vss nil))
+            nil)))
+
+(netlist-loadings-and-drives ex-net7)
+ '((M1 (LOADINGS) (DRIVES 50)))
+
+(netlist-properties ex-net7 '(delays) F)
+(netlist-properties ex-net7 '(delays) T)
+ '((M1 (DELAYS ((0 0) (0 0)))))
+
+
+(setq ex-net8
+      '((m1 (a b) (c d)
+            ((o1 (c) b-and (a b))
+             (o2 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net8)
+ '((M1 (LOADINGS 1 1) (DRIVES 10 C)))
+
+(netlist-properties ex-net8 '(delays) F)
+(netlist-properties ex-net8 '(delays) T)
+ '((M1 (DELAYS ((144 422) (54 707) A B) C)))
+
+
+(setq ex-net9
+      '((m1 (in0) (out1 out2 out3 out4)
+            ((o1 (out1) id (in0))
+             (o2 (out2) b-not (out1))
+             (o3 (out3) id (in0))
+             (o4 (out4) b-not (in0)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net9)
+ '((M1 (LOADINGS 4)
+       (DRIVES IN0 10 IN0 10)))
+
+(netlist-properties ex-net9 '(delays) F)
+(netlist-properties ex-net9 '(delays) T)
+ '((M1 (DELAYS IN0
+               ((70 235) (57 198) IN0)
+               IN0
+               ((70 235) (57 198) IN0))))
+
+
+(setq ex-net10
+      '((m1 (in0) (out0)
+            ((o1 (a) id (in0))
+             (o2 (b) id (in0))
+             (o3 (out0) b-and (a b)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net10)
+ '((M1 (LOADINGS 2) (DRIVES 10)))
+
+(netlist-properties ex-net10 '(delays) F)
+(netlist-properties ex-net10 '(delays) T)
+ '((M1 (DELAYS ((144 422) (54 707) IN0))))
+
+
+(setq ex-net11
+      '((m1 (in0) (out0)
+            ((o1 (a) id (in0))
+             (o2 (out0) b-and (in0 a)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net11)
+ '((M1 (LOADINGS 2) (DRIVES 10)))
+
+(netlist-properties ex-net11 '(delays) F)
+(netlist-properties ex-net11 '(delays) T)
+ '((M1 (DELAYS ((144 422) (54 707) IN0))))
+
+
+(setq ex-net12
+      '((m1 (in0 in1 in2) (out0 out1 out2 out3)
+            ((o1 (out1) id (in1))
+             (o2 (out0) b-or (in0 out1))
+             (o3 (out2) b-not (in1))
+             (o4 (out3) b-and (in1 in2)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net12)
+ '((M1 (LOADINGS 1 4 1)
+       (DRIVES 10 IN1 10 10)))
+
+(netlist-properties ex-net12 '(delays) F)
+(netlist-properties ex-net12 '(delays) T)
+ '((M1 (DELAYS ((143 332) (58 819) IN0 IN1)
+               IN1
+               ((70 235) (57 198) IN1)
+               ((144 422) (54 707) IN1 IN2))))
+
+
+(setq ex-net13
+      '((m1 (in0 in1 in2) (out0 out1 out2 out3)
+            ((o1 (out1) id (in1))
+             (o2 (out0) b-or (in0 out1))
+             (o3 (out2) b-not (out1))
+             (o4 (out3) b-and (out1 in2)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net13)
+ '((M1 (LOADINGS 1 4 1)
+       (DRIVES 10 IN1 10 10)))
+
+(netlist-properties ex-net13 '(delays) F)
+(netlist-properties ex-net13 '(delays) T)
+ '((M1 (DELAYS ((143 332) (58 819) IN0 IN1)
+               IN1
+               ((70 235) (57 198) IN1)
+               ((144 422) (54 707) IN1 IN2))))
+
+
+(setq ex-net14
+      '((m1 (in0 clk) (out1 out2 out3)
+            ((o1 (out1) b-not (in0))
+             (o2 (is1) id (out1))
+             (o3 (out2 w1) fd1 (is1 clk))
+             (o4 (out3 w2) b-nbuf (is1)))
+            o3)))
+             
+(netlist-loadings-and-drives ex-net14)
+ '((M1 (LOADINGS 2 1) (DRIVES 8 10 9)))
+
+(netlist-properties ex-net14 '(delays) F)
+(netlist-properties ex-net14 '(delays) T)
+ '((M1 (DELAYS ((70 375) (57 312) IN0)
+               ((147 1024) (55 1288))
+               ((142 447) (57 213) OUT1))))
+
+
+(setq ex-net15
+      '((m1 (in1 in2) (out1 out2)
+            ((o1 (is1) b-and (in1 in2))
+             (o2 (out1) b-not-b4ip (is1))
+             (o3 (out2) b-not (is1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net15)
+ '((M1 (LOADINGS 1 1) (DRIVES 128 10)))
+
+(netlist-properties ex-net15 '(delays) F)
+ '((M1 (DELAYS ((17 333)
+                (12 124)
+                (RANGE 1247 1862 IN1 IN2))
+               ((70 235)
+                (57 198)
+                (RANGE 1247 1862 IN1 IN2)))))
+
+(netlist-properties ex-net15 '(delays) T)
+ '((M1 (DELAYS ((17 (RANGE 1580 2195))
+                (12 (RANGE 1371 1986))
+                IN1 IN2)
+               ((70 (RANGE 1482 2097))
+                (57 (RANGE 1445 2060))
+                IN1 IN2))))
+
+
+(setq ex-net16
+      '((m1 (in1 in2) (out1 out2 out3)
+            ((o1 (out1) b-and (in1 in2))
+             (o2 (out2) b-not-b4ip (out1))
+             (o3 (out3) b-not (out1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net16)
+ '((M1 (LOADINGS 1 1) (DRIVES 0 128 10)))
+
+(netlist-properties ex-net16 '(delays) F)
+(netlist-properties ex-net16 '(delays) T)
+ '((M1 (DELAYS ((144 1862) (54 1247) IN1 IN2)
+               ((17 333) (12 124) OUT1)
+               ((70 235) (57 198) OUT1))))
+
+
+(setq ex-net17
+      '((m1 (in1 in2) (out1 out2)
+            ((o1 (is1) b-and (in1 in2))
+             (o2 (out1) b-not-b4ip (is1))
+             (o3 (out2) b-not-ivap (is1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net17)
+ (NET-ERROR 'NETLIST-ERRORS
+  (LIST
+   (NET-ERROR
+           '(MODULE M1)
+           (LIST (NET-ERROR 'BAD-DRIVES
+                            (LIST (NET-ERROR '(SIGNAL IS1)
+                                             '((DRIVE 10) (LOADING 11)))))))))
+
+(netlist-properties ex-net17 '(delays) F)
+(netlist-properties ex-net17 '(delays) T)
+ ; the drive error above
+
+(setq ex-net18
+      '((m1 (in1 in2) (out1 out2 out3)
+            ((o1 (out1) b-and (in1 in2))
+             (o2 (out2) b-not-b4ip (out1))
+             (o3 (out3) b-not-ivap (out1)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net18)
+ (NET-ERROR 'NETLIST-ERRORS
+  (LIST
+   (NET-ERROR
+           '(MODULE M1)
+           (LIST (NET-ERROR 'BAD-DRIVES
+                            (LIST (NET-ERROR '(SIGNAL OUT1)
+                                             '((DRIVE 10) (LOADING 11)))))))))
+
+(netlist-properties ex-net18 '(delays) F)
+(netlist-properties ex-net18 '(delays) T)
+; the drive error above
+
+(setq ex-net19
+      '((m1 (a b c d) (x)
+            ((o1 (x) b-and (a b)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net19)
+ '((M1 (LOADINGS 1 1 0 0) (DRIVES 10)))
+
+(netlist-properties ex-net19 '(delays) F)
+(netlist-properties ex-net19 '(delays) T)
+ '((M1 (DELAYS ((144 422) (54 707) A B))))
+
+
+(setq ex-net20
+      '((m1 (io a en pi b) (io x y z)
+            ((o0 (is0) t-buf (en a))
+             (o1 (is1) t-wire (b is0))
+             (o2 (io zi po) ttl-bidirect (io a en pi))
+             (o3 (x) pullup (io))
+             (o4 (y) b-not (x))
+             (o5 (is3) pullup (is1))
+             (o6 (z) b-and (x is3)))
+            nil)))
+
+(netlist-properties ex-net20 '(delays) F)
+(netlist-properties ex-net20 '(delays) T)
+ (LIST (LIST 'M1
+             (LIST 'DELAYS
+                   '(((61 PS-PF) 4073)
+                     ((41 PS-PF) 3893)
+                     EN A)
+                   (IO-OUT 'IO)
+                   (LIST '(70 235)
+                         '(57 198)
+                         (IO-OUT 'IO))
+                   (LIST '(144 422)
+                         '(54 707)
+                         (IO-OUT 'IO)
+                         '(OR B (RANGE 751 899 A EN))))))
+|#
+
+#|
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) id (a))
+             (o2 (c) id (a))
+             (o3 (d) id (a)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 0) (DRIVES A A A)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS A A A)))
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) id (a))
+             (o2 (c) id (b))
+             (o3 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 0) (DRIVES A A A)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS A A A)))
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (a))
+             (o3 (d) id (a)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 2) (DRIVES 10 A A)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((70 235) (57 198) A) A A)))
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (a))
+             (o3 (d) id (b)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 2) (DRIVES 10 A B)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((70 235) (57 198) A) A B)))
+
+
+(setq ex-net
+      '((m1 (a) (b c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (b))
+             (o3 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 2) (DRIVES 10 B B)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((70 235) (57 198) A) B B)))
+
+
+(setq ex-net
+      '((m1 (a) (c d)
+            ((o1 (b) b-not (a))
+             (o2 (c) id (b))
+             (o3 (d) id (c)))
+            nil)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M1 (LOADINGS 2) (DRIVES 10 C)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M1 (DELAYS ((70 235) (57 198) A) C)))
+
+
+(setq ex-net '((m3 (in0 clk) (out1 out2)
+                   ((o3 (is3 is4) fd1 (is1 is2))
+                    (o1 (is1) id (in0))
+                    (o2 (is2) id (clk))
+                    (o4 (out1) id (is3))
+                    (o5 (out2) id (is4)))
+                   o3)))
+
+(netlist-loadings-and-drives ex-net)
+ '((M3 (LOADINGS 1 1) (DRIVES 10 10)))
+
+(netlist-properties ex-net '(delays) F)
+(netlist-properties ex-net '(delays) T)
+ '((M3 (DELAYS ((147 1024) (55 1288))
+               ((145 1432) (53 1447)))))
+
+|#
+#|
+(setq
+ ex-net
+ '((m1 (i1) (o1)
+       ((super-big-long-name-for-an-occurrence-it-has-58-characters
+         (o1) m2 (i1)))
+       nil)
+   (m2 (i1) (o1)
+       ((another-super-big-long-name-for-an-occurrence-it-has-66-characters
+         (o1) m3 (i1)))
+       nil)
+   (m3
+    (i1) (o1)
+    ((still-another-super-big-long-name-for-an-occurrence-it-has-72-characters
+      (o1) m4 (i1)))
+    nil)
+   (m4 (i1) (super-big-long-name-for-a-signal-it-has-53-characters)
+       ((yet-another-super-big-long-name-for-an-occurrence-it-has-70-characters
+         (super-big-long-name-for-a-signal-it-has-53-characters) b-not (i1)))
+       nil)))
+
+; max-hierarchical-name-length: 324
+
+(lsi-netlist-syntax-ok ex-net 64 255)
+ (NET-ERROR 'LSI-NETLIST-SYNTAX-ERRORS
+  (LIST
+   (NET-ERROR
+    '(MODULE M2)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+       '(OCCURRENCE
+           ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-66-CHARACTERS)
+       (LIST
+        (NET-ERROR 'OCCURRENCE-NAME
+         (LIST
+          (NET-ERROR
+'(
+BAD-LSI-NAME ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-66-CHARACTERS
+)
+          (LIST (NET-ERROR 'NAME-TOO-LONG
+                           '((NAME-LENGTH 66)
+                             (MAX-ALLOWED-LENGTH 64)))))))
+        (NET-ERROR 'HIERARCHICAL-NAME-TOO-LONG
+ '((NAME-LENGTH 265)
+   (MAX-ALLOWED-LENGTH 255)
+   (NAME
+    (ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-66-CHARACTERS
+     STILL-ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-72-CHARACTERS
+     YET-ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-70-CHARACTERS
+     SUPER-BIG-LONG-NAME-FOR-A-SIGNAL-IT-HAS-53-CHARACTERS))))))))))
+   (NET-ERROR
+    '(MODULE M3)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+       '(OCCURRENCE
+ STILL-ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-72-CHARACTERS)
+       (LIST
+        (NET-ERROR 'OCCURRENCE-NAME
+         (LIST
+          (NET-ERROR
+ '(BAD-LSI-NAME
+   STILL-ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-72-CHARACTERS)
+          (LIST (NET-ERROR 'NAME-TOO-LONG
+                           '((NAME-LENGTH 72)
+                             (MAX-ALLOWED-LENGTH 64)))))))))))))
+   (NET-ERROR
+    '(MODULE M4)
+    (LIST
+     (NET-ERROR 'MODULE-OCCURRENCES
+      (LIST
+       (NET-ERROR
+       '(OCCURRENCE
+  YET-ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-70-CHARACTERS)
+       (LIST
+        (NET-ERROR 'OCCURRENCE-NAME
+         (LIST
+          (NET-ERROR
+          '(BAD-LSI-NAME
+ YET-ANOTHER-SUPER-BIG-LONG-NAME-FOR-AN-OCCURRENCE-IT-HAS-70-CHARACTERS)
+          (LIST (NET-ERROR 'NAME-TOO-LONG
+                           '((NAME-LENGTH 70)
+                             (MAX-ALLOWED-LENGTH 64)))))))))))))))
+
+|#
+
+#|
+(setq net '((m1 (a b) (c)
+                ((o1 (is1) t-wire (a b))
+                 (o2 (is2) pullup (is1))
+                 (o3  (c)  b-not  (is2)))
+                nil)
+            (m2 (a b clk) (c)
+                ((o1 (is1) t-wire (a b))
+                 (o2 (is2) pullup (is1))
+                 (o3 (c cn) fd1 (is2 clk)))
+                o3)))
+
+(top-level-predicate net)
+ T
+(netlist-database net F)
+ '((M1 (DELAYS ((70 235) (57 198) (OR A B)))
+       (DRIVES 10)
+       (INPUT-TYPES TRI-STATE TRI-STATE)
+       (INPUTS A B)
+       (LOADINGS 4 4)
+       (OUT-DEPENDS (A B))
+       (OUTPUT-TYPES BOOLP)
+       (OUTPUTS C)
+       (GATES . 1)
+       (PADS . 0)
+       (PRIMITIVES . 1)
+       (TRANSISTORS . 3))
+   (M2 (DELAYS ((147 1024) (55 1288)))
+       (DRIVES 10)
+       (INPUT-TYPES TRI-STATE TRI-STATE CLK)
+       (INPUTS A B CLK)
+       (LOADINGS 3 3 1)
+       (OUT-DEPENDS NIL)
+       (OUTPUT-TYPES BOOLP)
+       (OUTPUTS C)
+       (STATE-TYPES . BOOLP)
+       (STATES . O3)
+       (GATES . 7)
+       (PADS . 0)
+       (PRIMITIVES . 1)
+       (TRANSISTORS . 26)))
+
+(primitive-count 0 'b-and     'transistors nil)
+ 6
+(primitive-count 0 'ttl-input 'pads nil)
+ 1
+(primitive-count 0 'm2        'gates       net)
+ 7
+(primitive-count 0 'm3        'pads        net)
+ (NET-ERROR 'UNKNOWN-MODULE 'M3)
+(let ((occs (module-occurrences (lookup-module 'm2 net))))
+  (primitive-count 1 occs     'primitives  net))
+ 1
+(primitive-count 2 'm3 'pads net)
+ ; unknown flag
+
+
+(out-depends 0 'fd1 '((d) (clk)) nil nil)
+ '(NIL NIL)
+(out-depends 0 'm1  '((x) (y))   nil net)
+ '((X Y))
+(let ((occs (module-occurrences (lookup-module 'm2 net))))
+  (out-depends 1 occs  '(a b clk) '(c) net))
+ (LIST '(IS2 CLK IS1 A B C)
+       '(CN)
+       T
+       '(C)
+       T
+       '(IS2 A B)
+       T
+       '(IS1 A B)
+       T
+       '(A A)
+       '(B B)
+       '(CLK CLK))
+(out-depends 2 'm1 '((x) (y)) nil net)
+ ; unknown flag
+(output-dependencies 'b-not '((x) (y)) nil)
+ ; wrong number of args
+(output-dependencies 'm3 '((x) (y)) net)
+ ; unknown module m3
+(output-dependencies 'm2 '((x) (y)) net)
+ ; wrong number of args
+(output-dependencies 'm2 '((x) (y) (clock)) net)
+ '(NIL)
+(output-dependencies 'm1 '((x) (y)) net)
+ '((X Y))
+
+
+(IO-types 0 'b-not '(free) nil nil)
+ '((INPUT-TYPES BOOLP)
+   (OUTPUT-TYPES BOOLP))
+(IO-types 0 'id '(ttl) nil nil)
+ '((INPUT-TYPES FREE)
+   (OUTPUT-TYPES TTL))
+(IO-types 0 'm1 '(tri-state tri-state) nil net)
+ '((INPUT-TYPES TRI-STATE TRI-STATE)
+   (OUTPUT-TYPES BOOLP))
+(let ((occs (module-occurrences (lookup-module 'm2 net))))
+  (IO-types 1 occs '(a b clk) '(c) net))
+ '((INPUT-TYPES (CLK . CLK)
+                (IS2 . BOOLP)
+                (IS1 . TRI-STATE)
+                (B . TRI-STATE)
+                (A . TRI-STATE))
+   (OUTPUT-TYPES (CN . BOOLP)
+                 (C . BOOLP)
+                 (IS2 . BOOLP)
+                 (IS1 . TRI-STATE)))
+(let ((occs (module-occurrences (lookup-module 'm2 net))))
+  (IO-types 3 occs '(a b clk) '(c) net))
+ ; unknown flag
+
+
+(state-type-requirement 0 'ttl-bidirect nil)
+ NIL
+(state-type-requirement 0 'fd1 nil)
+ 'BOOLP
+(let ((occs (module-occurrences (lookup-module 'm2 net))))
+  (state-type-requirement 1 occs net))
+ '((O3 . BOOLP))
+(state-type-requirement 4 'm1 net)
+ ; unknown flag
+
+
+(loadings-and-drives 0 'b-not '(x) '(y) nil)
+ '((LOADINGS 2) (DRIVES 10))
+(loadings-and-drives 0 'm2 '(x y clock) '(out0) net)
+ '((LOADINGS 3 3 1) (DRIVES 10))
+(loadings-and-drives 0 'm3 '(x y clock) '(out0) net)
+ ; unknown module m3
+(let ((occs (module-occurrences (lookup-module 'm2 net))))
+  (loadings-and-drives 1 occs '(a b clk) '(c) net))
+ '((LOADINGS (B . 3)
+             (A . 3)
+             (IS1 . 2)
+             (CLK . 1)
+             (IS2 . 1))
+   (DRIVES (CN . 10)
+           (C . 10)
+           (IS2 . IS1)
+           (IS1 MIN A B)))
+(loadings-and-drives 2 'm1 '(a b) '(c) net)
+ ; unknown flag
+
+|#

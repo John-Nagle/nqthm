@@ -1,0 +1,11 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+
+;;;  This file is to disable everything prior to this point.
+;;;  The purpose of this is to make sure that the previous
+;;;  events do not interfere with the events that follow.
+
+
+(disable-back-to ground-zero math-theory)

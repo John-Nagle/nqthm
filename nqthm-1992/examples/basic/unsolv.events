@@ -1,0 +1,439 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer and J Strother Moore.  All Rights
+ Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer and J Strother Moore PROVIDE ABSOLUTELY NO WARRANTY.  THE
+ EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+ OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer or J Strother Moore BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(BOOT-STRAP NQTHM)
+(COMPILE-UNCOMPILED-DEFNS "tmp")
+(ADD-SHELL BTM NIL BTMP NIL)
+(DEFN GET (X ALIST)
+  (IF (NLISTP ALIST)
+      (BTM)
+      (IF (EQUAL X (CAAR ALIST))
+          (CDAR ALIST)
+          (GET X (CDR ALIST)))))
+(DEFN UNSOLV-SUBRP (FN)
+  (MEMBER FN
+          (QUOTE (ZERO TRUE FALSE ADD1 SUB1 NUMBERP CONS 
+                       CAR CDR LISTP PACK UNPACK LITATOM 
+                       EQUAL LIST))))
+(DEFN
+  UNSOLV-APPLY-SUBR
+  (FN LST)
+  (IF
+    (EQUAL FN (QUOTE ZERO))
+    (ZERO)
+    (IF
+      (EQUAL FN (QUOTE TRUE))
+      (TRUE)
+      (IF
+        (EQUAL FN (QUOTE FALSE))
+        (FALSE)
+        (IF
+          (EQUAL FN (QUOTE ADD1))
+          (ADD1 (CAR LST))
+          (IF
+            (EQUAL FN (QUOTE SUB1))
+            (SUB1 (CAR LST))
+            (IF
+              (EQUAL FN (QUOTE NUMBERP))
+              (NUMBERP (CAR LST))
+              (IF
+                (EQUAL FN (QUOTE CONS))
+                (CONS (CAR LST)
+                      (CADR LST))
+                (IF
+                  (EQUAL FN (QUOTE LIST))
+                  LST
+                  (IF
+                    (EQUAL FN (QUOTE CAR))
+                    (CAR (CAR LST))
+                    (IF
+                      (EQUAL FN (QUOTE CDR))
+                      (CDR (CAR LST))
+                      (IF
+                        (EQUAL FN (QUOTE LISTP))
+                        (LISTP (CAR LST))
+                        (IF (EQUAL FN (QUOTE PACK))
+                            (PACK (CAR LST))
+                            (IF (EQUAL FN (QUOTE UNPACK))
+                                (UNPACK (CAR LST))
+                                (IF (EQUAL FN (QUOTE LITATOM))
+                                    (LITATOM (CAR LST))
+                                    (IF (EQUAL FN (QUOTE EQUAL))
+                                        (EQUAL (CAR LST)
+                                               (CADR LST))
+                                        0))))))))))))))))
+(DEFN
+  EV
+  (FLG X VA FA N)
+  (IF
+    (EQUAL FLG (QUOTE AL))
+    (IF
+      (NLISTP X)
+      (IF (NUMBERP X)
+          X
+          (IF (EQUAL X (QUOTE T))
+              T
+              (IF (EQUAL X (QUOTE F))
+                  F
+                  (IF (EQUAL X NIL)
+                      NIL
+                      (GET X VA)))))
+      (IF
+        (EQUAL (CAR X)
+               (QUOTE QUOTE))
+        (CADR X)
+        (IF
+          (EQUAL (CAR X)
+                 (QUOTE IF))
+          (IF (BTMP (EV (QUOTE AL)
+                        (CADR X)
+                        VA FA N))
+              (BTM)
+              (IF (EV (QUOTE AL)
+                      (CADR X)
+                      VA FA N)
+                  (EV (QUOTE AL)
+                      (CADDR X)
+                      VA FA N)
+                  (EV (QUOTE AL)
+                      (CADDDR X)
+                      VA FA N)))
+          (IF
+            (BTMP (EV (QUOTE LIST)
+                      (CDR X)
+                      VA FA N))
+            (BTM)
+            (IF
+              (UNSOLV-SUBRP (CAR X))
+              (UNSOLV-APPLY-SUBR (CAR X)
+                          (EV (QUOTE LIST)
+                              (CDR X)
+                              VA FA N))
+              (IF (BTMP (GET (CAR X)
+                             FA))
+                  (BTM)
+                  (IF (ZEROP N)
+                      (BTM)
+                      (EV (QUOTE AL)
+                          (CADR (GET (CAR X)
+                                     FA))
+                          (PAIRLIST (CAR (GET (CAR X)
+                                              FA))
+                                    (EV (QUOTE LIST)
+                                        (CDR X)
+                                        VA FA N))
+                          FA
+                          (SUB1 N)))))))))
+    (IF (LISTP X)
+        (IF (BTMP (EV (QUOTE AL)
+                      (CAR X)
+                      VA FA N))
+            (BTM)
+            (IF (BTMP (EV (QUOTE LIST)
+                          (CDR X)
+                          VA FA N))
+                (BTM)
+                (CONS (EV (QUOTE AL)
+                          (CAR X)
+                          VA FA N)
+                      (EV (QUOTE LIST)
+                          (CDR X)
+                          VA FA N))))
+        NIL))
+  ((ORD-LESSP (CONS (ADD1 N) (COUNT X)))))
+(DEFN PR-EVAL (X VA FA N)
+  (EV (QUOTE AL)
+      X VA FA N))
+(DEFN EVLIST (X VA FA N)
+  (EV (QUOTE LIST)
+      X VA FA N))
+
+;   We now define the functions x, va, fa, and k. To do so we first define
+;   SUBLIS, which applies a substitution to an s-expression.  Then we use the
+;   names CIRC and LOOP in the definitions of x and fa and use SUBLIS to
+;   replace those names with "new" names. It is not important whether we have
+;   defined this notion of substitution correctly, since all that is required
+;   is that we exhibit some x, va, fa, and k with the desired properties.
+
+(DEFN SUBLIS (ALIST X)
+  (IF (NLISTP X)
+      (IF (ASSOC X ALIST)
+          (CDR (ASSOC X ALIST))
+          X)
+      (CONS (SUBLIS ALIST (CAR X))
+            (SUBLIS ALIST (CDR X)))))
+(DEFN x (FA)
+  (SUBLIS (LIST (CONS (QUOTE CIRC)
+                      (CONS FA 0)))
+          (QUOTE (CIRC A))))
+(DEFN
+  fa
+  (FA)
+  (APPEND
+    (SUBLIS
+      (LIST (CONS (QUOTE CIRC)
+                  (CONS FA 0))
+            (CONS (QUOTE LOOP)
+                  (CONS FA 1)))
+      (QUOTE ((CIRC (A)
+                    (IF (HALTS (QUOTE (CIRC A))
+                               (LIST (CONS (QUOTE A)
+                                           A))
+                               A)
+                        (LOOP)
+                        T))
+              (LOOP NIL (LOOP)))))
+    FA))
+(DEFN va (FA)
+  (LIST (CONS (QUOTE A)
+              (fa FA))))
+(DEFN k (N)
+  (ADD1 N))
+
+;   We wish to prove that having "new" program names in the function
+;   environment does not effect the computation of the body of HALTS.  To state
+;   this we must first define formally what we mean by "new". Then we will
+;   prove the general result we need and then we will instantiate it for the
+;   particular "new" program names we choose.
+
+(DEFN OCCUR (X Y)
+  (IF (EQUAL X Y)
+      T
+      (IF (NLISTP Y)
+          F
+          (OR (OCCUR X (CAR Y))
+              (OCCUR X (CDR Y))))))
+(DEFN OCCUR-IN-DEFNS (X LST)
+  (IF (NLISTP LST)
+      F
+      (OR (OCCUR X (CADDR (CAR LST)))
+          (OCCUR-IN-DEFNS X (CDR LST))))
+  NIL
+
+;   This function returns T or F according to whether X occurs in the body of
+;   some defn in LST. At first we avoided using this function and just asked
+;   instead whether X occurs in LST. However, when so put the following lemma
+;   is not valid.
+
+  )
+(PROVE-LEMMA OCCUR-OCCUR-IN-DEFNS (REWRITE)
+             (IMPLIES (AND (NOT (OCCUR-IN-DEFNS FN FA))
+                           (NOT (BTMP (GET X FA))))
+                      (NOT (OCCUR FN (CADR (GET X FA))))))
+(PROVE-LEMMA LEMMA1 (REWRITE)
+             (IMPLIES (AND (NOT (OCCUR FN X))
+                           (NOT (OCCUR-IN-DEFNS FN FA)))
+                      (EQUAL (EV FLG X VA (CONS (CONS FN DEF)
+                                                FA)
+                                 N)
+                             (EV FLG X VA FA N)))
+             NIL
+
+;   If a FN is not used in X or any defn in FA then it can be ignored.
+
+             )
+(PROVE-LEMMA COUNT-OCCUR (REWRITE)
+             (IMPLIES (LESSP (COUNT Y)
+                             (COUNT X))
+                      (NOT (OCCUR X Y)))
+             NIL
+
+;   This lemma will let us show that the name (CONS FA i) does not occur in FA.
+
+             )
+(PROVE-LEMMA COUNT-GET (REWRITE)
+             (LESSP (COUNT (CADR (GET FN FA)))
+                    (ADD1 (COUNT FA)))
+             NIL
+
+;   This lemma will let us show that the name (CONS FA i) does not occur in any
+;   defn obtained from FA.
+
+             )
+(PROVE-LEMMA COUNT-OCCUR-IN-DEFNS (REWRITE)
+             (IMPLIES (LESSP (COUNT FA)
+                             (COUNT X))
+                      (NOT (OCCUR-IN-DEFNS X FA)))
+             NIL
+
+;   This lemma lets us establish that (CONS FA i) doesn't occur in the defns of
+;   FA.
+             )
+
+(PROVE-LEMMA
+  COROLLARY1
+  (REWRITE)
+  (EQUAL (EV (QUOTE AL)
+             (CADR (GET (QUOTE HALTS)
+                        FA))
+             VA
+             (CONS (CONS (CONS FA 0)
+                         DEF0)
+                   (CONS (LIST (CONS FA 1)
+                               NIL
+                               (LIST (CONS FA 1)))
+                         FA))
+             N)
+         (EV (QUOTE AL)
+             (CADR (GET (QUOTE HALTS)
+                        FA))
+             VA FA N))
+             NIL
+
+;   This is the result we needed: evaluating the body of HALTS in an
+;   environment containing the two new programs CIRC and LOOP produces the same
+;   result as without those two programs.
+
+  )
+(DISABLE LEMMA1 
+
+;   We now turn off the key lemma and just rely on the result just proved.
+;   Failure to turn off the key lemma causes the system to spend hundred of
+;   thousands of conses investigating OCCURrences and comparing COUNTs on
+;   almost every PR-EVAL expression involved in the proof.
+         )
+(PROVE-LEMMA LEMMA2 NIL
+             (IMPLIES (AND (NOT (BTMP (EV FLG X VA FA N)))
+                           (NOT (BTMP (EV FLG X VA FA K))))
+                      (EQUAL (EV FLG X VA FA N)
+                             (EV FLG X VA FA K)))
+             NIL
+
+;   If EV at N and K are both not BTM then they are equal.  We will need only
+;   COROLLARY2 below, but we must prove the more general version by induction.
+
+             )
+(PROVE-LEMMA COROLLARY2 (REWRITE)
+                       (IMPLIES (EQUAL (EV FLG X VA FA N)
+                                       T)
+                                (EV FLG X VA FA K))
+                       ((USE (LEMMA2)))
+
+;   If EV at N is T then EV at K is not F. We have to tell the system to use
+;   LEMMA2 to prove this.
+
+                       )
+(PROVE-LEMMA LEMMA3 (REWRITE)
+             (IMPLIES (AND (LISTP X)
+                           (LISTP (CAR X))
+                           (NLISTP (CDR X))
+                           (LISTP (GET (CAR X)
+                                       FA))
+                           (EQUAL (CAR (GET (CAR X)
+                                            FA))
+                                  NIL)
+                           (EQUAL (CADR (GET (CAR X)
+                                             FA))
+                                  X))
+                      (BTMP (EV (QUOTE AL)
+                                X VA FA N)))
+
+;   If a program is defined so as to call itself immediately then it never
+;   terminates.
+             )
+(PROVE-LEMMA
+  EXPAND-CIRC
+  (REWRITE)
+  (IMPLIES
+    (AND (NOT (BTMP VAL))
+         (NOT (BTMP (GET (CONS FN 0)
+                         FA))))
+    (EQUAL
+      (EV (QUOTE AL)
+          (CONS (CONS FN 0)
+                (QUOTE (A)))
+          (LIST (CONS (QUOTE A)
+                      VAL))
+          FA J)
+      (IF (ZEROP J)
+          (BTM)
+          (EV (QUOTE AL)
+              (CADR (GET (CONS FN 0)
+                         FA))
+              (PAIRLIST (CAR (GET (CONS FN 0)
+                                  FA))
+                        (EV (QUOTE LIST)
+                            (QUOTE (A))
+                            (LIST (CONS (QUOTE A)
+                                        VAL))
+                            FA J))
+              FA
+              (SUB1 J)))))
+             NIL
+
+;   This lemma forces the system to expand any call of PR-EVAL on CIRC. Were
+;   CIRC defined recursively on the function alist this lemma would cause
+;   infinite rewriting.  Without this lemma the system does not expand the call
+;   of PR-EVAL on CIRC because it introduces "worse" calls of PR-EVAL, namely
+;   on the args of the call and body of CIRC. However, once it has stepped from
+;   the call of CIRC to its body it then the calls.
+
+  )
+
+;   After we published a proof of the unsolvability of the halting problem in
+;   the JACM, a student in one of our classes named Jonathan Bellin observed
+;   that one could get a trivial proof by defining (x FA) = (BTM).  However,
+;   the "idea" is that the frustrating values (x FA), (va FA), and (fa FA) are
+;   supposed to be objects on which EVAL behaves normally.  This class consists
+;   of those objects for which SEXP, defined below is, true.  So we added the
+;   second conjunct to our statement of UNSOLVABILITY-OF-THE-HALTING-PROBLEM.
+
+(DEFN SEXP (X)
+  (IF (EQUAL X T)
+      T
+      (IF (EQUAL X F) T
+          (IF (NUMBERP X) T
+              (IF (LISTP X) (AND (SEXP (CAR X))
+                                 (SEXP (CDR X)))
+                  (IF (LITATOM X) (SEXP (UNPACK X))
+                      F))))))
+
+(PROVE-LEMMA UNSOLVABILITY-OF-THE-HALTING-PROBLEM NIL
+(AND (IMPLIES (EQUAL H (PR-EVAL (LIST (QUOTE HALTS)
+                                 (LIST (QUOTE QUOTE)
+                                       (x FA))
+                                 (LIST (QUOTE QUOTE)
+                                       (va FA))
+                                 (LIST (QUOTE QUOTE)
+                                       (fa FA)))
+                           NIL FA N))
+            (AND (IMPLIES (EQUAL H F)
+                          (NOT (BTMP (PR-EVAL (x FA)
+                                           (va FA)
+                                           (fa FA)
+                                           (k N)))))
+                 (IMPLIES (EQUAL H T)
+                          (BTMP (PR-EVAL (x FA)
+                                      (va FA)
+                                      (fa FA)
+                                      K)))))
+     (IMPLIES (SEXP FA)
+              (AND (SEXP (X FA))
+                   (SEXP (VA FA))
+                   (SEXP (FA FA))))))
+
+(MAKE-LIB "unsolv" T)

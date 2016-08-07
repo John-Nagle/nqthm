@@ -1,0 +1,974 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    FINAL-RESET.EVENTS
+;;;
+;;;  This file contains the verification of the FM9001 reset sequence.  There
+;;;  are several reset proofs in this file, all stated in slightly different
+;;;  ways.  There are also a number of refinements of the main correctness
+;;;  theorem of the FM9001 microprocessor.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   Since some of the following proofs are simply simulations, we compile the
+;;;   uncompiled DEFNs at this point to speed up these proofs.
+
+(compile-uncompiled-defns* "a-weird-file-name-0")
+
+;;;  The definition of a properly structured but completely unknown machine
+;;;  state. 
+
+(defn unknown-regfile ()
+  (list
+   ;; regs
+   (cons (cons (cons (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x))))
+                     (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x)))))
+               (cons (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x))))
+                     (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x))))))
+         (cons (cons (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x))))
+                     (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x)))))
+               (cons (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x))))
+                     (cons (ram (make-list 32 (x)))
+                           (ram (make-list 32 (x)))))))
+   (x)                                  ; we
+   (make-list 32 (x))                   ; data
+   (make-list 4 (x))                    ; address
+   ))
+   
+(defn unknown-machine-state ()
+  (list
+   (unknown-regfile)                    ; regs
+   (make-list 4 (x))                    ; flags
+   (make-list 32 (x))                   ; a-reg
+   (make-list 32 (x))                   ; b-reg
+   (make-list 32 (x))                   ; i-reg
+   (make-list 32 (x))                   ; data-out
+   (make-list 32 (x))                   ; addr-out
+   (x)                                  ; reset
+   (x)                                  ; dtack
+   (x)                                  ; hold
+   (make-list 4 (x))                    ; pc-reg
+   (make-list 40 (x))                   ; cntl-state
+   ))
+
+(defn unknown-memory-state ()
+  (list
+   (stub (make-list 32 f))              ; mem
+   0                                    ; cntl
+   0                                    ; clock
+   0                                    ; count
+   (x)                                  ; dtack-asserted
+   (x)                                  ; last-rw-
+   (make-list 32 (x))                   ; last-address
+   (make-list 32 (x))))                 ; last-data
+
+(defn unknown-state ()
+  (list (unknown-machine-state) (unknown-memory-state)))
+
+(prove-lemma chip-system-invariant-unknown-state ()
+  (chip-system-invariant (unknown-state)))
+
+(prove-lemma fm9001-state-structure-unknown-state ()
+  (fm9001-state-structure (unknown-state)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Resetting the CHIP-SYSTEM
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  Putting together an input stream that initializes CHIP-SYSTEM.
+
+(defn reset-vector ()
+ (list* (x)                             ; clk
+        (x)                             ; ti
+        f                               ; te
+        f                               ; reset-
+        t                               ; hold-
+        t                               ; disable-regfile-
+        t                               ; test-regfile-
+        (make-list 4 t)))               ; pc-reg
+
+(defn run-vector ()
+ (list* (x)                             ; clk
+        (x)                             ; ti
+        f                               ; te
+        t                               ; reset-
+        t                               ; hold-
+        t                               ; disable-regfile-
+        t                               ; test-regfile-
+        (make-list 4 t)))               ; pc-reg
+
+(defn reset-sequence ()
+  (cons (reset-vector) (make-list 19 (run-vector))))
+
+(prove-lemma chip-system-operating-inputs-p-reset-sequence ()
+  (chip-system-operating-inputs-p (reset-sequence) 20))
+
+;;;  The initialized state.
+
+(defn initialized-regfile ()
+  (list
+   ;; regs
+   (cons (cons (cons (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f)))
+                     (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f))))
+               (cons (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f)))
+                     (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f)))))
+         (cons (cons (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f)))
+                     (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f))))
+               (cons (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f)))
+                     (cons (ram (make-list 32 f))
+                           (ram (make-list 32 f))))))
+   f                                    ; we
+   (make-list 32 f)                     ; data
+   (make-list 4 t)                      ; address
+   ))
+
+(defn initialized-machine-state ()
+  (list
+   (initialized-regfile)                ; regs
+   (list t f f f)                       ; flags
+   (make-list 32 f)                     ; a-reg
+   (make-list 32 f)                     ; b-reg
+   (make-list 32 f)                     ; i-reg
+   (make-list 32 f)                     ; data-out
+   (make-list 32 f)                     ; addr-out
+   t                                    ; reset
+   t                                    ; dtack
+   t                                    ; hold
+   (make-list 4 t)                      ; pc-reg
+   (cv_fetch1                           ; cntl-state
+              t                         ;   RW-           
+              (list t t t t)            ;   REGS-ADDRESS  
+              (make-list 32 f)          ;   I-REG         
+              (list t f f f)            ;   FLAGS         
+              (make-list 4 t))))        ;   PC-REG        
+
+(defn initialized-memory-state ()
+  (list (stub (make-list 32 f))         ; mem
+        0                               ; cntl
+        0                               ; clock
+        0                               ; count
+        t                               ; dtack-asserted
+        t                               ; last-rw-
+        (make-list 32 f)                ; last-address
+        (make-list 32 (x))              ; last-data
+        ))
+
+(defn final-state ()
+  (list (initialized-machine-state) (initialized-memory-state)))
+
+;;;   Prove that the reset sequence works, by running the machine.
+
+(prove-lemma reset-works ()
+  (equal (run-fm9001 (unknown-state)
+                     (map-up-inputs (reset-sequence))
+                     (length (reset-sequence)))
+         (final-state))
+  ;;Hint
+  ((disable run-fm9001 unknown-state map-up-inputs reset-sequence
+            length final-state)))
+
+(prove-lemma unknown-state-okp ()
+  (and
+   (fm9001-state-structure (unknown-state))
+   (chip-system-invariant (unknown-state))
+   (chip-system-operating-inputs-p (reset-sequence) 20))
+  ;;Hint
+  ((disable chip-system-invariant
+            chip-system-operating-inputs-p
+            reset-sequence unknown-state
+            fm9001-state-structure)))
+
+(prove-lemma final-state-okp (rewrite)
+  (and
+   (chip-system& (chip-system$netlist))
+   (fm9001-state-structure (final-state))
+   (macrocycle-invariant (final-state) (make-list 4 t)))
+  ;;Hint
+  ((disable chip-system& chip-system$netlist
+            fm9001-state-structure final-state
+            macrocycle-invariant)))
+
+(prove-lemma instance-theorem ()
+  (let 
+    ((fm9001-inputs (map-up-inputs inputs))
+     (netlist (chip-system$netlist))
+     (state (final-state)))
+    (let
+      ((time (total-microcycles state fm9001-inputs n)))
+      (implies
+       (and (chip-system& netlist)
+            (fm9001-state-structure state)
+            (macrocycle-invariant state pc)
+            (chip-system-operating-inputs-p inputs time)
+            (operating-inputs-p fm9001-inputs time))
+       (equal (map-up (simulate-dual-eval-2
+                       'chip-system inputs state netlist time))
+              (fm9001-interpreter (map-up state)
+                                  pc n)))))
+  ;; Hint
+  ((disable map-up-inputs total-microcycles
+            chip-system$netlist final-state *1*final-state
+            fm9001-state-structure macrocycle-invariant
+            chip-system-operating-inputs-p
+            operating-inputs-p map-up simulate-dual-eval-2
+            fm9001-interpreter pc-reg)))
+
+(prove-lemma fm9001-statep-map-up-final-state (rewrite)
+  (fm9001-statep (map-up (final-state)))
+  ((disable fm9001-statep map-up final-state)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Resetting the CHIP in isolation
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn reset-vector-chip ()
+  (list* (x)                            ; clk
+         (x)                            ; ti
+         f                              ; te
+
+         (x)                            ; dtack-
+         f                              ; reset-
+         t                              ; hold-
+         t                              ; disable-regfile-
+         t                              ; test-regfile-
+
+         (append 
+          (make-list 4 t)               ; pc-reg
+          (make-list 32 (x)))))         ; data input
+
+
+;;;  Note: If clk is (x), chip output PO will be (x).
+;;;  First run vector (clk T).  PO will be F.
+
+(defn run-vector-chip-1 ()
+  (list* t                              ; clk
+         (x)                            ; ti
+         f                              ; te
+
+         t                              ; dtack-
+         t                              ; reset-
+         t                              ; hold-
+         t                              ; disable-regfile-
+         t                              ; test-regfile-
+
+         (append
+          (make-list  4 t)              ; pc-reg
+          (make-list 32 t))))           ; data input
+
+;;;  Second run vector (clk F).  PO will be F.
+
+(defn run-vector-chip-2 ()
+  (list* f                              ; clk
+         (x)                            ; ti
+         f                              ; te
+
+         t                              ; dtack-
+         t                              ; reset-
+         t                              ; hold-
+         t                              ; disable-regfile-
+         t                              ; test-regfile-
+
+         (append
+          (make-list  4 t)              ; pc-reg
+          (make-list 32 t))))           ; data input
+
+
+(defn reset-sequence-chip-1 ()
+  (cons (reset-vector-chip) (make-list 19 (run-vector-chip-1))))
+
+(defn reset-sequence-chip-2 ()
+  (cons (reset-vector-chip) (make-list 19 (run-vector-chip-2))))
+
+(prove-lemma reset-sequence-chip-1-vs-2 ()
+  (let ((inputs-1 (reset-sequence-chip-1))
+        (inputs-2 (reset-sequence-chip-2))
+        (state    (unknown-machine-state))
+        (netlist  (chip$netlist)))
+
+    (equal (simulate 'chip inputs-1 state netlist)
+           (simulate 'chip inputs-2 state netlist)))
+
+  ;; hints
+  ((disable reset-sequence-chip-1 reset-sequence-chip-2
+            unknown-machine-state chip$netlist simulate)))
+
+(prove-lemma simulate-reset-chip-final-state ()
+  (let ((fn      'chip)
+        (inputs  (reset-sequence-chip-1))
+        (state   (unknown-machine-state))
+        (netlist (chip$netlist)))
+
+    (let ((n (sub1 (length inputs))))
+
+      (let ((result (nth n (simulate fn inputs state netlist))))
+
+        (let ((final-simulated-state (cadr result)))
+
+          (equal final-simulated-state
+                 (car (final-state)))))))
+
+  ;; hints
+  ((disable reset-sequence-chip-1 unknown-machine-state chip$netlist sub1
+            length nth simulate final-state)))
+
+
+;;;  This lemma says that the reset sequence is "good" in
+;;;  the sense required by the last lemma below.
+
+(prove-lemma for-final-1-of-reset-sequence-chip (rewrite)
+  (let ((fn      'chip)
+        (inputs  (reset-sequence-chip-1))
+        (state-1 (unknown-machine-state))
+        (netlist (chip$netlist)))
+
+    (let ((n (sub1 (length inputs))))
+
+      (let ((final-1 (nth n (simulate fn inputs state-1 netlist))))
+
+        (and (equal (lessp n (length inputs)) t)
+             (v-knownp (car final-1))
+             (s-knownp (cadr final-1))
+             (ok-netlistp 0 fn netlist '(mem-32x32))))))
+
+  ;; hints
+  ((disable reset-sequence-chip-1 unknown-machine-state chip$netlist sub1
+            length nth simulate v-knownp s-knownp ok-netlistp)))
+
+(disable for-final-1-of-reset-sequence-chip)
+
+;;;  Thus, for any STATE-2, we can reset the machine so long
+;;;  as (S-APPROX STATE-1 STATE-2) is true.  We believe that
+;;;  (S-APPROX STATE-1 STATE-2) is true for any STATE-2 of the
+;;;  proper form.
+
+(prove-lemma xs-suffice-for-reset-chip-lemma-instance ()
+  (let ((fn      'chip)
+        (inputs  (reset-sequence-chip-1))
+        (state-1 (unknown-machine-state))
+        (netlist (chip$netlist)))
+
+    (let ((n (sub1 (length inputs))))
+
+      (let ((final-1 (nth n (simulate fn inputs state-1 netlist)))
+            (final-2 (nth n (simulate fn inputs state-2 netlist))))
+
+        (implies (and (s-approx state-1 state-2)
+                      (good-s state-2))
+                 (equal final-1 final-2)))))
+
+  ;; hints
+  ((disable reset-sequence-chip-1 *1*reset-sequence-chip-1
+            unknown-machine-state *1*unknown-machine-state
+            chip$netlist *1*chip$netlist
+            sub1 *1*sub1 length *1*length nth *1*nth
+            simulate *1*simulate s-approx *1*s-approx
+            v-knownp *1*v-knownp s-knownp *1*s-knownp
+            ok-netlistp *1*ok-netlistp)
+   (enable for-final-1-of-reset-sequence-chip)
+   (use (xs-suffice-for-reset-lemma
+         (n       (sub1 (length (reset-sequence-chip-1))))
+         (fn      'chip)
+         (inputs  (reset-sequence-chip-1))
+         (state-1 (unknown-machine-state))
+         (state-2 state-2)
+         (netlist (chip$netlist))))))
+
+
+(prove-lemma fm9001-machine-statep-p-map-up-initialized-machine-state (rewrite)
+  (fm9001-machine-statep (p-map-up (initialized-machine-state)))
+  ((disable fm9001-machine-statep map-up initialized-machine-state)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Refinements
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-fourp (x)
+  (if (nlistp x)
+      (equal x nil)
+    (and (fourp (car x))
+         (v-fourp (cdr x)))))
+
+(defn all-xs (vec)
+  (if (nlistp vec)
+      (equal vec nil)
+    (and (equal (car vec) (X))
+         (all-xs (cdr vec)))))
+
+;; The following two were enabled in the context where many
+;; of the following events were originally developed.
+
+(enable b-knownp)
+(enable b-approx)
+
+(prove-lemma all-xs-approximates (rewrite)
+  (implies (and (all-xs vec1)
+                (equal (length vec1) (length vec2))
+                (properp vec2))
+           (v-approx vec1 vec2))
+  ((enable v-approx)))
+
+(prove-lemma all-xs-make-list (rewrite)
+  (all-xs (make-list n (x)))
+  ((enable make-list)))
+
+(defn memory-v-fourp (n width mem) 
+  (cond ((stubp mem) 
+         (and (v-fourp (stub-guts mem)) 
+              (equal (length (stub-guts mem)) 
+                     width))) 
+        ((zerop n) 
+         (cond ((ramp mem) 
+                (and (v-fourp (ram-guts mem)) 
+                     (equal (length (ram-guts mem)) 
+                            width))) 
+               ((romp mem) 
+                (and (v-fourp (rom-guts mem)) 
+                     (equal (length (rom-guts mem)) 
+                            width))) 
+               (t f))) 
+        (t (and (listp mem) 
+                (memory-v-fourp (sub1 n) 
+                                width 
+                                (car mem)) 
+                (memory-v-fourp (sub1 n) 
+                                width 
+                                (cdr mem))))))
+
+(defn new-machine-state-invariant (machine-state)
+  (let
+    ((regs               (car machine-state))
+     (flags              (cadr machine-state))
+     (a-reg              (caddr machine-state))
+     (b-reg              (cadddr machine-state))
+     (i-reg              (caddddr machine-state))
+     (data-out           (cadddddr machine-state))
+     (addr-out           (caddddddr machine-state))
+     (last-reset-        (cadddddddr machine-state))
+     (last-dtack-        (caddddddddr machine-state))
+     (last-hold-         (cadddddddddr machine-state))
+     (pc-reg             (caddddddddddr machine-state))
+     (cntl-state         (cadddddddddddr machine-state)))
+    (let
+      ((regs-regs    (car regs))
+       (regs-we      (cadr regs))
+       (regs-data    (caddr regs))
+       (regs-address (cadddr regs)))
+      (and
+       (equal (length machine-state) 12)
+       (properp machine-state)
+       (equal (length regs) 4)
+       (properp regs)
+       (all-ramp-mem 4 regs-regs)
+       (fourp regs-we)
+       (memory-v-fourp 4 32 regs-regs)
+       (v-fourp regs-data) (equal (length regs-data) 32)
+       (v-fourp regs-address) (equal (length regs-address) 4)
+       (v-fourp flags) (equal (length flags) 4)
+       (v-fourp a-reg) (equal (length a-reg) 32)
+       (v-fourp b-reg) (equal (length b-reg) 32)
+       (v-fourp i-reg) (equal (length i-reg) 32)
+       (v-fourp data-out) (equal (length data-out) 32)
+       (v-fourp addr-out) (equal (length addr-out) 32)
+       (fourp last-reset-)
+       (fourp last-dtack-)
+       (fourp last-hold-)
+       (v-fourp pc-reg) (equal (length pc-reg) 4)
+       (v-fourp cntl-state) (equal (length cntl-state) 40)))))
+
+(prove-lemma s-approx-make-list (rewrite)
+  (implies (and (equal (length vec1) (length vec2))
+                (v-fourp vec2)
+                (all-xs vec1))
+           (s-approx vec1 vec2))
+  ((enable s-approx)))
+
+(prove-lemma v-fourp-implies-properp (rewrite)
+  (implies (v-fourp x)
+           (properp x)))
+
+(prove-lemma listp-implies-not-fourp (rewrite)
+  (implies (listp x)
+           (not (fourp x))))
+
+(prove-lemma ramp-implies-not-fourp (rewrite)
+  (implies (ramp x)
+           (not (fourp x))))
+
+(prove-lemma romp-implies-not-fourp (rewrite)
+  (implies (romp x)
+           (not (fourp x))))
+
+(prove-lemma stubp-implies-not-fourp (rewrite)
+  (implies (stubp x)
+           (not (fourp x))))
+
+(prove-lemma b-approx-x (rewrite)
+  (b-approx (x) y))
+
+(prove-lemma machine-state-invariant-implies-s-approx-lemma ()
+  (implies (and (new-machine-state-invariant state)
+                (equal state
+                       (list (list s1-1 s1-2 s1-3 s1-4)
+                             s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12)))
+           (s-approx (unknown-machine-state) state))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable new-machine-state-invariant
+           b-approx-x
+           all-ramp-mem
+           listp-implies-not-fourp
+           ramp-implies-not-fourp
+           romp-implies-not-fourp
+           stubp-implies-not-fourp
+           *1*fourp
+           v-fourp-implies-properp
+           all-xs-approximates
+           length *1*length
+           length-cons
+           all-xs
+           all-xs-make-list
+           s-approx-make-list
+           s-approx
+           *1*unknown-machine-state
+           ram-guts-ram
+           rom-guts-rom
+           memory-v-fourp
+           stub-guts-stub)))
+
+(prove-lemma machine-state-invariant-implies-s-approx-lemma-2 ()
+  (let ((s1-1 (caar state))
+        (s1-2 (cadar state))
+        (s1-3 (caddar state))
+        (s1-4 (cadddar state))
+        (s2  (cadr state))
+        (s3  (caddr state))
+        (s4  (cadddr state))
+        (s5  (caddddr state))
+        (s6  (cadddddr state))
+        (s7  (caddddddr state))
+        (s8  (cadddddddr state))
+        (s9  (caddddddddr state))
+        (s10 (cadddddddddr state))
+        (s11 (caddddddddddr state))
+        (s12 (cadddddddddddr state)))
+    (implies (and (equal (length state) 12)
+                  (properp state)
+                  (equal (length (car state)) 4)
+                  (properp (car state)))
+             (equal state
+                    (list (list s1-1 s1-2 s1-3 s1-4)
+                          s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable length length-bottom properp)))
+
+(prove-lemma machine-state-invariant-implies-s-approx-lemma-3 ()
+  (implies (new-machine-state-invariant state)
+           (and (equal (length state) 12)
+                (properp state)
+                (equal (length (car state)) 4)
+                (properp (car state))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable new-machine-state-invariant)))
+
+(prove-lemma machine-state-invariant-implies-s-approx ()
+  (implies (new-machine-state-invariant state)
+           (s-approx (unknown-machine-state) state))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (use (machine-state-invariant-implies-s-approx-lemma-2)
+        (machine-state-invariant-implies-s-approx-lemma-3)
+        (machine-state-invariant-implies-s-approx-lemma
+         (s1-1 (caar state))
+         (s1-2 (cadar state))
+         (s1-3 (caddar state))
+         (s1-4 (cadddar state))
+         (s2  (cadr state))
+         (s3  (caddr state))
+         (s4  (cadddr state))
+         (s5  (caddddr state))
+         (s6  (cadddddr state))
+         (s7  (caddddddr state))
+         (s8  (cadddddddr state))
+         (s9  (caddddddddr state))
+         (s10 (cadddddddddr state))
+         (s11 (caddddddddddr state))
+         (s12 (cadddddddddddr state))))))
+
+(prove-lemma good-s-opener (rewrite)
+  (and (implies (listp s)
+                (equal (good-s s)
+                       (and (good-s (car s))
+                            (good-s (cdr s)))))
+       (implies (ramp s)
+                (equal (good-s s)
+                       (and (equal (length (ram-guts s))
+                                   (mem-width))
+                            (properp (ram-guts s)))))
+       (implies (romp s)
+                (equal (good-s s)
+                       (and (equal (length (rom-guts s))
+                                   (mem-width))
+                            (properp (rom-guts s)))))
+       (implies (stubp s)
+                (equal (good-s s)
+                       (and (equal (length (stub-guts s))
+                                   (mem-width))
+                            (properp (stub-guts s)))))
+       (implies (fourp s)
+                (good-s s)))
+  ((enable good-s)))
+
+(prove-lemma memory-v-fourp-implies-good-s (rewrite)
+  (implies (memory-v-fourp n 32 v)
+           (good-s v)))
+
+(prove-lemma v-fourp-is-good-s (rewrite)
+  (implies (v-fourp v)
+           (good-s v))
+  ((enable good-s)))
+
+(prove-lemma new-machine-state-invariant-implies-good-s ()
+  (implies (new-machine-state-invariant state)
+           (good-s state))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable good-s-opener new-machine-state-invariant
+           v-fourp-is-good-s length-cons length-1 length-bottom
+           properp-cons properp-nlistp
+           *1*good-s
+           memory-v-fourp-implies-good-s)))
+
+(prove-lemma xs-suffice-for-reset-chip-final-state-for-any-unknown-state ()
+  (let ((n (sub1 (length (reset-sequence-chip-1)))))
+
+    (let ((final-1 (cadr (nth n (simulate 'chip
+                                          (reset-sequence-chip-1)
+                                          (unknown-machine-state)
+                                          (chip$netlist)))))
+          (final-2 (cadr (nth n (simulate 'chip
+                                          (reset-sequence-chip-1)
+                                          state
+                                          (chip$netlist))))))
+
+      (implies (new-machine-state-invariant state)
+               (equal final-1 final-2))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable final-state)
+   (use (xs-suffice-for-reset-chip-lemma-instance
+         (final-1 (car (final-state)))
+         (state-2 state))
+        (simulate-reset-chip-final-state)
+        (machine-state-invariant-implies-s-approx)
+        (new-machine-state-invariant-implies-good-s))))
+
+;; The following is a main theorem.  It follows readily from
+;; XS-SUFFICE-FOR-RESET-CHIP-LEMMA-INSTANCE together with the theorem
+;; SIMULATE-RESET-CHIP-FINAL-STATE, which essentially tells us that
+;; when we simulate from the (UNKNOWN-MACHINE-STATE) we get to
+;; (INITIALIZED-MACHINE-STATE).  The main improvement of this theorem
+;; over XS-SUFFICE-FOR-RESET-CHIP-LEMMA-INSTANCE is that the
+;; hypothesis here avoids the notion of ``approximation'' in favor
+;; of a simple invariant on the structure of the state (see
+;; NEW-MACHINE-STATE-INVARIANT-IS-NON-TRIVIAL and
+;; NEW-MACHINE-STATE-INVARIANT-IMPLIES-MACHINE-STATE-INVARIANT
+;; below).
+
+(prove-lemma
+  xs-suffice-for-reset-chip-final-state-for-any-unknown-state-better
+  (rewrite)
+  (let ((n (sub1 (length (reset-sequence-chip-1)))))
+    (implies (new-machine-state-invariant state)
+             (equal (cadr (nth n (simulate 'chip
+                                           (reset-sequence-chip-1)
+                                           state
+                                           (chip$netlist))))
+                    (initialized-machine-state))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable final-state)
+   (use (xs-suffice-for-reset-chip-final-state-for-any-unknown-state)
+        (simulate-reset-chip-final-state))))
+
+(prove-lemma new-machine-state-invariant-is-non-trivial ()
+  (new-machine-state-invariant (unknown-machine-state))
+  ((disable-theory t)
+   (enable *1*new-machine-state-invariant
+           *1*unknown-machine-state)))
+
+(prove-lemma memory-v-fourp-implies-memory-properp (rewrite)
+  (implies (memory-v-fourp n width mem)
+           (memory-properp n width mem))
+  ((enable memory-properp)))
+
+(prove-lemma
+  new-machine-state-invariant-implies-machine-state-invariant
+  (rewrite)
+  (implies (new-machine-state-invariant machine-state)
+           (machine-state-invariant machine-state))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable new-machine-state-invariant machine-state-invariant
+           v-fourp-implies-properp
+           memory-v-fourp-implies-memory-properp)))
+
+;==============================
+
+;; Consider the lemma FM9001=CHIP-SYSTEM from "proofs.events".  We can
+;; replace the FM9001-STATEP hypothesis in that lemma with a
+;; MEMORY-OKP hypothesis for the class of machine states we are
+;; considering, i.e., those obtained at the end of the reset sequence.
+
+(prove-lemma fm9001-statep-implies-memory-ok-p-instance ()
+  (let ((state (map-up (list (initialized-machine-state) machine-memory))))
+    (implies (memory-okp 32 32 (cadr state))
+             (fm9001-statep state)))
+  ((enable *1*initialized-machine-state *1*fm9001-machine-statep)))
+
+;; Just a lemma along the way to FM9001=CHIP-SYSTEM-TRUE-AFTER-RESET.
+
+(prove-lemma fm9001=chip-system-true-after-reset-lemma (rewrite)
+  (let ((state (map-up (list (initialized-machine-state) machine-memory))))
+    (implies (and (chip-system& netlist)
+                  ;;(fm9001-statep state)
+                  (memory-okp 32 32 (cadr state))
+                  (chip-system-operating-inputs-p
+                   inputs 
+                   (total-microcycles (map-down state) 
+                                      (map-up-inputs inputs) 
+                                      n)) 
+                  (operating-inputs-p
+                   (map-up-inputs inputs) 
+                   (total-microcycles (map-down state) 
+                                      (map-up-inputs inputs) 
+                                      n))) 
+             (equal (fm9001 state n) 
+                    (map-up
+                     (simulate-dual-eval-2
+                      'chip-system inputs
+                      (map-down state)
+                      netlist 
+                      (total-microcycles (map-down state) 
+                                         (map-up-inputs inputs) 
+                                         n))))))
+  ((use (fm9001=chip-system
+         (state (map-up (list (initialized-machine-state) machine-memory))))
+        (fm9001-statep-implies-memory-ok-p-instance))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable fm9001-statep
+           properp length
+           length-cons length-bottom
+           properp-cons properp-nlistp)))
+
+(prove-lemma map-down-inverts-map-up (rewrite)
+  (let ((machine-memory
+         (list memory 0 0 0 t t (make-list 32 f) (make-list 32 (x)))))
+    (let ((state (map-up (list (initialized-machine-state) machine-memory))))
+      (implies (memory-okp 32 32 (cadr state))
+               (equal (map-down state)
+                      (list (initialized-machine-state) machine-memory))))))
+
+(prove-lemma cadr-map-up ()
+  (equal (cadr (map-up (list s mem)))
+         (car mem)))
+
+;; Here is a statement of FM9001=CHIP-SYSTEM, which, when combined
+;; with the reset lemma
+;; XS-SUFFICE-FOR-RESET-CHIP-FINAL-STATE-FOR-ANY-UNKNOWN-STATE-BETTER
+;; above, says that the chip implements its specification assuming
+;; that we attach the memory after the reset process.  This is a
+;; general statement; without a particular memory design, it seems
+;; difficult to come up with a statement that is much ``better'' than
+;; this one.
+
+(prove-lemma fm9001=chip-system-true-after-reset (rewrite)
+  (let ((machine-memory
+         (list memory 0 0 0 t t (make-list 32 f) (make-list 32 (x)))))
+    (let ((state (map-up (list (initialized-machine-state) machine-memory)))
+          (low-state (list (initialized-machine-state) machine-memory)))
+      (implies (and (chip-system& netlist)
+                    (memory-okp 32 32 memory)
+                    (chip-system-operating-inputs-p
+                     inputs 
+                     (total-microcycles low-state 
+                                        (map-up-inputs inputs) 
+                                        n)) 
+                    (operating-inputs-p
+                     (map-up-inputs inputs) 
+                     (total-microcycles low-state 
+                                        (map-up-inputs inputs) 
+                                        n))) 
+               (equal (fm9001 state n) 
+                      (map-up
+                       (simulate-dual-eval-2
+                        'chip-system inputs
+                        low-state
+                        netlist 
+                        (total-microcycles low-state 
+                                           (map-up-inputs inputs) 
+                                           n)))))))
+  ((use (fm9001=chip-system-true-after-reset-lemma
+         (machine-memory
+          (list memory 0 0 0 t t (make-list 32 f) (make-list 32 (x)))))
+        (cadr-map-up
+         (s (initialized-machine-state))
+         (mem (list memory 0 0 0 t t (make-list 32 f) (make-list 32 (x))))))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable map-down-inverts-map-up cadr-map-up)))
+
+(disable map-down-inverts-map-up)
+
+;; Let us compensate now for the corresponding two enables
+;; appearing above.
+
+(disable b-knownp)
+(disable b-approx)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Final Statements
+;;;
+;;;    Below are our most general statements about the correctness of the
+;;;    FM9001 microprocessor.
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  Some of the earlier lemmas were written in terms of SIMULATE.  Since we
+;;;  are only interested in the final state, we show that SIMULATE contains
+;;;  SIMULATE-DUAL-EVAL-2. 
+
+(prove-lemma simulate-contains-simulate-dual-eval-2 ()
+  (implies
+   (and (not (zerop n))
+        (leq n (length inputs)))
+   (equal (cadr (nth (sub1 n) (simulate fn inputs state netlist)))
+          (simulate-dual-eval-2 fn inputs state netlist n)))
+  ;;Hint
+  ((induct (simulate-dual-eval-2 fn inputs state netlist n))
+   (enable simulate simulate-dual-eval-2)))
+
+(prove-lemma length-reset-sequence-chip-1 (rewrite)
+  (equal (length (reset-sequence-chip-1))
+         20))
+
+;;;   RESET-CHIP shows that CHIP can be reset from a completely unknown state. 
+
+(prove-lemma reset-chip ()
+  (equal (simulate-dual-eval-2
+          'chip
+          (reset-sequence-chip-1)
+          (unknown-machine-state)
+          (chip$netlist)
+          (length (reset-sequence-chip-1)))
+         (initialized-machine-state))
+  ;;Hint
+  ((use (simulate-contains-simulate-dual-eval-2
+         (n (length (reset-sequence-chip-1)))
+         (inputs (reset-sequence-chip-1))
+         (fn 'chip)
+         (state (unknown-machine-state))
+         (netlist (chip$netlist)))
+        (simulate-reset-chip-final-state))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable final-state length-reset-sequence-chip-1)))
+
+;;;   RESET-CHIP-FROM-ANY-STATE shows that the machine can be reset from any
+;;;   state of the proper shape.
+
+(prove-lemma reset-chip-from-any-state ()
+  (implies
+   (and (s-approx (unknown-machine-state) any-state)
+        (good-s any-state))
+   (equal (simulate-dual-eval-2
+           'chip
+           (reset-sequence-chip-1)
+           any-state
+           (chip$netlist)
+           (length (reset-sequence-chip-1)))
+          (initialized-machine-state)))
+  ;;Hint
+  ((use (simulate-contains-simulate-dual-eval-2
+         (n (length (reset-sequence-chip-1)))
+         (inputs (reset-sequence-chip-1))
+         (fn 'chip)
+         (state (unknown-machine-state))
+         (netlist (chip$netlist)))
+        (simulate-contains-simulate-dual-eval-2
+         (n (length (reset-sequence-chip-1)))
+         (inputs (reset-sequence-chip-1))
+         (fn 'chip)
+         (state any-state)
+         (netlist (chip$netlist)))
+        (simulate-reset-chip-final-state)
+        (xs-suffice-for-reset-chip-lemma-instance
+         (state-2 any-state)))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable final-state length-reset-sequence-chip-1)))
+            
+;;;  CHIP-SYSTEM=FM9001-INTERPRETER$AFTER-RESET is the same as the lemma
+;;;  chip-system=fm9001-interpreter in "proofs.events", except that it's
+;;;  specialized to the case where the initial state is made up of the chip
+;;;  state after reset (i.e., (INITIALIZED-MACHINE-STATE)) together with an
+;;;  appropriate machine memory.  Thus, the hypothesis
+;;;  (fm9001-state-structure state) has been omitted and the rather
+;;;  elaborate hypothesis (macrocycle-invariant state) has been replaced by
+;;;  the much weaker hypothesis (memory-okp 32 32 memory).  We can do this
+;;;  because (INITIALIZED-MACHINE-STATE) satisfies the processor state
+;;;  portions of these two hypotheses.
+
+(prove-lemma chip-system=fm9001-interpreter$after-reset (rewrite)
+  (let
+    ((state
+      (list
+       (initialized-machine-state)
+       (list memory 0 clock 0 (x) t (make-list 32 f) (make-list 32 (x)))))) 
+    (let 
+      ((rtl-inputs (map-up-inputs inputs)))
+      (let
+        ((clock-cycles (total-microcycles state rtl-inputs instructions)))
+        (implies
+         (and (chip-system& netlist)
+              (memory-okp 32 32 memory)
+              (chip-system-operating-inputs-p inputs clock-cycles)
+              (operating-inputs-p rtl-inputs clock-cycles))
+         (equal (map-up (simulate-dual-eval-2
+                         'chip-system inputs state netlist clock-cycles))
+                (fm9001-interpreter
+                 (map-up state) (make-list 4 t) instructions))))))
+  ;;Hint
+  ((use (chip-system=fm9001-interpreter
+         (state
+          (list
+           (initialized-machine-state)
+           (list memory 0 clock 0 (x) t (make-list 32 f) (make-list 32 (x)))))
+         (pc (make-list 4 t))))
+   (disable chip-system=fm9001-interpreter)))

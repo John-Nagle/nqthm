@@ -1,0 +1,1211 @@
+#|
+ Copyright (C) 1994 by Ken Kunen.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Ken Kunen PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS
+ IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT
+ NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Ken Kunen BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+ PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+ LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+ BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+ DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+(boot-strap nqthm)    ; load initial database
+
+; This file was developed by Ken Kunen, kunen@cs.wisc.edu.  It checks
+; the fundamental theorem of arithmetic.  Unlike the proof in the book
+; A Compuational Logic and in the file basic.events, Kunen's proof does not
+; need auxilliary functions, e.g., gcd.  Why should one be interested
+; in this matter?
+
+; In full first order logic, one can show that definitions are
+; unnecessary, both in the ``use sense'' that they are ``eliminable''
+; from theorems in which they occur and in the ``unnecessary'' sense
+; that anything that can be proved with a definition (whose statement
+; does not involve that definition) can be proved without the
+; definition.
+
+; However, NQTHM does not provide the full power of first order logic.
+; It remains an open question, can any Nqthm theorem be proved without
+; the definition of concepts not used in the theorem?  Kunen did the
+; job for prime factorization.  Can someone else do the job for, say,
+; Wilson's theorem?
+
+; Foregoing comments by Robert S. Boyer
+
+; file basic4 -- proof of prime-factorization uniqueness
+; no definitions needed except those used to state the theorem,
+; EXCEPT the identically 0 function kludge used to 
+; force the correct induction.
+; events in caps were just copied from basic.events
+; no attemt to be elegant here, but it works
+; time on decstation3100:  [ 22.7 1448.2 29.1 ]
+
+
+
+;;;;;;;;;;;  basic defns -- needed to state the uniqueness of prime fact.
+
+(DEFN DIVIDES (X Y)
+    (ZEROP (REMAINDER Y X)))
+
+    (DEFN PRIME1 (X Y)
+      (IF (ZEROP Y)
+          F
+          (IF (EQUAL Y 1)
+              T
+              (AND (NOT (DIVIDES Y X))
+                   (PRIME1 X (SUB1 Y))))))
+
+    (DEFN PRIME (X)
+      (AND (NOT (ZEROP X))
+           (NOT (EQUAL X 1))
+           (PRIME1 X (SUB1 X))))
+
+
+    (DEFN DELETE (X Y)
+      (IF (LISTP Y)
+          (IF (EQUAL X (CAR Y))
+              (CDR Y)
+              (CONS (CAR Y)
+                    (DELETE X (CDR Y))))
+          Y))
+
+
+    (DEFN PERM (A B)
+      (IF (NLISTP A)
+          (NLISTP B)
+          (IF (MEMBER (CAR A)
+                      B)
+              (PERM (CDR A)
+                    (DELETE (CAR A)
+                            B))
+              F)))
+
+    (DEFN PRIME-LIST (L)
+      (IF (NLISTP L)
+          T
+          (AND (PRIME (CAR L))
+               (PRIME-LIST (CDR L)))))
+
+    (DEFN TIMES-LIST (L)
+      (IF (NLISTP L)
+          1
+          (TIMES (CAR L)
+                 (TIMES-LIST (CDR L)))))
+
+; end defns
+; THE GOAL
+;    (PROVE-LEMMA PRIME-FACTORIZATION-UNIQUENESS NIL
+;                (IMPLIES (AND (PRIME-LIST L1)
+;                              (PRIME-LIST L2)
+;                              (EQUAL (TIMES-LIST L1)
+;                                     (TIMES-LIST L2)))
+;                         (PERM L1 L2)))
+; 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;   Basic facts about +, *, -
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+    (PROVE-LEMMA PLUS-RIGHT-ID2 (REWRITE)
+                 (IMPLIES (NOT (NUMBERP Y))
+                          (EQUAL (PLUS X Y)
+                                 (FIX X))))
+    (PROVE-LEMMA PLUS-ADD1 (REWRITE)
+                 (EQUAL (PLUS X (ADD1 Y))
+                        (IF (NUMBERP Y)
+                            (ADD1 (PLUS X Y))
+                            (ADD1 X))))
+    (PROVE-LEMMA COMMUTATIVITY2-OF-PLUS (REWRITE)
+                 (EQUAL (PLUS X (PLUS Y Z))
+                        (PLUS Y (PLUS X Z)))) 
+    (PROVE-LEMMA COMMUTATIVITY-OF-PLUS (REWRITE)
+                 (EQUAL (PLUS X Y)
+                        (PLUS Y X)))
+    (PROVE-LEMMA ASSOCIATIVITY-OF-PLUS (REWRITE)
+                 (EQUAL (PLUS (PLUS X Y)
+                              Z)
+                        (PLUS X (PLUS Y Z)))) 
+    (PROVE-LEMMA PLUS-EQUAL-0 (REWRITE)
+                 (EQUAL (EQUAL (PLUS A B)
+                               0)
+                        (AND (ZEROP A)
+                             (ZEROP B))))
+    (PROVE-LEMMA DIFFERENCE-X-X (REWRITE)
+                 (EQUAL (DIFFERENCE X X)  0))
+    (PROVE-LEMMA DIFFERENCE-PLUS (REWRITE)
+                 (AND (EQUAL (DIFFERENCE (PLUS X Y)
+                                         X)
+                             (FIX Y))
+                      (EQUAL (DIFFERENCE (PLUS Y X)
+                                         X)
+                             (FIX Y))))
+    (PROVE-LEMMA PLUS-CANCELLATION (REWRITE)
+                 (EQUAL (EQUAL (PLUS A B)
+                               (PLUS A C))
+                        (EQUAL (FIX B) (FIX C))))
+    (PROVE-LEMMA DIFFERENCE-0 (REWRITE)
+                 (IMPLIES (NOT (LESSP Y X))
+                          (EQUAL (DIFFERENCE X Y)
+                                 0)))
+    (PROVE-LEMMA EQUAL-DIFFERENCE-0 (REWRITE)
+                 (EQUAL (EQUAL 0 (DIFFERENCE X Y))
+                        (NOT (LESSP Y X))))
+    (PROVE-LEMMA DIFFERENCE-CANCELLATION-0 (REWRITE)
+                 (EQUAL (EQUAL X (DIFFERENCE X Y))
+                        (AND (NUMBERP X)
+                             (OR (EQUAL X 0)
+                                 (ZEROP Y)))))
+    (PROVE-LEMMA DIFFERENCE-CANCELLATION-1 (REWRITE)
+                 (EQUAL (EQUAL (DIFFERENCE X Y)
+                               (DIFFERENCE Z Y))
+                        (IF (LESSP X Y)
+                            (NOT (LESSP Y Z))
+                            (IF (LESSP Z Y)
+                                (NOT (LESSP Y X))
+                                (EQUAL (FIX X)
+                                       (FIX Z))))))
+
+
+    (PROVE-LEMMA TIMES-ZERO2 (REWRITE)
+                 (IMPLIES (NOT (NUMBERP Y))
+                          (EQUAL (TIMES X Y)
+                                 0)))
+    (PROVE-LEMMA DISTRIBUTIVITY-OF-TIMES-OVER-PLUS (REWRITE)
+                 (EQUAL (TIMES X (PLUS Y Z))
+                        (PLUS (TIMES X Y)
+                              (TIMES X Z))))
+    (PROVE-LEMMA TIMES-ADD1 (REWRITE)
+                 (EQUAL (TIMES X (ADD1 Y))
+                        (IF (NUMBERP Y)
+                            (PLUS X (TIMES X Y))
+                            (FIX X))))
+    (PROVE-LEMMA COMMUTATIVITY-OF-TIMES (REWRITE)
+                 (EQUAL (TIMES X Y)
+                        (TIMES Y X)))
+    (PROVE-LEMMA COMMUTATIVITY2-OF-TIMES (REWRITE)
+                 (EQUAL (TIMES X (TIMES Y Z))
+                        (TIMES Y (TIMES X Z))))
+    (PROVE-LEMMA ASSOCIATIVITY-OF-TIMES (REWRITE)
+                 (EQUAL (TIMES (TIMES X Y)
+                               Z)
+                        (TIMES X (TIMES Y Z))))
+    (PROVE-LEMMA EQUAL-TIMES-0 (REWRITE)
+                 (EQUAL (EQUAL (TIMES X Y)
+                               0)
+                        (OR (ZEROP X)
+                            (ZEROP Y))))
+
+    (PROVE-LEMMA EQUAL-LESSP (REWRITE)
+                 (EQUAL (EQUAL (LESSP X Y)
+                               Z)
+                        (IF (LESSP X Y)
+                            (EQUAL T Z)
+                            (EQUAL F Z))))
+    (PROVE-LEMMA DIFFERENCE-ELIM (ELIM)
+                 (IMPLIES (AND (NUMBERP Y)
+                               (NOT (LESSP Y X)))
+                          (EQUAL (PLUS X (DIFFERENCE Y X))
+                                 Y)))
+
+    (PROVE-LEMMA LESSP-TIMES-1 (REWRITE)
+                 (IMPLIES (NOT (ZEROP I))
+                          (NOT (LESSP (TIMES I J)
+                                      J))))
+    (PROVE-LEMMA LESSP-TIMES-2 (REWRITE)
+                 (IMPLIES (NOT (ZEROP I))
+                          (NOT (LESSP (TIMES J I)
+                                      J))))
+
+
+    (PROVE-LEMMA DIFFERENCE-PLUS1 (REWRITE)
+                 (EQUAL (DIFFERENCE (PLUS X Y)
+                                    X)
+                        (FIX Y)))
+    (PROVE-LEMMA DIFFERENCE-PLUS2 (REWRITE)
+                 (EQUAL (DIFFERENCE (PLUS Y X)
+                                    X)
+                        (FIX Y)))
+    (PROVE-LEMMA DIFFERENCE-PLUS-CANCELATION (REWRITE)
+                 (EQUAL (DIFFERENCE (PLUS X Y)
+                                    (PLUS X Z))
+                        (DIFFERENCE Y Z)))
+    (PROVE-LEMMA TIMES-DIFFERENCE (REWRITE)
+                 (EQUAL (TIMES X (DIFFERENCE C W))
+                        (DIFFERENCE (TIMES C X)
+                                    (TIMES W X))))
+
+
+    (PROVE-LEMMA DIFFERENCE-PLUS3 (REWRITE)
+                 (EQUAL (DIFFERENCE (PLUS B (PLUS A C))
+                                    A)
+                        (PLUS B C)))
+
+    (PROVE-LEMMA DIFFERENCE-ADD1-CANCELLATION (REWRITE)
+                 (EQUAL (DIFFERENCE (ADD1 (PLUS Y Z))
+                                    Z)
+                        (ADD1 Y)))
+
+    (PROVE-LEMMA LESSP-PLUS-CANCELATION (REWRITE)
+                 (EQUAL (LESSP (PLUS X Y)
+                               (PLUS X Z))
+                        (LESSP Y Z)))
+
+    (PROVE-LEMMA LESSP-TIMES-CANCELLATION (REWRITE)
+                 (EQUAL (LESSP (TIMES X Z)
+                               (TIMES Y Z))
+                        (AND (NOT (ZEROP Z))
+                             (LESSP X Y))))
+    (PROVE-LEMMA LESSP-PLUS-CANCELLATION3 (REWRITE)
+                 (EQUAL (LESSP Y (PLUS X Y))
+                        (NOT (ZEROP X))))
+
+    (PROVE-LEMMA TIMES-ID-IFF-1 (REWRITE)
+                 (EQUAL (EQUAL Z (TIMES W Z))
+                        (AND (NUMBERP Z)
+                             (OR (EQUAL Z 0)
+                                 (EQUAL W 1)))))
+
+
+    (PROVE-LEMMA TIMES-IDENTITY1 (REWRITE)
+                 (IMPLIES (AND (NUMBERP Y)
+                               (NOT (EQUAL Y 1))
+                               (NOT (EQUAL Y 0))
+                               (NOT (EQUAL X 0)))
+                          (NOT (EQUAL X (TIMES X Y)))))
+    (PROVE-LEMMA TIMES-IDENTITY (REWRITE)
+                 (EQUAL (EQUAL X (TIMES X Y))
+                        (OR (EQUAL X 0)
+                            (AND (NUMBERP X)
+                                 (EQUAL Y 1)))))
+
+    (PROVE-LEMMA TIMES-EQUAL-1 (REWRITE)
+                 (EQUAL (EQUAL (TIMES A B)
+                               1)
+                        (AND (NOT (EQUAL A 0))
+                             (NOT (EQUAL B 0))
+                             (NUMBERP A)
+                             (NUMBERP B)
+                             (EQUAL (SUB1 A)
+                                    0)
+                             (EQUAL (SUB1 B)
+                                    0))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;  List facts -- pure lists only
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    (PROVE-LEMMA DELETE-NON-MEMBER (REWRITE)
+                 (IMPLIES (NOT (MEMBER X Y))
+                          (EQUAL (DELETE X Y)
+                                 Y)))
+    (PROVE-LEMMA MEMBER-DELETE (REWRITE)
+                 (IMPLIES (MEMBER X (DELETE U V))
+                          (MEMBER X V)))
+    (PROVE-LEMMA COMMUTATIVITY-OF-DELETE (REWRITE)
+                 (EQUAL (DELETE X (DELETE Y Z))
+                        (DELETE Y (DELETE X Z))))
+
+    (PROVE-LEMMA LESSP-COUNT-DELETE (REWRITE)
+                 (IMPLIES (MEMBER N L)
+                          (LESSP (COUNT (DELETE N L))
+                                 (COUNT L))))
+
+;;; ok to here -- save as basic4a
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;  Quotients, Remainders, Divisibility
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;   !!!!!!!  this one is really important
+    (PROVE-LEMMA REMAINDER-QUOTIENT (REWRITE)
+                 (EQUAL (PLUS (REMAINDER X Y)
+                              (TIMES Y (QUOTIENT X Y)))
+                        (FIX X)))
+
+
+
+    (PROVE-LEMMA REMAINDER-WRT-1 (REWRITE)
+                 (EQUAL (REMAINDER Y 1)
+                        0))
+    (PROVE-LEMMA REMAINDER-WRT-12 (REWRITE)
+                 (IMPLIES (NOT (NUMBERP X))
+                          (EQUAL (REMAINDER Y X)
+                                 (FIX Y))))
+    (PROVE-LEMMA LESSP-REMAINDER2 (REWRITE GENERALIZE)
+                 (EQUAL (LESSP (REMAINDER X Y)
+                               Y)
+                        (NOT (ZEROP Y))))
+    (PROVE-LEMMA REMAINDER-X-X (REWRITE)
+                 (EQUAL (REMAINDER X X)
+                        0))
+    (PROVE-LEMMA REMAINDER-QUOTIENT-ELIM (ELIM)
+                 (IMPLIES (AND (NOT (ZEROP Y))
+                               (NUMBERP X))
+                          (EQUAL (PLUS (REMAINDER X Y)
+                                       (TIMES Y (QUOTIENT X Y)))
+                                 X)))
+
+
+    (PROVE-LEMMA LESSP-QUOTIENT1 (REWRITE)
+                 (EQUAL (LESSP (QUOTIENT I J)
+                               I)
+                        (AND (NOT (ZEROP I))
+                             (OR (ZEROP J)
+                                 (NOT (EQUAL J 1))))))
+    (PROVE-LEMMA LESSP-REMAINDER1 (REWRITE)
+                 (EQUAL (LESSP (REMAINDER X Y)
+                               X)
+                        (AND (NOT (ZEROP Y))
+                             (NOT (ZEROP X))
+                             (NOT (LESSP X Y)))))
+
+
+    (PROVE-LEMMA DIVIDES-TIMES (REWRITE)
+                 (EQUAL (REMAINDER (TIMES X Z)
+                                   Z)
+                        0))
+
+    (PROVE-LEMMA REMAINDER-ADD1 (REWRITE)
+                 (IMPLIES
+                   (AND (NOT (ZEROP Y))
+                        (NOT (EQUAL Y 1)))
+                   (NOT (EQUAL (REMAINDER (ADD1 (TIMES X Y))
+                                          Y)
+                               0))))
+    (PROVE-LEMMA DIVIDES-PLUS-REWRITE1 (REWRITE)
+                 (IMPLIES (AND (EQUAL (REMAINDER X Z)
+                                      0)
+                               (EQUAL (REMAINDER Y Z)
+                                      0))
+                          (EQUAL (REMAINDER (PLUS X Y)
+                                            Z)
+                                 0)))
+    (PROVE-LEMMA DIVIDES-PLUS-REWRITE2 (REWRITE)
+                 (IMPLIES (AND (EQUAL (REMAINDER X Z)
+                                      0)
+                               (NOT (EQUAL (REMAINDER Y Z)
+                                           0)))
+                          (NOT (EQUAL (REMAINDER (PLUS X Y)
+                                                 Z)
+                                      0))))
+    (PROVE-LEMMA DIVIDES-PLUS-REWRITE (REWRITE)
+                 (IMPLIES (EQUAL (REMAINDER X Z)
+                                 0)
+                          (EQUAL (EQUAL (REMAINDER (PLUS X Y)
+                                                   Z)
+                                        0)
+                                 (EQUAL (REMAINDER Y Z)
+                                        0))))
+
+    (PROVE-LEMMA DIVIDES-PLUS-REWRITE-COMMUTED (REWRITE)
+                 (IMPLIES (EQUAL (REMAINDER X Z)
+                                 0)
+                          (EQUAL (EQUAL (REMAINDER (PLUS Y X)
+                                                   Z)
+                                        0)
+                                 (EQUAL (REMAINDER Y Z)
+                                        0))))
+    (PROVE-LEMMA EUCLID (REWRITE)
+                 (IMPLIES
+                   (EQUAL (REMAINDER X Z)
+                          0)
+                   (EQUAL (EQUAL (REMAINDER (DIFFERENCE Y X)
+                                            Z)
+                                 0)
+                          (IF (LESSP X Y)
+                              (EQUAL (REMAINDER Y Z)
+                                     0)
+                              T))))
+
+
+    (PROVE-LEMMA REMAINDER-0-CROCK (REWRITE)
+                 (EQUAL (REMAINDER 0 Y)
+                        0)
+                 NIL
+;   We have to prove this to get (REMAINDER 1 Y) to open in GREATEST-FACTOR-1.
+;   If CURRENT-CL moved we wouldn't have to do it.
+                 )
+
+
+    (PROVE-LEMMA QUOTIENT-TIMES1 (REWRITE)
+                 (IMPLIES (AND (NUMBERP Y)
+                               (NUMBERP X)
+                               (NOT (EQUAL X 0))
+                               (DIVIDES X Y))
+                          (EQUAL (TIMES X (QUOTIENT Y X))
+                                 Y)))
+    (PROVE-LEMMA QUOTIENT-LESSP (REWRITE)
+                 (IMPLIES (AND (NOT (ZEROP X))
+                               (LESSP X Y))
+                          (NOT (EQUAL (QUOTIENT Y X)
+                                      0))))
+
+    (PROVE-LEMMA DIVIDES-TIMES1 (REWRITE)
+                 (IMPLIES (EQUAL A (TIMES Z Y))
+                          (EQUAL (REMAINDER A Z)
+                                 0)))
+
+    (PROVE-LEMMA
+      QUOTIENT-DIVIDES
+      (REWRITE)
+      (IMPLIES (AND (NUMBERP Y)
+                    (NOT (EQUAL (TIMES X (QUOTIENT Y X))
+                                Y)))
+               (NOT (EQUAL (REMAINDER Y X)
+                           0))))
+
+    (PROVE-LEMMA QUOTIENT-TIMES (REWRITE)
+                 (EQUAL (QUOTIENT (TIMES Y X)
+                                  Y)
+                        (IF (ZEROP Y)
+                            0
+                            (FIX X))))
+    (PROVE-LEMMA DISTRIBUTIVITY-OF-DIVIDES (REWRITE)
+                 (IMPLIES (AND (NOT (ZEROP A))
+                               (DIVIDES A W))
+                          (EQUAL (TIMES C (QUOTIENT W A))
+                                 (QUOTIENT (TIMES C W)
+                                           A))))
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;  Times-list and Prime-list facts -- only stuff that
+;;;  doesn't depend on meaning of "prime"
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    (PROVE-LEMMA TIMES-LIST-APPEND (REWRITE)
+                 (EQUAL (TIMES-LIST (APPEND X Y))
+                        (TIMES (TIMES-LIST X)
+                               (TIMES-LIST Y))))
+
+    (PROVE-LEMMA PRIME-LIST-APPEND (REWRITE)
+                 (EQUAL (PRIME-LIST (APPEND X Y))
+                        (AND (PRIME-LIST X)
+                             (PRIME-LIST Y))))
+
+
+    (PROVE-LEMMA PRIME-LIST-DELETE (REWRITE)
+                 (IMPLIES (PRIME-LIST L2)
+                          (PRIME-LIST (DELETE X L2))))
+
+;  ok to here -- save as "basic4b"
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;  Primes and their properties
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; as far as possible, try to express theorems in terms of 
+; divisibility, rather than remainder=0 -- then, in later lemmas,
+; we don't have to expand DIVIDES
+; ????????? actually, that's not so clear -- divides is still
+; expanded, even when it's disabled
+
+(prove-lemma primes-are-big ()  (implies
+        (prime p) 
+        (equal (lessp 1 p) T)))
+
+(prove-lemma little-step-aux1 (rewrite)  
+        (implies 
+                (and (prime1 p z) (lessp 1 y) (leq y z) )
+                (not (divides y p)))
+        ; hints -- don't expand divides -- just use defn of prime1 induct on z 
+        ( (disable divides )))
+
+(prove-lemma little-step-aux2 (rewrite)  
+        (implies 
+                (and (prime p) (lessp 1 y) (lessp y p) )
+                (not (divides y p)))
+        ; hints -- this is trivial by previous lemma
+        ( (use (little-step-aux1 (p p) (z (sub1 p))))
+        (disable little-step-aux1)))
+
+(prove-lemma little-step-aux3 ()  
+        (implies 
+                (and (lessp 1 p) (lessp 1 y) (divides y p) )
+                (leq y p)))
+
+(prove-lemma little-step (rewrite)  ; revised from basic.events LITTLE-STEP
+        (implies 
+                (and (prime p) (lessp 1 y) (not (equal y p)) )
+                (not (divides y p)))
+        ; hints -- just use propositional logic -- by cases
+        ( (use (little-step-aux3 (p p) (y y))(little-step-aux2 (p p) (y y)))
+        (disable little-step-aux2)    ))
+                        
+
+(prove-lemma exact-remainder-quotient (rewrite) (implies
+        (and (numberp x) (divides p x))
+        (equal (times p (quotient x p))    x))  )
+
+(prove-lemma divides-product-aux1 (rewrite) (implies
+        (divides p x)
+        (equal
+                (times x y)
+                (times p (times (quotient x p) y)  ))))
+
+(prove-lemma divides-product-aux2 (rewrite) (equal
+        (divides p (times p w))
+        T )
+        ; hints -- trivial using DIVIDES-TIMES
+        (
+        (use (DIVIDES-TIMES (Z p) (X w)))
+        (disable DIVIDES-TIMES)
+        (do-not-induct T)
+))
+
+(prove-lemma divides-product (rewrite) (implies
+        (divides p x)
+        (divides p (times x y))  )
+        ; hints -- just use auxilliary lemmas
+        (
+        (do-not-induct T)
+        (use (divides-product-aux1 (x x) (y y) (p p))
+                (divides-product-aux2 (p p) (w (times (quotient x p) y))))
+        (disable divides-product-aux1 divides-product-aux2)
+))
+
+
+; ok to here -- saved as basic4c
+
+(prove-lemma divides-sum (rewrite) (implies
+        (and
+                (divides p (plus u v))
+                (divides p v) )
+        (divides p u)))
+; really just a restatement of DIVIDES-PLUS-REWRITE
+
+(prove-lemma divides-reduction-aux1 (rewrite) (implies
+        (lessp 1 p)  ; we only plan to use this for primes
+        (equal
+                (plus 
+                        (remainder p b)
+                        (times b (quotient p b)))
+                p ))  )
+; just a restatement of REMAINDER-QUOTIENT
+
+; now, multiply on left by a:
+(prove-lemma divides-reduction-aux2 (rewrite) (implies
+        (lessp 1 p)  ; we only plan to use this for primes
+        (equal
+                (plus 
+                        (times a (remainder p b))
+                        (times a (times b (quotient p b))))
+                (times a p) ))  )
+
+; since p divides a*p: 
+(prove-lemma divides-reduction-aux3 (rewrite) (implies
+    (lessp 1 p)  ; we only plan to use this for primes
+    (divides p
+        (plus
+            (times a (remainder p b))
+            (times a (times b (quotient p b))))  )))
+
+; now, if p divides a*b, it divides the second term
+(prove-lemma divides-reduction-aux4 (rewrite) (implies
+        (divides p (times a b))
+        (divides p (times a (times b anything))))
+        ; hint -- don't induct -- just use algebra
+        (
+        (do-not-induct T)
+        (use (divides-product (p p) (x (times a b)) (y anything)))
+        (disable divides-product)
+))
+
+
+; hence:
+(prove-lemma divides-reduction (rewrite) (implies
+        (and
+                (lessp 1 p)  ; we only plan to use this for primes
+                (divides p (times a b)))
+        (divides p (times a (remainder p b)))) 
+        ; hints -- just apply the auxilliary lemmas in the obvious way
+        (
+        (do-not-induct T)
+        (use (divides-reduction-aux3 (p p) (a a) (b b))
+                (divides-reduction-aux4 (p p) (a a) (b b) (anything (quotient p b)))
+                (divides-sum (p p) (u (times a (remainder p b)))
+                        (v (times a (times b (quotient p b))))))
+        (disable divides-reduction-aux3 divides-reduction-aux4
+                divides-sum divides-reduction-aux2)
+)) 
+; point of this lemma -- it reduces b to a smaller b', so induction can be used
+
+; basis for induction:
+(prove-lemma prime-divides-small-product-aux1 (rewrite) (implies
+        (divides p (times a 1))
+        (divides p a)))
+; ok
+
+(prove-lemma prime-divides-small-product-aux2 (rewrite) (implies
+        (and
+                (prime p)
+                (lessp 1 b) (lessp b p) )   
+        (lessp 0 (remainder p b)) )
+        ; hints
+        ( (use (little-step (p p) (y b)))
+        (disable little-step)))
+; just a restatement of little-step
+
+; ok to here -- save as "basic4d"
+
+
+; goal -- prime-divides-small-product is of form:
+; (prime p) --> phi(b,p,a)
+; we want to prove a lemma saying (prime p) & not(phi(b,p,a)) -->
+; remainder(p,b) < b  and not(phi(remainder(p,b),p,a))
+; phi is: not( b<p  and 0<b  and divides(p, a*b) and not(divides(p, a)))
+; we can't seem to prove the induction lemma all in one step
+
+(prove-lemma prime-divides-small-product-aux3 (rewrite) (implies
+        (lessp 0 b)
+        (or (lessp 1 b) (equal 1 b))))
+; ok
+
+(prove-lemma prime-divides-small-product-aux4 () (implies
+        (and
+                (lessp 0 b)
+                (divides p (times a b))
+                (not (divides p a))  )
+        (lessp 1 b)))
+; ok
+; i.e., the the induction lemma is trivial unless 1<b
+
+(prove-lemma prime-divides-small-product-aux5 () (implies
+        (and
+                (prime p)
+                (lessp 1 b) )
+        (lessp (remainder p b) b) ))
+; ok
+
+(prove-lemma prime-divides-small-product-aux6 () (implies
+        (and
+                (prime p)
+                (lessp 1 b)
+                (lessp b p))
+        (lessp 0 (remainder p b))))
+; ok
+
+(prove-lemma prime-divides-small-product-aux7 () (implies
+        (and
+                (prime p)
+                (lessp 1 b)
+                (lessp b p))
+        (lessp (remainder p b) p) ))
+; ok
+
+(prove-lemma prime-divides-small-product-aux8 () (implies
+        (and
+                (prime p)
+                (lessp 1 b)
+                (lessp b p)
+                (divides p (times a b))
+                (not (divides p a))  )
+        (and
+                (lessp (remainder p b) b)  ; aux5
+                (lessp 0 (remainder p b))  ; aux6
+                (lessp (remainder p b) p)  ; aux7
+                (divides p (times a (remainder p b)))   ; divides-reduction
+                (not (divides p a))  ))           ; tautology
+        ; hints
+        (
+        (use
+                (prime-divides-small-product-aux5 (a a) (b b) (p p))
+                (prime-divides-small-product-aux6 (a a) (b b) (p p))
+                (prime-divides-small-product-aux7 (a a) (b b) (p p))
+                (divides-reduction (a a) (b b) (p p))
+        )
+        (disable
+                prime-divides-small-product-aux5
+                prime-divides-small-product-aux6
+                prime-divides-small-product-aux7
+                divides-reduction
+        )
+))
+; trivially rewrites to T, after 166.6 seconds !!!!!!!!
+
+; the induction lemma -- same as above, but with 1 replaced by 0
+(prove-lemma prime-divides-small-product-aux9 () (implies (and
+                (prime p)
+                (lessp 0 b)
+                (lessp b p)
+                (divides p (times a b))
+                (not (divides p a))  )
+        (and
+                (lessp (remainder p b) b)
+                (lessp 0 (remainder p b))
+                (lessp (remainder p b) p)
+                (divides p (times a (remainder p b)))
+                (not (divides p a))  )  )
+        ; hints
+        (
+        (use
+                (prime-divides-small-product-aux8 (a a) (b b) (p p))
+                        ; same thing, assuming 1<b
+                (prime-divides-small-product-aux4 (a a) (b b) (p p))
+                        ; i.e., actually, 1 < b
+        )
+        (disable
+                prime-divides-small-product-aux8
+                prime-divides-small-product-aux4
+        )
+))
+; rewrites trivially to T after 76.3 sec
+
+
+; we still have to force nqthm to do the right induction
+
+(defn kludge (b p) (if
+        (not (prime p)) 0
+        (if (not (lessp 0 b)) 0
+        (kludge (remainder p b) p))))
+; always returns 0, but now we can use it in an induct hint
+
+(prove-lemma prime-divides-small-product (rewrite) (implies
+        (and
+                (prime p)
+                (divides p (times a b))
+                (lessp 0 b) (lessp b p) )   ; of course, these last two can be weakened
+        (divides p a)  )  
+        ; hints -- do the natural induction
+        (
+        (do-not-generalize T)
+        (induct (kludge b p))
+        ;  (hands-off (divides p a) (divides p (times a b)))
+        (use (prime-divides-small-product-aux9 (a a)(b b)(p p) )  )
+        (disable  prime-divides-small-product-aux9 )
+))
+; ok after 199.1 sec -- probably phrasing some of the auxilliary
+; lemmas as rewrite rules would have helped speed things up
+
+;;; ok to here -- save as basic4e
+
+; now, try to replace (b < p) by (not (divides p b))
+; idea -- if p divdes a*b, then p divides a*(b mod p) -- if  b mod p 
+; isn't 0, then it's between 0 and p, so apply prime-divides-small-product
+
+; first step -- prove a variant of divides-reduction, but replacing
+; (remainder p b) by (remainder b p)
+; i.e.  : divides p (a * b) --> divides p (a * remainder b p)
+; say, 
+; plan
+; remainder b p + p * b/p  = fix( b)    (REMAINDER-QUOTENT)
+;  a * remainder b p + a * ( p * b/p) = a * b
+
+
+(prove-lemma divides-reduction-var-aux1 (rewrite)  (implies
+        (numberp b)  ; we only care about numbers here
+        (equal
+                (plus
+                        (times a (remainder b p))
+                        (times a (times p (quotient b p))))
+                (times a b))))
+
+(prove-lemma divides-reduction-var-aux2 (rewrite) 
+        (divides p (times p anything)))
+
+(prove-lemma divides-reduction-var-aux3 (rewrite) (equal
+        (times a (times p anything))
+        (times p (times a anything))))
+
+(prove-lemma divides-reduction-var-aux4 (rewrite) 
+        (divides p (times a (times p anything)))
+        ; hints
+        (
+        (do-not-induct T)
+        (use (divides-reduction-var-aux2 (p p) (anything (times a anything)))
+                (divides-reduction-var-aux3 (p p) (anything anything) (a a)))
+        (disable divides-reduction-var-aux2 divides-reduction-var-aux3)
+                        
+))
+
+(prove-lemma divides-reduction-var (rewrite)  (implies
+        (and
+                (numberp b)  ; we only care about numbers here
+                (divides p (times a b)))
+        (divides p (times a (remainder b p))))
+        ; hints
+        (
+        (do-not-induct T)
+        (use (divides-reduction-var-aux1 (p p) (b b)) ;deleted second (p p) rsb
+                (divides-reduction-var-aux4 (p p) (anything (quotient b p)) (a a))
+                (divides-sum 
+                        (u (times a (remainder b p))) 
+                        (v (times a (times p (quotient b p)))))  )
+        (disable divides-reduction-var-aux1 divides-reduction-var-aux4
+                divides-sum)
+))
+
+
+; ok to here -- save as basic4f
+
+(prove-lemma prime-divides-product-aux1 (rewrite) (implies
+        (not (equal (remainder b p) 0))
+        (equal
+                (lessp 0 (remainder b p)) T) ) )
+
+(prove-lemma prime-divides-product-aux2 (rewrite) (implies
+        (prime p)
+        (equal
+                (lessp (remainder b p) p) 
+                T) ))
+
+
+(prove-lemma prime-divides-product (rewrite) (implies
+        (and
+                (prime p)
+                (divides p (times a b))
+                (not (divides p b)))
+        (divides p a)  )   
+        ; hints
+        (
+        (do-not-induct T)
+        (use 
+                (prime-divides-small-product (a a) (p p) (b (remainder b p)))
+                (divides-reduction-var (a a) (b b) (p p))  )
+        (disable prime-divides-small-product divides-reduction-var)
+))
+;;;;;;;;  THIS is the key lemma -- the rest should be just list-hacking
+
+(prove-lemma car-divides-times-list (rewrite) (implies
+        (listp L)
+        (divides (car L) (times-list L))))
+
+(prove-lemma divides-equal (rewrite) (implies
+        (and (prime p) (prime q) (divides p q))
+        (equal (equal p q) T ))
+        ; hints
+        (
+        (use (little-step (p p) (y q)) (little-step (p q) (y p)))
+        (disable little-step)
+))
+
+; following should be trivial by times-divides-product
+(prove-lemma prime-divides-list-aux1 (rewrite) (implies
+        (and
+                (prime-list L) (prime p) (listp L) 
+                (divides p (times-list L))
+                (not (divides p (times-list (cdr L)))))
+        (divides p (car L)))
+        ; hints -- this should be trivial, if we disable enough stuff
+        (
+        (use (prime-divides-product (a (car L)) (b (times-list (cdr L)))))
+        (disable prime-divides-product prime-divides-small-product-aux2
+                exact-remainder-quotient difference-0 quotient-divides remainder)
+))
+
+(disable prime-divides-small-product-aux1)
+(disable prime-divides-small-product-aux2)
+(disable prime-divides-small-product )
+; these auxilliaries are getting in the way
+
+(prove-lemma prime-divides-list-aux2 (rewrite) (implies
+        (and
+                (prime-list L) (prime p) (listp L) 
+                (divides p (times-list L))
+                (not (divides p (times-list (cdr L)))))
+        (equal (car L) p) )
+        ; hints
+        (
+        (use 
+                (divides-equal (p p) (q (car L)))
+                (prime-divides-list-aux1 (p p) (L L)))
+        (disable divides-equal prime-divides-list-aux1 quotient-divides )
+))
+; ok
+
+(disable prime-divides-list-aux1)
+
+; basis of induction
+(prove-lemma prime-divides-list-aux3 (rewrite) (implies
+        (and
+                 (prime p) (nlistp L) )
+        (not (divides p (times-list L)))))
+; ok
+
+
+; so it can see the trivial induction:
+(prove-lemma prime-divides-list-aux4 () (implies
+        (and
+                (prime-list L) (prime p) 
+                (divides p (times-list L)))
+        (and
+                (listp L)
+                (or
+                        (equal (car L) p)
+                        (divides p (times-list (cdr L))))))
+        ; hints
+        (
+        (use 
+                (prime-divides-list-aux3 (p p) (L L))
+                (prime-divides-list-aux2 (p p) (L L)) )
+        (disable quotient-divides  divides-equal little-step-aux1
+                prime-divides-list-aux3 
+                prime-divides-list-aux2 )
+
+))
+; ok
+(disable prime-divides-list-aux2)
+(disable prime-divides-list-aux3)
+
+; now, by a simple induction on L:
+(prove-lemma prime-divides-list (rewrite) (implies
+        (and
+                (prime-list L) (prime p) 
+                (divides p (times-list L)))
+        (member p L))  
+        ; hints
+        (
+        (induct (prime-list L))
+        (use (prime-divides-list-aux4 (p p) (L L)))
+        (disable quotient-divides prime1 divides-product divides-equal times
+                remainder)
+))
+; ok
+
+
+;;; two lemmas from basic.events now follow trivially
+
+    (PROVE-LEMMA PRIME-LIST-TIMES-LIST (REWRITE)
+                 (IMPLIES
+                   (AND (PRIME C)
+                        (PRIME-LIST L2)
+                        (NOT (MEMBER C L2)))
+                   (NOT (EQUAL (REMAINDER (TIMES-LIST L2)
+                                          C)
+                               0))))
+
+
+    (PROVE-LEMMA PRIME-MEMBER (REWRITE)
+                           (IMPLIES (AND (EQUAL (TIMES C (TIMES-LIST L1))
+                                                (TIMES-LIST L2))
+                                         (PRIME C)
+                                         (PRIME-LIST L2))
+                                    (MEMBER C L2))
+                           ((DISABLE TIMES)))
+
+;;;;; some more lemmas about lists and producs
+
+; this is the base case in PRIME-FACTORIZATION-UNIQUENESS
+(prove-lemma void-case (rewrite) (implies
+        (and
+                (prime-list L)
+                (equal 1 (times-list L)))
+        (nlistp L))
+        ; hints
+        (
+        (do-not-induct T)
+        (use (primes-are-big (p (car L))))
+))
+; ok
+
+(prove-lemma product-delete (rewrite) (implies
+        (member x L)
+        (equal
+                (times-list L)
+                (times x (times-list (delete x L)))))
+        ; hints
+        (
+        (disable divides-equal)
+))
+; ok
+
+
+(prove-lemma times-cancellation () (implies
+        (and
+                (lessp 0 p)
+                (equal (times p x) (times p y)))
+        (equal (fix x) (fix y)))
+        ; hints
+        (
+        (do-not-induct T)
+        (use
+                (quotient-times (y p) (x x))
+                (quotient-times (y p) (x y))  )
+        (disable quotient-times divides-equal)
+))
+; ok
+
+(prove-lemma number-times-cancellation (rewrite) (implies
+        (and
+                (numberp x) (numberp y)
+                (lessp 0 p)
+                (equal (times p x) (times p y)))
+        (equal (equal x y) T) )
+        ; hints
+        (
+        (do-not-induct T)
+        (use (times-cancellation (p p) (x x) (y y)))
+))
+; ok
+
+(prove-lemma products-are-numbers (rewrite) (equal
+        (numberp (times-list L))   T))
+; ok
+
+; changed
+(prove-lemma divide-by-member-aux1 () (implies
+        (and 
+                (member p L)  
+                (equal (times p x) (times-list L)))
+        (equal (times p (times-list (delete p L))) (times p x)))   
+        ; hints
+        (
+        (do-not-induct T)
+        (use (product-delete (x p) (L L)))
+        (disable quotient-divides divides-equal number-times-cancellation
+                product-delete)
+))
+; ok
+
+; next is just a kludge to force final rewrite
+; with hypotheses stated in exact form required
+(prove-lemma divide-by-member-aux2 (rewrite) (implies
+        (and 
+                (equal (times p x) (times-list L))
+                (numberp x)
+                (not (equal p 0))
+                (numberp p)
+                (equal (times-list L)
+                        (times p (times-list (delete p L))))  )
+        (equal (times-list (delete p L)) x))   
+        ; hints
+        (
+        (use (number-times-cancellation (p p) (x (times-list (delete p L))) (y x)))
+        (disable divides-equal number-times-cancellation)
+))   
+
+; trivially, we should have now:
+(prove-lemma divide-by-member (rewrite) (implies
+        (and 
+                (numberp x)
+                (member p L)  (lessp 0 p)
+                (equal (times p x)  (times-list L)   ) )
+        (equal (times-list (delete p L))  x) )    
+        ; hints
+        (
+        (do-not-induct T)
+        (use (divide-by-member-aux1 (p p) (x x) (L L)))
+        (disable quotient-divides prime-divides-list product-delete
+                prime-member  divides-equal)
+        ;; (hands-off (times-list L)) -- commented out by MK
+))
+; ok
+
+(prove-lemma divide-by-prime-member-aux1 (rewrite) (implies
+        (and 
+                (prime-list L)
+                (member p L)  )
+        (prime p) )
+        ; hints -- do the trivial induction, and don't rewrite anything
+        (
+        (induct (prime-list L))
+        (disable prime prime1 quotient-divides)
+))
+
+; since primes are positive:
+(prove-lemma divide-by-prime-member (rewrite) (implies
+        (and 
+                (numberp x)
+                (prime-list L)
+                (member p L)  
+                (equal (times p x) (times-list L)))
+        (equal (times-list (delete p L)) x))  
+; hints
+(
+(do-not-induct T)
+(use (primes-are-big (p p)))
+(disable prime lessp-times-2 divides-equal prime-divides-list quotient-divides
+        product-delete)
+))
+; ok
+
+; should handle induction case in prime factorization uniqueness
+(prove-lemma reduct-product (rewrite) (implies
+        (and
+                (prime-list L1) (prime-list L2)
+                (equal (times-list L1) (times-list L2))
+                (listp L1)
+                (member (car L1) L2)  )
+        (equal 
+                (times-list (delete (car L1) L2))
+                (times-list (cdr L1)))  )
+        ; hints
+        (
+        (use (divide-by-prime-member (x (times-list (cdr L1))) (p (car L1))
+                (L L2)))
+        (disable divides-equal prime1 divide-by-prime-member-aux1 product-delete 
+                times divide-by-prime-member)
+        (do-not-induct T)
+))
+; ok
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; On to the goal:
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(disable divides-equal)
+(disable divide-by-prime-member-aux1)
+
+(prove-lemma prime-factorization-uniqueness-aux1 () (implies 
+        (and
+                (prime-list L)
+                (listp L))
+        (lessp 1 (times-list L))))
+
+; a trivial variant:
+(prove-lemma prime-factorization-uniqueness-aux2 () (implies 
+        (and
+                (prime-list L)
+                (equal 1 (times-list L)))
+        (not (listp L)))
+        ; hints
+        (
+        (use (prime-factorization-uniqueness-aux1 (L L)))
+))
+
+(disable product-delete)
+
+; seems to require some hints in our present setting
+    (PROVE-LEMMA PRIME-FACTORIZATION-UNIQUENESS NIL
+                 (IMPLIES (AND (PRIME-LIST L1)
+                               (PRIME-LIST L2)
+                               (EQUAL (TIMES-LIST L1)
+                                      (TIMES-LIST L2)))
+                          (PERM L1 L2)) 
+        ; hints
+        (
+        (use (prime-factorization-uniqueness-aux2 (L L2)))
+        (induct (perm L1 L2))
+        (disable quotient-divides prime prime1)
+))
+
+
+
+
+
+
+
+

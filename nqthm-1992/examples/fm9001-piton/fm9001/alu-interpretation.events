@@ -1,0 +1,1042 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    ALU-INTERPRETATION.EVENTS
+;;;    
+;;;  Proofs of correctness of V-ALU.  The lemmas proven here mirror the lemmas
+;;;  proven in the FM8501/FM8502 efforts.  These lemmas are actually proofs
+;;;  about the behavioral level specification; that is, these lemmas show that
+;;;  the ALU correctly performs various arithmetic operations when the bit
+;;;  vector inputs are viewed as integers and natural numbers.
+;;;
+;;;  Proofs by Matt Kaufmann
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;; Table of contents
+
+;; I.   *PRELIMINARIES*
+;;      A.  V-BUF
+
+;; II.  *NATURALS*
+;;      A. USEFUL LEMMAS for naturals case
+;;      B. V-ADDER
+;;      C. V-INC
+;;      D. V-SUBTRACTER
+;;      E. V-DEC
+;;      F. V-LSR
+;;      G.  CORRECTNESS -- natural number case
+
+;; III. *INTEGERS*
+;;      A. USEFUL LEMMAS for integers case
+;;      B. V-ADDER
+;;      C. V-INC
+;;      D. V-SUBTRACTER
+;;      E. V-DEC
+;;      F. V-ASR
+;;      G. V-NEG
+;;      H.  CORRECTNESS -- integers case
+
+;; IV.  *FINAL DISABLES*
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;               *PRELIMINARIES*               ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn b-to-nat (c)
+  (if c 1 0))
+
+(disable v-adder-output=v-sum)
+(disable v-adder-carry-out=v-carry)
+
+(prove-lemma bvp-cdr (rewrite)
+  ;; for speed
+  (implies (and (bvp x) (listp x))
+           (bvp (cdr x))))
+
+(deftheory integer-metas
+  (correctness-of-cancel-ineg
+   correctness-of-cancel-iplus
+   correctness-of-cancel-iplus-ilessp
+   correctness-of-cancel-itimes
+   correctness-of-cancel-itimes-ilessp
+   correctness-of-cancel-itimes-factors
+   correctness-of-cancel-itimes-ilessp-factors
+   correctness-of-cancel-factors-0
+   correctness-of-cancel-factors-ilessp-0
+   correctness-of-cancel-ineg-terms-from-equality
+   correctness-of-cancel-ineg-terms-from-inequality
+   ))
+
+(disable correctness-of-cancel-ineg)
+(disable correctness-of-cancel-iplus)
+(disable correctness-of-cancel-iplus-ilessp)
+(disable correctness-of-cancel-itimes)
+(disable correctness-of-cancel-itimes-ilessp)
+(disable correctness-of-cancel-itimes-factors)
+(disable correctness-of-cancel-itimes-ilessp-factors)
+(disable correctness-of-cancel-factors-0)
+(disable correctness-of-cancel-factors-ilessp-0)
+(disable correctness-of-cancel-ineg-terms-from-equality)
+(disable correctness-of-cancel-ineg-terms-from-inequality)
+
+(deftheory naturals-metas
+  (correctness-of-cancel-equal-plus
+   correctness-of-cancel-difference-plus
+   correctness-of-cancel-lessp-plus
+   correctness-of-cancel-lessp-times
+   correctness-of-cancel-equal-times
+   correctness-of-cancel-quotient-times))
+
+(disable correctness-of-cancel-equal-plus)
+(disable correctness-of-cancel-difference-plus)
+(disable correctness-of-cancel-lessp-plus)
+(disable correctness-of-cancel-lessp-times)
+(disable correctness-of-cancel-equal-times)
+(disable correctness-of-cancel-quotient-times)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                    V-BUF                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-int-buf (a)
+  (cvzbv f f a))
+
+(prove-lemma v-alu-correct-nat-int-buf (rewrite)
+  (implies (bvp a)
+           (equal (cvzbv f f (v-buf a))
+                  (v-alu-nat-int-buf a))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                  *NATURALS*                 ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;       USEFUL LEMMAS for naturals case       ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-nat-adder-carry-out
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma nth-length-v (rewrite)
+  (implies (and (bvp bv)
+                (equal (length bv) (add1 n)))
+           (equal (nth n bv)
+                  (not (lessp (v-to-nat bv)
+                              (exp 2 n)))))
+  ((enable v-to-nat nth)
+   (induct (nth n bv))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-nat-adder-output
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; In order to prove v-to-nat-firstn, we need some
+;;; lemmas about remainder, which I'll do myself rather than adapting
+;;; them from bv-to-nat-of-trunc in fm8502, because I don't want to
+;;; work on re-creating that environment.
+
+(prove-lemma remainder-plus-multiple nil
+  (implies (and (lessp z1 y1)
+                (equal (remainder a y1) 0))
+           (equal (remainder (plus z1 a)
+                             y1)
+                  (fix z1))))
+
+(prove-lemma divides-plus-plus (rewrite)
+  (implies (equal (remainder x y) 0)
+           (equal (remainder (plus x x) (plus y y)) 0)))
+
+(prove-lemma v-to-nat-firstn-hack1 (rewrite)
+  (implies (lessp z y)
+           (equal (remainder (plus z z (times w y) (times w y))
+                             (plus y y))
+                  (plus z z)))
+  ((use (remainder-plus-multiple
+         (y1 (plus y y))
+         (z1 (plus z z))
+         (a (plus (times w y) (times w y)))))
+   (disable-theory t)
+   (enable-theory ground-zero naturals)
+   (enable divides-plus-plus)))
+
+(prove-lemma remainder-add1-plus-multiple nil
+  (implies (and (lessp (add1 z1) y1)
+                (equal (remainder a y1) 0))
+           (equal (remainder (add1 (plus z1 a))
+                             y1)
+                  (add1 z1)))
+  ((use (remainder-plus-multiple
+         (z1 (add1 z1))))))
+
+(prove-lemma v-to-nat-firstn-hack2 (rewrite)
+  (implies (lessp z y)
+           (equal (remainder (add1 (plus z z (times d y) (times d y)))
+                             (plus y y))
+                  (add1 (plus z z))))
+  ((use (remainder-add1-plus-multiple
+         (y1 (plus y y))
+         (z1 (plus z z))
+         (a (plus (times d y) (times d y)))))
+   (disable-theory t)
+   (enable-theory ground-zero naturals)
+   (enable divides-plus-plus)))
+
+(prove-lemma v-to-nat-firstn (rewrite)
+  ;; adapted from fm8502 lemma bv-to-nat-of-trunc
+  (equal (v-to-nat (firstn n v))
+         (remainder (v-to-nat v) (exp 2 n)))
+  ((enable v-to-nat firstn)))
+
+(disable v-to-nat-firstn-hack1)
+(disable v-to-nat-firstn-hack2)
+
+(prove-lemma v-to-nat-of-nat-to-v-hack (rewrite)
+  (implies
+   (lessp v (exp 2 x))
+   (equal (remainder (add1 (plus v v
+                                 (times w (exp 2 x))
+                                 (times w (exp 2 x))))
+                     (plus (exp 2 x) (exp 2 x)))
+          (add1 (plus v v))))
+  ((use (remainder-plus-multiple
+         (y1 (plus (exp 2 x) (exp 2 x)))
+         (z1 (add1 (plus v v)))
+         (a (plus (times w (exp 2 x)) (times w (exp 2 x))))))
+   (disable-theory t)
+   (enable-theory ground-zero naturals)
+   (enable divides-plus-plus)))
+
+(prove-lemma v-to-nat-of-nat-to-v (rewrite)
+  (equal (v-to-nat (nat-to-v n len))
+         (remainder n (exp 2 len)))
+  ((enable v-to-nat nat-to-v)
+   (induct (nat-to-v n len))))
+
+(prove-lemma remainder-plus-x-x-2 (rewrite)
+             (equal (remainder (plus x x) 2)
+                    0)
+             ((induct (plus x q))))
+
+(prove-lemma quotient-plus-x-x-2 (rewrite)
+             (equal (quotient (plus x x) 2)
+                    (fix x))
+             ((induct (plus x q))))
+
+(prove-lemma nat-to-v-plus-x-x (rewrite)
+  (equal (nat-to-v (plus x x) (add1 n))
+         (cons f (nat-to-v x n)))
+  ((enable nat-to-v)))
+
+(prove-lemma firstn-add1-cons (rewrite)
+  (equal (firstn (add1 n) (cons a x))
+         (cons a (firstn n x)))
+  ((enable firstn)))
+
+(prove-lemma firstn-zerop (rewrite)
+  (implies (zerop n)
+           (equal (firstn n x)
+                  nil))
+  ((enable firstn)))
+
+(prove-lemma firstn-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (firstn n x)
+                  nil))
+  ((enable firstn)))
+
+(prove-lemma nat-to-v-of-v-to-nat-general (rewrite)
+  (implies (and (bvp v)
+                (not (lessp (length v) n)))
+           (equal (nat-to-v (v-to-nat v) n)
+                  (firstn n v)))
+  ((enable v-to-nat nat-to-v)
+   (induct (firstn n v))))
+
+(prove-lemma firstn-length (rewrite)
+  (implies (properp x)
+           (equal (firstn (length x) x)
+                  x))
+  ((enable firstn)))
+
+(prove-lemma nat-to-v-of-v-to-nat (rewrite)
+  (implies (bvp v)
+           (equal (nat-to-v (v-to-nat v) (length v))
+                  v)))
+
+(prove-lemma nat-to-v-zerop (rewrite)
+  (implies (zerop len)
+           (equal (nat-to-v n len) nil))
+  ((enable nat-to-v)))
+
+(prove-lemma equal-nat-to-v-inverter-hack1 (rewrite)
+  (implies (and (numberp len)
+                (equal v (nat-to-v n len)))
+           (equal (equal (v-to-nat v)
+                         (remainder n (exp 2 len)))
+                  t)))
+
+(prove-lemma equal-nat-to-v-inverter-hack2-lemma nil
+  (implies (and (bvp v)
+                (equal (v-to-nat v)
+                       (remainder n (exp 2 len))))
+           (equal (equal (nat-to-v (v-to-nat v) len)
+                         (nat-to-v (remainder n (exp 2 len))
+                                   len))
+                  t)))
+
+(prove-lemma nat-to-v-remainder (rewrite)
+  (equal (nat-to-v (remainder n (exp 2 len))
+                   len)
+         (nat-to-v n len))
+  ((enable nat-to-v)))
+
+(prove-lemma equal-nat-to-v-inverter-hack2 (rewrite)
+  (implies (and (bvp v)
+                (equal (v-to-nat v)
+                       (remainder n (exp 2 (length v)))))
+           (equal (equal v (nat-to-v n (length v)))
+                  t))
+  ((use (equal-nat-to-v-inverter-hack2-lemma
+         (len (length v))))))
+
+(prove-lemma equal-nat-to-v-inverter (rewrite)
+  (iff (equal v (nat-to-v n len))
+       (and (bvp v)
+            (equal (length v) (fix len))
+            (equal (v-to-nat v) (remainder n (exp 2 len))))))
+
+(disable equal-nat-to-v-inverter-hack1)
+(disable equal-nat-to-v-inverter-hack2)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-nat-subtracter-carry-out
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma v-to-nat-v-not-lemma nil
+  (implies (bvp a)
+           (equal (plus (v-to-nat a) (v-to-nat (v-not a)))
+                  (sub1 (exp 2 (length a)))))
+  ((enable v-to-nat v-not)))
+
+(prove-lemma v-to-nat-v-not (rewrite)
+  (implies (bvp a)
+           (equal (v-to-nat (v-not a))
+                  (sub1 (difference (exp 2 (length a))
+                                    (v-to-nat a)))))
+  ((use (v-to-nat-v-not-lemma))))
+
+(prove-lemma lessp-v-to-nat-exp (rewrite)
+  (implies (bvp a)
+           (lessp (v-to-nat a)
+                  (exp 2 (length a))))
+  ((enable v-to-nat length)))
+
+(prove-lemma equal-iff (rewrite)
+  (implies (and (boolp x) (boolp y))
+           (equal (equal x y)
+                  (iff x y)))
+  ((enable boolp)))
+
+(disable equal-iff)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-nat-subtracter-output
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma v-alu-correct-nat-subtracter-output-lemma (rewrite)
+  (implies (and (lessp a-nat bound)
+                (lessp b-nat bound))
+           (equal (plus b-nat
+                        (sub1 (difference bound a-nat)))
+                  (sub1 (difference (plus b-nat bound)
+                                    a-nat)))))
+
+(prove-lemma lessp-v-to-nat-exp-rewrite (rewrite)
+  ;; should be useful when len is (length b), arising from hyp. (bv2p a b)
+  (implies (and (bvp a) (equal (length a) len))
+           (equal (lessp (v-to-nat a)
+                         (exp 2 len))
+                  t)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-nat-lsr-output
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma not-lessp-quotient (rewrite)
+  (not (lessp n (quotient n k))))
+
+(prove-lemma v-to-nat-append (rewrite)
+  (implies (and (bvp a) (bvp b))
+           (equal (v-to-nat (append a b))
+                  (plus (v-to-nat a)
+                        (times (exp 2 (length a))
+                               (v-to-nat b)))))
+  ((enable v-to-nat)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                   V-ADDER                   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-adder-output (c a b)
+  ;; specification function for v-adder-output
+  (nat-to-v (remainder (plus (b-to-nat c) (v-to-nat a) (v-to-nat b))
+                       (exp 2 (length a)))
+            (length a)))
+
+(defn v-alu-nat-adder-carry-out (c a b)
+  ;; specification function for v-adder-carry-out
+  (not (lessp (plus (b-to-nat c) (v-to-nat a) (v-to-nat b))
+              (exp 2 (length a)))))
+
+(defn v-alu-nat-adder (c a b)
+  ;; specification function for cvzbv-v-adder
+  (cvzbv (v-alu-nat-adder-carry-out c a b)
+         ;; we don't have anything special to say about overflows in
+         ;; the natural number case
+         (v-adder-overflowp         c a b)
+         (v-alu-nat-adder-output    c a b)))
+
+(prove-lemma v-alu-correct-nat-adder-carry-out (rewrite)
+  (implies (bv2p a b)
+           (equal (v-adder-carry-out c a b)
+                  (v-alu-nat-adder-carry-out c a b))))
+
+(prove-lemma v-alu-correct-nat-adder-output (rewrite)
+  (implies (bv2p a b)
+           (equal (v-adder-output c a b)
+                  (v-alu-nat-adder-output c a b))))
+
+(prove-lemma v-alu-correct-nat-adder (rewrite)
+  (implies (bv2p a b)
+           (equal (cvzbv-v-adder c a b)
+                  (v-alu-nat-adder c a b)))
+  ((disable v-adder-carry-out v-adder-overflowp
+            v-adder-output v-alu-nat-adder-carry-out
+            v-alu-nat-adder-output)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                    V-INC                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-inc (a)
+  ;; specification function for cvzbv-inc -- it seems quite reasonable
+  ;; to use the specification function for the adder to express this
+  ;; property
+  (v-alu-nat-adder t a (nat-to-v 0 (length a))))
+
+(prove-lemma v-alu-correct-nat-inc (rewrite)
+  (implies (bvp a)
+           (equal (cvzbv-inc a)
+                  (v-alu-nat-inc a)))
+  ((disable v-alu-nat-adder cvzbv-v-adder)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                 V-SUBTRACTER                ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-subtracter-output (c a b)
+  ;; specification function for v-subtracter-output
+  ;; The idea here is that it's b - (c + a), but since we want
+  ;; to stay in the realm of the natural numbers, we add
+  ;; 2**n to be in order to be sure that this is a "proper"
+  ;; subtraction.
+  (nat-to-v (remainder (difference (plus (v-to-nat b) (exp 2 (length a)))
+                                   (plus (v-to-nat a) (b-to-nat c)))
+                       (exp 2 (length a)))
+            (length a)))
+
+(defn v-alu-nat-subtracter-carry-out (c a b)
+  ;; specification function for v-subtracter-carry-out
+  (lessp (v-to-nat b)
+         (plus (v-to-nat a) (b-to-nat c))))
+
+(defn v-alu-nat-subtracter (c a b)
+  ;; specification function for cvzbv-v-subtracter
+  (cvzbv (v-alu-nat-subtracter-carry-out c a b)
+         ;; we don't have anything special to say about overflows in
+         ;; the natural number case
+         (v-subtracter-overflowp         c a b)
+         (v-alu-nat-subtracter-output    c a b)))
+
+(prove-lemma v-alu-correct-nat-subtracter-carry-out (rewrite)
+  (implies (bv2p a b)
+           (equal (v-subtracter-carry-out c a b)
+                  (v-alu-nat-subtracter-carry-out c a b)))
+  ((enable equal-iff)))
+
+(prove-lemma v-alu-correct-nat-subtracter-output (rewrite)
+  (implies (bv2p a b)
+           (equal (v-subtracter-output c a b)
+                  (v-alu-nat-subtracter-output c a b))))
+
+(prove-lemma v-alu-correct-nat-subtracter (rewrite)
+  (implies (bv2p a b)
+           (equal (cvzbv-v-subtracter c a b)
+                  (v-alu-nat-subtracter c a b)))
+  ((disable v-subtracter-carry-out v-subtracter-overflowp
+            v-subtracter-output v-alu-nat-subtracter-carry-out
+            v-alu-nat-subtracter-output)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                    V-DEC                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-dec (a)
+  ;; specification function for cvzbv-dec -- it seems quite reasonable
+  ;; to use the specification function for the adder to express this
+  ;; property
+  (v-alu-nat-subtracter t (nat-to-v 0 (length a)) a))
+
+(prove-lemma v-alu-correct-nat-dec (rewrite)
+  (implies (bvp a)
+           (equal (cvzbv-dec a)
+                  (v-alu-nat-dec a)))
+  ((disable v-alu-nat-subtracter cvzbv-v-subtracter)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                     V-LSR                   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-lsr-output (a)
+  (nat-to-v (quotient (v-to-nat a) 2)
+            (length a)))
+
+(defn v-alu-nat-lsr-carry-out (a)
+  (not (equal (remainder (v-to-nat a) 2) 0)))
+
+(defn v-alu-nat-lsr (a)
+  (cvzbv (v-alu-nat-lsr-carry-out a)
+         ;; we don't have anything special to say about overflows in
+         ;; the natural number case
+         f
+         (v-alu-nat-lsr-output a)))
+
+(prove-lemma v-alu-correct-nat-lsr-carry-out (rewrite)
+  (implies (and (bvp a) (listp a))
+           (equal (nth 0 a)
+                  (v-alu-nat-lsr-carry-out a)))
+  ((enable nth v-to-nat)))
+
+(prove-lemma v-alu-correct-nat-lsr-output (rewrite)
+  (implies (bvp a)
+           (equal (v-lsr a)
+                  (v-alu-nat-lsr-output a)))
+  ((enable v-shift-right v-to-nat)))
+
+(prove-lemma v-alu-correct-nat-lsr (rewrite)
+  (implies (bvp a)
+           (equal (cvzbv-v-lsr a)
+                  (v-alu-nat-lsr a)))
+  ((disable v-alu-nat-lsr-carry-out v-alu-nat-lsr-output v-lsr)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                     V-NOT                   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat-not-output (a)
+  (nat-to-v (sub1 (difference (exp 2 (length a))
+                              (v-to-nat a)))
+            (length a)))
+
+(defn v-alu-nat-not (a)
+  (cvzbv f
+         f
+         (v-alu-nat-not-output a)))
+
+(prove-lemma v-alu-correct-nat-not-output (rewrite)
+  (implies (bvp a)
+           (equal (v-not a)
+                  (v-alu-nat-not-output a))))
+
+(prove-lemma v-alu-correct-nat-not (rewrite)
+  (implies (bvp a)
+           (equal (cvzbv-v-not a)
+                  (v-alu-nat-not a))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;      CORRECTNESS -- natural number case     ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-nat (c a b op)
+  (cond ((equal op #v0000) (v-alu-nat-int-buf a))
+        ((equal op #v0001) (v-alu-nat-inc a))
+        ((equal op #v0010) (v-alu-nat-adder c a b))
+        ((equal op #v0011) (v-alu-nat-adder f a b))
+        ((equal op #v0101) (v-alu-nat-dec a))
+        ((equal op #v0110) (v-alu-nat-subtracter c a b))
+        ((equal op #v0111) (v-alu-nat-subtracter f a b))
+        ((equal op #v1010) (v-alu-nat-lsr a))
+        ((equal op #v1110) (v-alu-nat-not a))
+        (t (v-alu c a b op))))
+
+(prove-lemma v-alu-correct-nat ()
+  (implies (bv2p a b)
+           (equal (v-alu c a b op)
+                  (v-alu-nat c a b op)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable v-alu v-alu-nat bv2p
+           v-alu-correct-nat-int-buf v-alu-correct-nat-adder
+           v-alu-correct-nat-inc v-alu-correct-nat-subtracter
+           v-alu-correct-nat-dec v-alu-correct-nat-lsr
+           v-alu-correct-nat-not)
+   (disable v-alu-nat-int-buf v-alu-nat-inc v-alu-nat-adder
+            v-alu-nat-dec v-alu-nat-subtracter v-alu-nat-lsr
+            v-alu-nat-not)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                  *INTEGERS*                 ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; My approach will be to think as little as possible about integers
+;; in general, but rather only to bother with two's complement integers,
+;; i.e. those that are in range.
+
+(defn int-to-v (i l)
+  ;; works even if i is as low as -2**l (inclusive), so that overflowing
+  ;; additions should be handled OK
+  (if (ilessp i 0)
+      (nat-to-v (iplus i (exp 2 l)) l)
+    (nat-to-v i l)))
+
+(defn v-to-int (v)
+  (if (lessp (v-to-nat v) (exp 2 (sub1 (length v))))
+      (v-to-nat v)
+    (idifference (v-to-nat v) (exp 2 (length v)))))
+
+(defn integer-in-rangep (i l)
+  (and (ileq (ineg (exp 2 (sub1 l))) i)
+       (ilessp i (exp 2 (sub1 l)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;       USEFUL LEMMAS for integers case       ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-int-adder-overflowp
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma iplus-plus (rewrite)
+  (implies (and (numberp x) (numberp y))
+           (equal (iplus x y) (plus x y)))
+  ((enable iplus)))
+
+(prove-lemma ilessp-lessp (rewrite)
+  (implies (and (numberp x) (numberp y))
+           (equal (ilessp x y) (lessp x y)))
+  ((enable ilessp)))
+
+(prove-lemma times-2 (rewrite)
+  ;; **** probably don't need this
+  (equal (times 2 x) (plus x x)))
+
+(prove-lemma b-to-nat-leq (rewrite)
+  ;; **** can probably get rid of this if I don't disable b-to-nat in
+  ;; proofs below
+  (not (lessp 1 (b-to-nat x))))
+
+(prove-lemma lessp-v-to-nat-exp-with-exp-opened (rewrite)
+  (implies (and (bvp a) (equal (length a) (length b))
+                (not (equal (length b) 0)))
+           (lessp (v-to-nat a)
+                  (plus (exp 2 (sub1 (length b))) (exp 2 (sub1 (length b))))))
+  ((use (lessp-v-to-nat-exp))
+   (disable lessp-v-to-nat-exp-rewrite)))
+
+(prove-lemma fix-int-numberp (rewrite)
+  (implies (numberp x)
+           (equal (fix-int x) x))
+  ((enable-theory integer-defns)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-int-adder-output
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma iplus3-plus-difference (rewrite)
+  (implies (and (numberp c0) (numberp a0) (numberp b0) (numberp d)
+                (not (lessp (plus c0 a0 b0) d)))
+           (equal (iplus c0 (iplus a0 (iplus b0 (ineg d)))) 
+                  (difference (plus c0 a0 b0) d)))
+  ((enable-theory integer-defns)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-int-subtracter-overflowp
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma v-to-int-v-not (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (v-to-int (v-not a))
+                  (iplus -1 (ineg (v-to-int a)))))
+  ((enable-theory integer-defns)))
+
+(disable v-alu-correct-nat-not-output)
+
+(prove-lemma v-alu-correct-int-subtracter-overflowp-lemma (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (iplus (b-to-nat (b-not c))
+                         (iplus (v-to-int (v-not a))
+                                (v-to-int b)))
+                  (idifference (v-to-int b)
+                               (iplus (v-to-int a) (b-to-nat c)))))
+  ((enable-theory integer-defns)
+   (disable v-to-int)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; lemmas for v-alu-correct-int-asr-output
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma idifference-difference (rewrite)
+  (implies (and (numberp x) (numberp y) (not (lessp x y)))
+           (and (equal (iplus x (ineg y))
+                       (difference x y))
+                (equal (iplus (ineg y) x)
+                       (difference x y))))
+  ((enable-theory integer-defns)))
+
+(prove-lemma idiv-quotient (rewrite)
+  (implies (and (numberp x) (numberp y))
+           (equal (idiv x y)
+                  (quotient x y)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma idiv-ilessp-0 (rewrite)
+  (implies (and (numberp y)
+                (not (equal y 0)))
+           (equal (ilessp (idiv x y) 0)
+                  (ilessp x 0)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma quotient-plus-x-x-2-with-extra-arg (rewrite)
+  (equal (quotient (plus x x y) 2)
+         (plus x (quotient y 2)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable plus-add1)))
+
+(prove-lemma plus-quotient-2-lemma (rewrite)
+  (equal (quotient (plus v (times 2 z)) 2)
+         (plus z (quotient v 2))))
+
+(prove-lemma plus-quotient-2 (rewrite)
+  (implies (not (lessp a0 exp))
+           (equal (plus exp
+                        (quotient (difference a0 exp) 2))
+                  (quotient (plus a0 exp) 2)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable quotient-plus-x-x-2-with-extra-arg
+           lessp-remainder remainder-quotient-elim difference-elim
+           associativity-of-plus plus-quotient-2-lemma
+           commutativity-of-plus commutativity2-of-plus)))
+
+(prove-lemma iplus-div-hack1 (rewrite)
+  (implies (and (numberp a0) (numberp exp))
+           (equal (iplus (idiv (iplus a0
+                                      (ineg exp))
+                               2)
+                         exp)
+                  (quotient (plus a0 exp) 2)))
+  ((enable-theory integer-defns)))
+
+(disable quotient-plus-x-x-2-with-extra-arg)
+(disable plus-quotient-2-lemma)
+(disable plus-quotient-2)
+
+(prove-lemma lessp-quotient-2 (rewrite)
+  (iff (lessp (quotient x 2) y)
+       (lessp x (plus y y))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                   V-ADDER                   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-adder-output (c a b)
+  ;; specification function for v-adder-output
+  (int-to-v (iplus (b-to-nat c) (iplus (v-to-int a) (v-to-int b)))
+           (length a)))
+
+(defn v-alu-int-adder-overflowp (c a b)
+  (not (integer-in-rangep
+        (iplus (b-to-nat c) (iplus (v-to-int a) (v-to-int b)))
+        (length a))))
+
+(defn v-alu-int-adder (c a b)
+  ;; specification function for cvzbv-v-adder
+  (cvzbv (v-adder-carry-out         c a b)
+         (v-alu-int-adder-overflowp c a b)
+         (v-alu-int-adder-output    c a b)))
+
+(prove-lemma v-alu-correct-int-adder-overflowp (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (v-adder-overflowp c a b)
+                  (v-alu-int-adder-overflowp c a b)))
+  ((enable-theory integer-metas naturals-metas)
+   (disable v-adder-output b-to-nat)))
+
+(prove-lemma v-alu-correct-int-adder-output (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (v-adder-output c a b)
+                  (v-alu-int-adder-output c a b)))
+  ((enable-theory integer-metas naturals-metas)
+   (disable v-adder-output b-to-nat)))
+
+(prove-lemma v-alu-correct-int-adder (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (cvzbv-v-adder c a b)
+                  (v-alu-int-adder c a b)))
+  ((disable v-adder-carry-out v-adder-overflowp
+            v-adder-output v-alu-int-adder-overflowp
+            v-alu-int-adder-output
+            v-alu-correct-nat-adder)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                    V-INC                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-inc (a)
+  ;; specification function for cvzbv-inc -- it seems quite reasonable
+  ;; to use the specification function for the adder to express it
+  (v-alu-int-adder t a (int-to-v 0 (length a))))
+
+(prove-lemma v-alu-correct-int-inc (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (cvzbv-inc a)
+                  (v-alu-int-inc a)))
+  ((disable v-alu-correct-nat-inc v-alu-int-adder cvzbv-v-adder)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                 V-SUBTRACTER                ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-subtracter-output (c a b)
+  ;;   The idea is that it's b - (c + a).
+  (int-to-v (idifference (v-to-int b)
+                        (iplus (v-to-int a) (b-to-nat c)))
+           (length a)))
+
+(defn v-alu-int-subtracter-overflowp (c a b)
+  (not (integer-in-rangep
+        (idifference (v-to-int b)
+                     (iplus (v-to-int a) (b-to-nat c)))
+        (length a))))
+
+(defn v-alu-int-subtracter (c a b)
+  (cvzbv (v-subtracter-carry-out         c a b)
+         (v-alu-int-subtracter-overflowp c a b)
+         (v-alu-int-subtracter-output    c a b)))
+
+(prove-lemma v-alu-correct-int-subtracter-overflowp (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (v-subtracter-overflowp c a b)
+                  (v-alu-int-subtracter-overflowp c a b)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable bv2p v-alu-correct-int-adder-overflowp
+           bvp-v-not length-v-not v-alu-int-adder-overflowp
+           v-alu-int-subtracter-overflowp v-subtracter-overflowp
+           v-alu-correct-int-subtracter-overflowp-lemma)))
+
+(prove-lemma v-alu-correct-int-subtracter-output (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (v-subtracter-output c a b)
+                  (v-alu-int-subtracter-output c a b)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable v-subtracter-output v-alu-correct-int-adder-output
+           v-alu-int-subtracter-output v-alu-int-adder-output
+           v-alu-correct-int-subtracter-overflowp-lemma
+           length-v-not bv2p bvp-v-not)))
+
+(prove-lemma v-alu-correct-int-subtracter (rewrite)
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (cvzbv-v-subtracter c a b)
+                  (v-alu-int-subtracter c a b)))
+  ((disable v-subtracter-carry-out v-subtracter-overflowp
+            v-subtracter-output v-alu-int-subtracter-overflowp
+            v-alu-int-subtracter-output
+            v-alu-correct-nat-subtracter-carry-out
+            v-alu-correct-nat-subtracter)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                    V-DEC                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-dec (a)
+  ;; specification function for cvzbv-dec -- it seems quite reasonable
+  ;; to use the specification function for the adder to express it
+  (v-alu-int-subtracter t (int-to-v 0 (length a)) a))
+
+(prove-lemma v-alu-correct-int-dec (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (cvzbv-dec a)
+                  (v-alu-int-dec a)))
+  ((disable v-alu-int-subtracter cvzbv-v-subtracter
+            v-alu-correct-nat-dec v-alu-correct-nat-subtracter)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                     V-ASR                   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-asr-output (a)
+  (int-to-v (idiv (v-to-int a) 2)
+           (length a)))
+
+(defn v-alu-int-asr (a)
+  (cvzbv (v-alu-nat-lsr-carry-out a);; same as lsr case
+         f
+         (v-alu-int-asr-output a)))
+
+(prove-lemma v-alu-correct-int-asr-output (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (v-asr a)
+                  (v-alu-int-asr-output a)))
+  ((enable-theory integer-metas naturals-metas)
+   (enable v-shift-right v-to-nat)))
+
+(prove-lemma v-alu-correct-int-asr (rewrite)
+  (implies (bvp a)
+           (equal (cvzbv-v-asr a)
+                  (v-alu-int-asr a)))
+  ((disable v-alu-nat-lsr-carry-out v-alu-nat-lsr-output v-lsr)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                    V-NEG                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-neg (a)
+  (v-alu-int-subtracter f a (int-to-v 0 (length a))))
+
+(prove-lemma v-alu-correct-int-neg (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (cvzbv-neg a)
+                  (v-alu-int-neg a)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable *1*ilessp cvzbv-neg v-alu-int-neg int-to-v
+           v-alu-correct-int-subtracter bv2p bvp-nat-to-v
+           length-nat-to-v)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                     V-NOT                   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int-not-output (a)
+  (v-alu-int-subtracter-output t a (int-to-v 0 (length a))))
+
+(defn v-alu-int-not (a)
+  (cvzbv f f (v-alu-int-not-output a)))
+
+(prove-lemma v-alu-correct-int-not-output (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (v-not a)
+                  (v-alu-int-not-output a)))
+  ((disable-theory t)
+   (enable-theory ground-zero integer-defns naturals)
+   (enable lessp-v-to-nat-exp
+           v-to-nat-of-nat-to-v length-nat-to-v
+           v-alu-correct-nat-not-output
+           v-alu-nat-not-output
+           v-alu-int-not-output
+           v-alu-int-subtracter-output
+           int-to-v v-to-int
+           idifference ileq b-to-nat *1*b-to-nat)))
+
+(prove-lemma v-alu-correct-int-not (rewrite)
+  (implies (and (bvp a)
+                (not (equal (length a) 0)))
+           (equal (cvzbv-v-not a)
+                  (v-alu-int-not a))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;         CORRECTNESS -- integer case         ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-alu-int (c a b op)
+  (cond ((equal op #v0000) (v-alu-nat-int-buf a))
+        ((equal op #v0001) (v-alu-int-inc a))
+        ((equal op #v0010) (v-alu-int-adder c a b))
+        ((equal op #v0011) (v-alu-int-adder f a b))
+        ((equal op #v0100) (v-alu-int-neg a))
+        ((equal op #v0101) (v-alu-int-dec a))
+        ((equal op #v0110) (v-alu-int-subtracter c a b))
+        ((equal op #v0111) (v-alu-int-subtracter f a b))
+        ((equal op #v1001) (v-alu-int-asr a))
+        ((equal op #v1110) (v-alu-int-not a))
+        (t (v-alu c a b op))))
+
+(prove-lemma v-alu-correct-int ()
+  (implies (and (bv2p a b)
+                (not (equal (length a) 0)))
+           (equal (v-alu c a b op)
+                  (v-alu-int c a b op)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable v-alu v-alu-int bv2p
+           v-alu-correct-nat-int-buf v-alu-correct-int-adder
+           v-alu-correct-int-inc v-alu-correct-int-subtracter
+           v-alu-correct-int-dec v-alu-correct-int-asr
+           v-alu-correct-int-neg v-alu-correct-int-not)
+   (disable v-alu-nat-int-buf v-alu-int-inc v-alu-int-adder
+            v-alu-int-dec v-alu-int-subtracter v-alu-int-asr
+            v-alu-correct-nat)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;               *FINAL DISABLES*              ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(disable v-alu-correct-nat-int-buf)
+(disable v-alu-correct-nat-adder-carry-out)
+(disable v-alu-correct-nat-adder-output)
+(disable v-alu-correct-nat-adder)
+(disable v-alu-correct-nat-inc)
+(disable v-alu-correct-nat-subtracter-carry-out)
+(disable v-alu-correct-nat-subtracter-output)
+(disable v-alu-correct-nat-subtracter)
+(disable v-alu-correct-nat-dec)
+(disable v-alu-correct-nat-lsr-carry-out)
+(disable v-alu-correct-nat-lsr-output)
+(disable v-alu-correct-nat-lsr)
+(disable v-alu-correct-nat-not-output)
+(disable v-alu-correct-nat-not)
+
+(disable v-alu-correct-int-adder-overflowp)
+(disable v-alu-correct-int-adder-output)
+(disable v-alu-correct-int-adder)
+(disable v-alu-correct-int-inc)
+(disable v-alu-correct-int-subtracter-overflowp)
+(disable v-alu-correct-int-subtracter-output)
+(disable v-alu-correct-int-subtracter)
+(disable v-alu-correct-int-dec)
+(disable v-alu-correct-int-asr-output)
+(disable v-alu-correct-int-asr)
+(disable v-alu-correct-int-neg)
+(disable v-alu-correct-int-not)

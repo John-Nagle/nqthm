@@ -1,0 +1,484 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+; Matt Wilding
+
+(note-lib "extras" T)
+
+;; Proof of Matijasevich's lemma constructed by MW week of 5-10-91.  Inspired by
+;; proof in Concrete Mathematics by Graham, Knuth, and Patashnik and notes from 
+;; Dijkstra's Capita Selecta Spring '90 course.
+
+;;;; Some additional facts needed in the proof that appear useful 
+;;;; enough to add to libraries (and a few facts to prove them)
+
+(prove-lemma irem-igcd-arg1 (rewrite)
+             (equal
+              (equal (irem (igcd a b) c) 0)
+              (and
+               (equal (irem a c) 0)
+               (equal (irem b c) 0)))
+             ((enable irem-is-my-irem iabs igcd my-irem fix-int 
+                      integerp ineg)))
+
+(prove-lemma irem-x-x (rewrite)
+             (equal (irem x x) 0)
+             ((enable-theory integer-defns)))
+
+;; The nonsensical induction hint is a silly trick to get the prover 
+;; to throw an equality away after using it
+(prove-lemma gcd-times-easy-proof-helper-helper nil
+        (implies
+         (and
+          (numberp a)
+          (numberp b)
+          (numberp c))
+         (equal (remainder (times c (gcd a b)) 
+                           (gcd a (times b c))) 
+                0))
+        ((use (gcd-factors-gives-linear-combination (x a) (y b)))
+         (induct (append x y))
+         (enable-theory nats-to-ints)
+         (disable irem-0-backchain not-integerp irem-noop)))
+
+(prove-lemma gcd-times-easy-proof-helper nil
+             (equal (remainder (times c (gcd a b)) 
+                               (gcd a (times b c))) 
+                    0)
+             ((use (gcd-times-easy-proof-helper-helper))
+              (disable remainder-times1)))
+
+(prove-lemma gcd-times-easy-proof nil
+             (implies
+              (equal (gcd a b) 1)
+              (equal (gcd a (times b c)) (gcd a c)))
+             ((enable equal-gcd-gcd-as-remainder remainder-gcd 
+                      remainder-gcd-arg1 remainder-times1)
+              (use (gcd-times-easy-proof-helper))
+              (disable-theory remainders)))
+        
+;; Would the more general case of rewriting gcd-times regardless 
+;; of the value of gcd with one of the times arguments be superior?
+(prove-lemma gcd-times-easy (rewrite)
+             (implies
+              (equal (gcd a b) 1)
+              (and
+               (equal (gcd a (times b c)) (gcd a c))
+               (equal (gcd a (times c b)) (gcd a c))))
+             ((use (gcd-times-easy-proof))
+              (enable commutativity-of-times)
+              (disable-theory naturals)))
+
+
+(prove-lemma lessp-gcd3 (rewrite)
+       (and
+        (equal 
+         (lessp (gcd a b) a)
+         (and
+          (not (equal (remainder b a) 0))
+          (not (zerop a))
+          (not (zerop b))))
+        (equal 
+         (lessp (gcd b a) a)
+         (and
+          (not (equal (remainder b a) 0))
+          (not (zerop a))
+          (not (zerop b)))))
+        ((use (equal-x-gcd-x-y (x a) (y b)) (lessp-gcd2 (b a) (a b)))
+         (disable-theory naturals)
+         (enable gcd-zero)))
+
+(prove-lemma equal-remainder-gcd-0-proof nil
+             (equal
+              (equal (remainder (gcd a b) a) 0)
+              (equal (remainder b a) 0)))
+
+;; not used in proof (though equal-remainder-gcd-0-proof is)
+(prove-lemma equal-remainder-gcd-0 (rewrite)
+             (and
+              (equal
+               (equal (remainder (gcd a b) a) 0)
+               (equal (remainder b a) 0))
+              (equal
+               (equal (remainder (gcd b a) a) 0)
+               (equal (remainder b a) 0))))
+
+(prove-lemma equal-remainder-x-y-x (rewrite)
+             (equal
+              (equal (remainder x y) x)
+              (or
+               (and
+                (numberp x)
+                (lessp x y))
+               (equal x 0)
+               (and
+                (equal (fix y) 0)
+                (numberp x)))))
+
+(prove-lemma gcd-a-gcd-exp-a (rewrite)
+             (equal
+              (gcd a (exp a b))
+              (if (zerop b) 1 (fix a))))
+
+(prove-lemma equal-gcd-times-1-help1 nil
+             (implies
+              (and
+               (equal (gcd a b) 1)
+               (equal (gcd a c) 1))
+              (equal (gcd a (times b c)) 1)))
+
+(prove-lemma remainder-gcd-gcd-0-hack (rewrite)
+             (equal (remainder (gcd a (times b c)) (gcd a c)) 0))
+
+(prove-lemma lessp-gcd-times nil
+             (implies
+              (or
+               (not (zerop a))
+               (not (zerop (times b c))))
+              (not (lessp (gcd a (times b c))
+                    (gcd a c))))
+       ((use (remainder-gcd-gcd-0-hack))
+        (disable remainder-gcd-gcd-0-hack)
+        (disable-theory naturals)
+        (enable remainder-noop equal-times-0 equal-gcd-0)))
+
+(prove-lemma lessp-1-hack (rewrite)
+             (equal
+              (lessp 1 x)
+              (and
+               (not (zerop x))
+               (not (equal x 1)))))
+
+(prove-lemma equal-gcd-times-1-help2 nil
+             (implies
+              (equal (gcd a (times b c)) 1)
+              (equal (gcd a c) 1))
+             ((use (lessp-gcd-times))
+              (disable-theory remainders)
+              (enable-theory multiplication)))
+             
+(prove-lemma equal-gcd-times-1 (rewrite)
+             (equal
+              (equal (gcd a (times b c)) 1)
+              (and
+               (equal (gcd a b) 1)
+               (equal (gcd a c) 1)))
+             ((use (equal-gcd-times-1-help1) (equal-gcd-times-1-help2)
+                   (equal-gcd-times-1-help2 (b c) (c b)))
+              (disable-theory naturals)))
+
+(prove-lemma gcd-exp-1 (rewrite)
+             (and
+              (equal
+               (equal (gcd a (exp b c)) 1)
+               (or
+                (equal (gcd a b) 1)
+                (zerop c)))
+              (equal
+               (equal (gcd (exp b c) a) 1)
+               (or
+                (equal (gcd a b) 1)
+                (zerop c))))
+             ((induct (exp b c))))
+
+;; mistake in other version of this lemma limits applicability and
+;; makes this version needed
+(prove-lemma gcd-remainder-times-fact1-proof2 (rewrite)
+      (implies (equal (gcd a b) 1)
+               (equal (equal (remainder (times c b) a) 0)
+                      (equal (remainder c a) 0))))
+
+
+(prove-lemma times-quotient-better (rewrite)
+             (implies (equal (remainder x y) 0)
+                      (and (equal (times (quotient x y) y)
+                                  (if (zerop y) 0 (fix x)))
+                           (equal (times y (quotient x y))
+                                  (if (zerop y) 0 (fix x))))))
+
+(prove-lemma equal-remainder-exp-0 (rewrite)
+             (implies
+              (and
+               (equal (remainder a c) 0)
+               (not (zerop b)))
+              (equal (remainder (exp a b) c) 0)))
+
+
+(prove-lemma remainder-2-hack (rewrite)
+             (equal
+              (remainder 2 x)
+              (if (or (equal x 1) (equal x 2))
+                  0
+                2)))
+
+(prove-lemma remainder-times-hack2 (rewrite)
+              (implies 
+               (not (equal (remainder a b) 0))
+               (and
+                (not (equal (remainder a (times b c)) 0))
+                (not (equal (remainder a (times c b)) 0)))))
+
+
+(prove-lemma gcd-a-add1-a (rewrite)
+             (equal
+              (gcd a (add1 a))
+              1))
+
+;; These facts should perhaps be generalized into a meta lemma that 
+;; factors first
+(prove-lemma remainder-times-times-hack (rewrite)
+             (equal
+              (remainder (times b (times a c))
+                         (times a x))
+              (times a (remainder (times b c) x))))
+
+(prove-lemma remainder-plus-times-hack (rewrite)
+       (equal
+        (remainder (plus (times a x) (times b (times c (times a y))))
+                   (times a z))
+        (times a (remainder (plus x (times b (times c y)))
+                            z)))
+       ((use (remainder-times-times-proof 
+              (y (plus x (times b (times c y)))) (x a) (z z)))
+        (disable-theory naturals)
+        (enable times-distributes-over-plus commutativity2-of-times)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Now, on to the proof
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn fib ( x )
+  (if (zerop x)
+      0
+      (if (equal x 1)
+          1
+          (plus (fib (sub1 (sub1 x)))
+                (fib (sub1 x))))))
+
+(prove-lemma fib-plus (rewrite)
+             (equal (fib (plus j k))
+                    (if (zerop j)
+                        (fib k)
+                      (plus (times (fib (add1 k)) (fib j))
+                            (times (fib (sub1 j)) (fib k))))))
+
+(prove-lemma gcd-fib-next-fib (rewrite)
+             (equal
+              (gcd (fib n) (fib (add1 n)))
+              1))
+
+(prove-lemma gcd-fib (rewrite)
+             (equal
+              (gcd (fib a) (fib b))
+              (fib (gcd a b)))
+             ((disable gcd-difference2 remainder-difference1)))
+
+
+(prove-lemma equal-fib-constant (rewrite)
+             (and
+              (equal 
+               (equal (fib a) 0)
+               (zerop a))
+              (equal
+               (equal (fib a) 1)
+               (or
+                (equal a 1)
+                (equal a 2)))))
+
+(prove-lemma fib-small (rewrite)
+             (implies
+              (lessp a 3)
+              (equal
+               (fib a)
+               (if (zerop a) 0 1))))
+
+(defn double-fib-induction (a b)
+  (if (or (lessp a 3) (lessp b 3)) t
+    (and (double-fib-induction (sub1 a) (sub1 b))
+         (double-fib-induction (sub1 (sub1 a)) (sub1 (sub1 b))))))
+
+
+(prove-lemma lessp-fib-fib (rewrite)
+             (equal
+              (lessp (fib a) (fib b))
+              (and
+               (lessp a b)
+               (not
+                (and
+                 (equal a 1)
+                 (equal b 2)))))
+             ((induct (double-fib-induction a b))))
+
+(prove-lemma remainder-fib-fib-0 (rewrite)
+             (equal
+              (equal (remainder (fib a) (fib b)) 0)
+              (or
+               (equal (remainder a b) 0)
+               (equal b 2)))
+             ((use (equal-remainder-gcd-0-proof 
+                    (a (fib b)) (b (fib a))))
+              (disable equal-remainder-gcd-0 gcd-remainder)))
+
+;; fib-times-open and fib-add1-times-open apply fib-plus to 
+;; particular terms in a way that will be useful in the proof 
+;; of fib-times-special
+(prove-lemma fib-times-open (rewrite)
+             (implies
+              (lessp 0 k)
+              (equal
+               (fib (times k n))
+               (plus
+                (times (fib n) (fib (add1 (times (sub1 k) n))))
+                (times (fib (sub1 n)) (fib (times (sub1 k) n))))))
+             ((use (fib-plus (j (times (sub1 k) n)) (k n)))
+              (disable fib-plus)))
+
+(disable fib-times-open)
+                
+(prove-lemma fib-add1-times-open (rewrite)
+             (implies
+              (lessp 0 k )
+              (equal
+               (fib (add1 (times k n)))
+               (plus
+                (times (fib (add1 (times (sub1 k) n))) (fib (add1 n)))
+                (times (fib (times (sub1 k) n)) (fib n)))))
+             ((use (fib-plus (j (add1 (times (sub1 k) n))) (k n)))
+              (disable fib-plus)))
+
+(disable fib-add1-times-open)
+
+(prove-lemma fib-times-special-step (rewrite)
+       (implies
+        (lessp 1 k)
+        (equal
+         (remainder (times k (times (fib n) (exp (fib (add1 n)) (sub1 k))))
+                    (times (fib n) (fib n)))
+         (remainder 
+          (plus (times (fib n) (exp (fib (add1 n)) (sub1 k)))
+                (times (fib (sub1 n)) 
+                       (times (sub1 k) 
+                              (times (fib n) 
+                                     (exp (fib (add1 n)) (sub1 (sub1 k)))))))
+          (times (fib n) (fib n)))))
+       ((disable-theory gcds)
+        (disable gcd-remainder-times-fact1-proof2 difference-leq-arg1 
+                 gcd-remainder-times-fact1-proof equal-remainder-plus-0
+                 remainder-noop lessp-1-hack)))
+
+(prove-lemma fib-remainder-hack (rewrite)
+              (equal (remainder (fib (times x y)) (fib x)) 0))
+
+;; We wish the rewriter to use a modulo arithmetic equality to rewrite
+;; a term.  Fortunately, we can can construct REMAINDER-FIB-BACKCHAIN
+;; to do it the way we wish since the terms are of a specialized form
+(prove-lemma remainder-backchain-proof1 nil
+       (implies
+        (equal (remainder a c) (remainder b c))
+        (equal
+         (remainder (times a d) c)
+         (remainder (times b d) c))))
+
+(prove-lemma remainder-backchain-proof2 nil
+       (implies
+        (and
+         (equal (remainder a c) (remainder b c))
+         (equal (remainder d c) (remainder e c)))
+        (equal
+         (remainder (plus a d) c)
+         (remainder (plus b e) c))))
+
+(prove-lemma remainder-fib-backchain (rewrite)
+       (implies
+        (and
+         (equal (remainder (fib x) c) (remainder (exp p q) c))
+         (equal (remainder (fib y) c) (remainder (times r s) c)))
+        (equal (remainder (plus (times a (fib x)) (times b (fib y))) c)
+               (remainder (plus (times a (exp p q)) (times b (times r s))) c)))
+       ((use (remainder-backchain-proof2 
+              (a (times a (fib x))) (b (times a (exp p q)))
+              (d (times b (fib y))) (e (times b (times r s)))
+              (c c))
+             (remainder-backchain-proof1 (a (fib y)) (b (times r s)) (c c) (d b))
+             (remainder-backchain-proof1 (a (fib x)) (b (exp p q)) (c c) (d a)))
+        (disable-theory naturals)
+        (enable commutativity-of-times)))
+
+;; This is the guts of the proof
+(prove-lemma fib-times-special nil
+             (implies
+              (lessp 1 k)
+              (and
+               (equal 
+                (remainder (fib (times k n)) (exp (fib n) 2))
+                (remainder 
+                 (times k (times (fib n) (exp (fib (add1 n)) (sub1 k)))) 
+                 (exp (fib n) 2)))
+               (equal
+                (remainder (fib (add1 (times k n))) (exp (fib n) 2))
+                (remainder (exp (fib (add1 n)) k) (exp (fib n) 2)))))
+             ((induct (times k n))
+              (disable times equal-sub1-0 remainder-times2-instance difference-leq-arg1
+                       gcd-remainder-times-fact1-proof2 lessp-fib-fib remainder-noop
+                       lessp-1-hack remainder-times-times-hack exp 
+                       remainder-plus-times-hack remainder-times2 
+                       commutativity2-of-times commutativity-of-plus)
+              (enable fib-add1-times-open fib-times-open remainder-times-times)
+              (disable-theory gcds)))
+
+(prove-lemma fib-remainder-times-special (rewrite)
+             (equal 
+              (remainder (fib (times n k)) (times (fib n) (fib n)))
+              (remainder (times k (times (fib n) (exp (fib (add1 n)) (sub1 k))))
+                         (times (fib n) (fib n))))
+             ((use (fib-times-special))
+              (disable remainder-times-times-hack)
+              (disable-theory naturals)
+              (enable-theory exponentiation multiplication)))
+
+(prove-lemma remainder-times-times-hack2 (rewrite)
+              (equal
+               (remainder (times k n) (times n p))
+               (times n (remainder k p))))
+
+(prove-lemma matijasevich-lemma-helper nil
+       (implies
+        (and
+         (lessp 2 n)
+         (equal (remainder m n) 0))
+        (equal
+         (equal (remainder (fib m) (times (fib n) (fib n))) 0)
+         (equal (remainder m (times n (fib n))) 0)))
+       ((disable times-add1 remainder-times2 lessp-1-hack fib gcd
+                 gcd-remainder remainder-times2-instance)
+        (enable remainder-times-times)))
+
+(prove-lemma matijasevich-lemma (rewrite)
+             (implies
+              (lessp 2 n)
+              (equal
+               (equal (remainder (fib m) (times (fib n) (fib n))) 0)
+               (equal (remainder m (times n (fib n))) 0)))
+             ((use (matijasevich-lemma-helper))))

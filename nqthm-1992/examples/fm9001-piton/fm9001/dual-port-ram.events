@@ -1,0 +1,90 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    DUAL-PORT-RAM.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;  This file contains a model of a dual-port ram:
+;;;
+;;;  (DUAL-PORT-RAM-VALUE bits address-lines args state)
+;;;
+;;;  returns the RAM output, i.e., the contents of the memory addressed by the
+;;;  read-adress port.
+;;;
+;;;  (DUAL-PORT-RAM-STATE bits address-lines args state)
+;;;
+;;;  updates the state of the RAM.
+;;;
+;;;  The ARGS are assumed to be structured as follows: 
+;;;
+;;;  0..(ADDRESS-LINES - 1)               -- A (read port) address.
+;;;  ADDRESS-LINES..(2*ADDRESS-LINES - 1) -- B (write port) address.
+;;;  (2*ADDRESS-LINES)                    -- WEN, active low.
+;;;  remainder                            -- DATA lines.
+;;;
+;;;    WARNING -- This is a sequential model of what is essentially a
+;;; level-sensitive device.  Note that this state-holding device has no clock
+;;; input.  Spikes on WEN, or changes on B-ADDRESS while WEN is active may
+;;; cause unanticipated changes in the memory state of the real device.   
+;;;
+;;;    The dual-port RAM used in the register file of the FM9001 is surrounded
+;;;  by sequential logic that ensures that setup and hold constraints are met.
+;;;  See the file "regfile.events".
+
+(defn dual-port-ram-value (bits address-lines args state)
+  (let ((a-address (subrange args 0 (sub1 address-lines)))
+        (b-address (subrange args address-lines
+                             (sub1 (times 2 address-lines))))
+        (wen (nth (times 2 address-lines) args)))
+    ;;  If the read address is unknown, or the device is potentially write
+    ;;  enabled and there is a potential write at the read address, then read
+    ;;  out X's.  Otherwise, read out the vector from the STATE.
+    (if (or (not (bvp a-address))
+            (and (not (equal wen t))
+                 (or (not (bvp b-address))
+                     (equal a-address b-address))))
+        (make-list bits (x))
+      (let ((val (read-mem a-address state)))
+        (if (and (properp val)
+                 (equal (length val) bits))
+            val
+          ;; Return an unknown proper list of the right length if we don't read
+          ;; a proper list of the right length. 
+          (make-list bits (x)))))))
+
+(defn dual-port-ram-state (bits address-lines args state)
+  (let ((b-address (subrange args address-lines
+                             (sub1 (times 2 address-lines))))
+        (wen (nth (times 2 address-lines) args))
+        ;; Use SUBRANGE instead of RESTN so that we are guaranteed
+        ;; that this argument has the right length and is a PROPERP.
+        ;; Note that we use bits below rather than (length args) 
+        ;; in order to ensure that data has the right length.
+        (data
+         (subrange args
+                   (add1 (times 2 address-lines))
+                   (plus (times 2 address-lines) bits))))
+    ;;  If WEN is solidly high, do nothing.
+    (if (equal wen t)
+        state
+      ;;  There is a potential write.  If the address is unknown, wipe out the
+      ;;  state.
+      (if (not (bvp b-address))
+          (constant-ram state (make-list bits (x)))
+        ;;  If WEN is solidly low, update the state with data, otherwise X out
+        ;;  the addressed entry.
+        (if (equal wen f)
+            (write-mem b-address state data)
+          (write-mem b-address state (make-list bits (x))))))))
+
+;;;  LEMMAS
+
+(prove-lemma properp-length-dual-port-ram-value (rewrite)
+  (and
+   (properp (dual-port-ram-value bits address-lines args state))
+   (equal (length (dual-port-ram-value bits address-lines args state))
+          (fix bits))))

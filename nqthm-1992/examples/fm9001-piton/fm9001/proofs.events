@@ -1,0 +1,814 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PROOFS.EVENTS
+;;;
+;;;  This file contains events that lead up to the proof that the DUAL-EVAL
+;;;  netlist model correctly implements the high-level specification.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    OPERATING-INPUTS-P
+;;;
+;;;  This predicate recognizes mid-level input streams that do not reset the
+;;;  machine, and do not include hold requests.
+;;;  
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn operating-inputs-p (inputs n)
+  (if (zerop n)
+      t
+    (and (equal (reset--input (car inputs)) t)
+         (equal (hold--input (car inputs)) t)
+         (bvp (pc-reg-input (car inputs)))
+         (equal (length (pc-reg-input (car inputs))) 4)
+         (operating-inputs-p (cdr inputs) (sub1 n)))))
+
+(disable operating-inputs-p)
+
+(prove-lemma open-operating-inputs-p (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (operating-inputs-p inputs n)
+           t))
+   (implies
+    (not (zerop n))
+    (equal (operating-inputs-p inputs n)
+           (and (equal (reset--input (car inputs)) t)
+                (equal (hold--input (car inputs)) t)
+                (bvp (pc-reg-input (car inputs)))
+                (equal (length (pc-reg-input (car inputs))) 4)
+                (operating-inputs-p (cdr inputs) (sub1 n))))))
+  ;;Hint
+  ((enable operating-inputs-p)))
+  
+;;;  This lemma relates our two predicates on the input streams.
+
+(prove-lemma operating-inputs-p-implies-run-inputs-p (rewrite)
+  (implies
+   (operating-inputs-p inputs n)
+   (run-inputs-p inputs n))
+  ;;Hint
+  ((enable run-inputs-p operating-inputs-p)))
+
+(prove-lemma operating-inputs-p-plus (rewrite)
+  (equal (operating-inputs-p inputs (plus n m))
+         (and (operating-inputs-p inputs n)
+              (operating-inputs-p (nthcdr n inputs) m)))
+  ;;Hint
+  ((enable operating-inputs-p nthcdr plus)))
+
+(prove-lemma operating-inputs-p-1 (rewrite)
+  (implies
+   (and (operating-inputs-p inputs n)
+        (not (zerop n)))
+   (operating-inputs-p inputs 1))
+  ;;Hint
+  ((enable operating-inputs-p)))
+
+(prove-lemma operating-inputs-p-implies-hold--input (rewrite)
+  (implies
+   (and (operating-inputs-p inputs n)
+        (not (zerop n)))
+   (equal (hold--input (car inputs))
+          t))
+  ;;Hint
+  ((enable operating-inputs-p)))
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    MICROCYCLES state
+;;;    TOTAL-MICROCYCLES state inputs n
+;;;
+;;;    Given a low-level machine state at the beginning of the instruction
+;;;    execution cycle, MICROCYCLES computes the number of clock cycles
+;;;    necessary to excute the instruction, given that the machine is
+;;;    neither reset nor held.  MICROCYCLES assumes that the processor is in
+;;;    state FETCH1.  Notice that in state FETCH1 the instruction resides in
+;;;    memory. 
+;;;
+;;;    TOTAL-MICROCYCLES computes the number of clock cycles needed to
+;;;    execute N instructions, again assuming that the machine is neither
+;;;    reset nor held.  Notice here that it is necessary to simulate each
+;;;    instruction.
+;;;    
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn microcycles (state)
+  (let ((machine-state (car state))
+        (mem-state (cadr state)))
+    (let
+      ((regs             (car machine-state))
+       (flags            (cadr machine-state))
+       (pc-reg           (caddddddddddr machine-state))
+       (mem              (car mem-state))
+       (mem-clock        (caddr mem-state)))
+      (let
+        ((instr (read-mem (read-mem pc-reg (car regs)) mem)))
+        (t_fetch1 mem-clock instr flags)))))
+
+(defn total-microcycles (state inputs n)
+  (if (zerop n)
+      0
+    (let ((microcycles (microcycles state)))
+      (let ((new-state (run-fm9001 state inputs microcycles)))
+        (plus microcycles
+              (total-microcycles
+               new-state
+               (nthcdr microcycles inputs)
+               (sub1 n)))))))
+
+(disable total-microcycles)        
+
+(prove-lemma open-total-microcycles (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (total-microcycles state inputs n)
+           0))
+   (implies
+    (not (zerop n))
+    (equal (total-microcycles state inputs n)
+           (let ((microcycles (microcycles state)))
+             (let ((new-state (run-fm9001 state inputs microcycles)))
+               (plus microcycles
+                     (total-microcycles
+                      new-state
+                      (nthcdr microcycles inputs)
+                      (sub1 n))))))))
+  ;;Hint
+  ((enable total-microcycles)
+   (disable microcycles)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    MACROCYCLE-INVARIANT state pc
+;;;
+;;;  This is an invariant about the state of the machine at the beginning of
+;;;  the instruction execution cycle:  all of the internal registers are
+;;;  Boolean and properly sized; the machine is in state FETCH1 (ready to
+;;;  execute an instruction);  the ADDR-OUT register contains the program
+;;;  counter;  there are no pending writes in the register file;  HOLD-
+;;;  and RESET- are not asserted;  the PC-REG is equal to (and remains equal
+;;;  to) the specified PC; and the memory is well-formed and in a quiescent
+;;;  state. 
+;;;
+;;;  This is an important invariant; one of the more important proofs that
+;;;  follows states that if we begin in this state, and run for
+;;;  (MICROCYCLES state), then we will reach a state recognized by this
+;;;  invariant.  This is the basis for the inductive proof that the
+;;;  low-level machine implements the behavioral specification.
+;;;  
+;;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn macrocycle-invariant (state pc)
+  (let ((machine-state (car state))
+        (mem-state (cadr state)))
+    (let
+      ((regs             (car machine-state))
+       (flags            (cadr machine-state))
+       (a-reg            (caddr machine-state))
+       (b-reg            (cadddr machine-state))
+       (i-reg            (caddddr machine-state))
+       (data-out         (cadddddr machine-state))
+       (addr-out         (caddddddr machine-state))
+       (last-reset-      (cadddddddr machine-state))
+       (last-dtack-      (caddddddddr machine-state))
+       (last-hold-       (cadddddddddr machine-state))
+       (pc-reg           (caddddddddddr machine-state))
+       (cntl-state       (cadddddddddddr machine-state))
+       (mem              (car mem-state))
+       (mem-cntl         (cadr mem-state))
+       (mem-clock        (caddr mem-state))
+       (mem-count        (cadddr mem-state))
+       (mem-dtack        (caddddr mem-state))
+       (mem-last-rw-     (cadddddr mem-state))
+       (mem-last-address (caddddddr mem-state))
+       (mem-last-data    (cadddddddr mem-state)))
+      (let
+        ((regs-regs    (car regs))
+         (regs-we      (cadr regs))
+         (regs-data    (caddr regs))
+         (regs-address (cadddr regs)))
+        (and
+         (all-ramp-mem 4 regs-regs)
+         (memory-okp 4 32 regs-regs)
+         (equal regs-we f)
+         (bvp regs-data) (equal (length regs-data) 32)
+         (bvp regs-address) (equal (length regs-address) 4)
+         (bvp flags) (equal (length flags) 4)
+         (equal a-reg (read-regs pc-reg regs))
+         (bvp b-reg) (equal (length b-reg) 32)
+         (bvp i-reg) (equal (length i-reg) 32)
+         (bvp data-out) (equal (length data-out) 32)
+         (equal addr-out (read-regs pc-reg regs))
+         (equal last-reset- t)
+         (boolp last-dtack-)
+         (equal last-hold- t)
+         (bvp pc-reg) (equal (length pc-reg) 4)
+         (equal pc-reg pc)
+         (equal cntl-state (cv_fetch1 mem-last-rw- pc-reg i-reg flags pc-reg))
+         (memory-okp 32 32 mem)
+         (equal mem-cntl 0)
+         (numberp mem-count)
+         (boolp mem-last-rw-)
+         (bvp mem-last-address) (equal (length mem-last-address) 32)
+         (properp mem-last-data)
+         (equal (length mem-last-data) 32))))))
+
+(prove-lemma macrocycle-invariant==>chip-system-invariant$help ()
+  (let
+    ((state
+      (list (list
+             (list regs-regs regs-we regs-data regs-address)
+             flags a-reg b-reg i-reg
+             data-out addr-out
+             last-reset- last-dtack- last-hold-
+             pc-reg cntl-state)
+            (list mem cntl clock count dtack
+                  last-rw- last-address last-data))))
+    (implies
+     (macrocycle-invariant state pc)
+     (chip-system-invariant state)))
+  ((disable car-cdr-elim)))
+
+(prove-lemma macrocycle-invariant==>chip-system-invariant (rewrite)
+  (implies
+   (and (fm9001-state-structure state)
+        (macrocycle-invariant state pc))
+   (chip-system-invariant state))
+  ;;Hint
+  ((disable chip-system-invariant macrocycle-invariant
+            fm9001-state-structure)
+   (use (macrocycle-invariant==>chip-system-invariant$help
+         (regs-regs        (caaar state))
+         (regs-we          (cadaar state))
+         (regs-data        (caddaar state))
+         (regs-address     (cadddaar state))
+         (flags            (cadar state))
+         (a-reg            (caddar state))
+         (b-reg            (cadddar state))
+         (i-reg            (caddddar state))
+         (data-out         (cadddddar state))
+         (addr-out         (caddddddar state))
+         (last-reset-      (cadddddddar state))
+         (last-dtack-      (caddddddddar state))
+         (last-hold-       (cadddddddddar state))
+         (pc-reg           (caddddddddddar state))
+         (cntl-state       (cadddddddddddar state))
+         (mem              (caadr state))
+         (cntl             (cadadr state))
+         (clock            (caddadr state))
+         (count            (cadddadr state))
+         (dtack            (caddddadr state))
+         (last-rw-         (cadddddadr state))
+         (last-address     (caddddddadr state))
+         (last-data        (cadddddddadr state)))
+        (fm9001-state-as-a-list))))
+
+;;;  MACROCYCLE-INVARIANT* is introduced to delay opening up the function
+;;;  until the low-level machine has been completely rewritten. This should
+;;;  save a tremendous amount of time in the coming proof. 
+
+(defn macrocycle-invariant* (state pc)
+  (macrocycle-invariant state pc))
+
+(disable macrocycle-invariant*)
+
+(prove-lemma macrocycle-invariant*=macrocycle-invariant (rewrite)
+  (equal (macrocycle-invariant* (cons x y) pc)
+         (macrocycle-invariant (cons x y) pc))
+  ;;Hint
+  ((enable macrocycle-invariant*)
+   (disable macrocycle-invariant)))
+
+(prove-lemma macrocycle-invariant-is-invariant$help ()
+  (let
+    ((state (list (list
+                   (list regs-regs regs-we regs-data regs-address)
+                   flags a-reg b-reg i-reg
+                   data-out addr-out
+                   last-reset- last-dtack- last-hold-
+                   pc-reg cntl-state)
+                  (list mem cntl clock count dtack
+                        last-rw- last-address last-data))))
+    (let ((microcycles (microcycles state)))
+      (implies
+       (and (macrocycle-invariant state pc)
+            (operating-inputs-p inputs microcycles))
+       (macrocycle-invariant* (run-fm9001 state inputs microcycles) pc))))
+  ;;Hint
+  ((enable expand-*-connectives open-nth t_fetch1 write-regs regfile-okp
+           reg-direct->not-reg-indirect
+           fm9001-step)
+   (enable-theory fm9001-hardware-state-accessors)
+   (disable-theory fm9001-step-theory)
+   (disable plus *1*plus plus-add1  
+            make-tree *1*make-tree 
+            open-run-inputs-p open-run-inputs-p-add1
+            open-operating-inputs-p)))
+
+(prove-lemma macrocycle-invariant-is-invariant (rewrite)
+  (implies
+   (and (fm9001-state-structure state)
+        (macrocycle-invariant state pc)
+        (operating-inputs-p inputs (microcycles state)))
+   (macrocycle-invariant (run-fm9001 state inputs (microcycles state)) pc))
+  ;;Hint
+  ((use (macrocycle-invariant-is-invariant$help
+         (regs-regs        (caaar state))
+         (regs-we          (cadaar state))
+         (regs-data        (caddaar state))
+         (regs-address     (cadddaar state))
+         (flags            (cadar state))
+         (a-reg            (caddar state))
+         (b-reg            (cadddar state))
+         (i-reg            (caddddar state))
+         (data-out         (cadddddar state))
+         (addr-out         (caddddddar state))
+         (last-reset-      (cadddddddar state))
+         (last-dtack-      (caddddddddar state))
+         (last-hold-       (cadddddddddar state))
+         (pc-reg           (caddddddddddar state))
+         (cntl-state       (cadddddddddddar state))
+         (mem              (caadr state))
+         (cntl             (cadadr state))
+         (clock            (caddadr state))
+         (count            (cadddadr state))
+         (dtack            (caddddadr state))
+         (last-rw-         (cadddddadr state))
+         (last-address     (caddddddadr state))
+         (last-data        (cadddddddadr state))
+         (instr (read-mem  
+                 (read-regs (caddddddddddar state)
+                            (list
+                             (caaar state) (cadaar state) (caddaar state)
+                             (cadddaar state)))
+                 (caadr state)))
+         (microcycles (microcycles state)))
+        (fm9001-state-as-a-list))
+   (enable macrocycle-invariant*)
+   (disable fm9001-state-structure macrocycle-invariant 
+            t_fetch1)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    MAP-UP
+;;;
+;;;  Maps a low-level state to a high-level state.
+;;;  
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn p-map-up (p-state)
+  (list (car (regs p-state))
+        (flags p-state)))
+
+(defn mem-map-up (mem-state)
+  (car mem-state))
+
+(defn map-up (state)
+  (let ((p-state   (car  state))
+        (mem-state (cadr state)))
+    (list
+     (p-map-up p-state)
+     (mem-map-up mem-state))))
+
+(disable map-up)
+
+;;;  This rather obvious fact is stated in a non-obvious way.  We
+;;;  will be "mapping-up" a low-level simulation, i.e., a call of
+;;;  RUN-FM9001.  If MAP-UP opens before RUN-FM9001 is completely rewritten
+;;;  to a new state, i.e., a CONS, then we will be rewriting RUN-FM9001 
+;;;  3 times for each path through the state diagram.  By stating the lemma
+;;;  this way, we wait until RUN-FM9001 is completely rewritten before
+;;;  extracting the 3 interesting bits, thus saving massive amounts of work.
+
+(prove-lemma open-map-up (rewrite)
+  (let ((state (cons x y)))
+    (equal (map-up state)
+           (let ((p-state (car state))
+                 (mem-state (cadr state)))
+             (list
+              (list (car (regs p-state))
+                    (flags p-state))
+              (car mem-state)))))
+  ;;Hint
+  ((enable map-up)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    MIDDLE=HIGH
+;;;
+;;;  This is the proof that the architecture implements the specification
+;;;  for the execution of a single instruction.  The time abstraction
+;;;  between the behavioral-level specification and the implementation is a
+;;;  critical part of this proof; that is, the implementation requires a
+;;;  number of clock cycles to execute a single instruction while the
+;;;  behavioral-level specification executes just one instruction.
+;;;  
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  FM9001-STEP* is introduced to delay opening up the high-level
+;;;  specification until the low-level machine has been completely rewritten.
+;;;  This saves a fair amount of time in the coming proof.
+
+(defn fm9001-step* (state pc-reg)
+  (fm9001-step state pc-reg))
+
+(disable fm9001-step*)
+
+(prove-lemma fm9001-step*-lemma (rewrite)
+  (equal (equal (cons x y)
+                (fm9001-step* state pc-reg))
+         (equal (cons x y)
+                (fm9001-step state pc-reg)))
+  ;;Hint
+  ((enable fm9001-step*)))
+
+(prove-lemma middle=high$help ()
+  (let
+    ((state (list (list
+                   (list regs-regs regs-we regs-data regs-address)
+                   flags a-reg b-reg i-reg
+                   data-out addr-out
+                   last-reset- last-dtack- last-hold-
+                   pc-reg cntl-state)
+                  (list mem cntl clock count dtack
+                        last-rw- last-address last-data))))
+    (let ((microcycles (microcycles state)))
+      (implies
+       (and (macrocycle-invariant state pc-reg)
+            (operating-inputs-p inputs microcycles))
+       (equal (map-up (run-fm9001 state inputs microcycles))
+              (fm9001-step* (list (list regs-regs flags) mem) pc-reg)))))
+  ;;Hint
+  ((enable expand-*-connectives open-nth t_fetch1 write-regs regfile-okp
+           reg-direct->not-reg-indirect
+           fm9001-step)
+   (enable-theory fm9001-hardware-state-accessors)
+   (disable-theory fm9001-step-theory)
+   (disable plus *1*plus plus-add1  
+            make-tree *1*make-tree 
+            open-run-inputs-p open-run-inputs-p-add1
+            open-operating-inputs-p)))
+
+(prove-lemma macrocycle-invariant==>pc-reg ()
+  (implies
+   (macrocycle-invariant state pc-reg)
+   (equal (pc-reg (car state)) pc-reg))
+  ;;Hint
+  ((enable pc-reg macrocycle-invariant open-nth)))
+  
+(prove-lemma middle=high (rewrite)
+  (implies
+   (and (fm9001-state-structure state)
+        (macrocycle-invariant state pc)
+        (operating-inputs-p inputs (microcycles state)))
+   (equal (map-up (run-fm9001 state inputs (microcycles state)))
+          (fm9001-step (map-up state) pc)))
+  ;;Hint
+  ((use (macrocycle-invariant==>pc-reg (pc-reg pc))
+        (middle=high$help
+         (regs-regs        (caaar state))
+         (regs-we          (cadaar state))
+         (regs-data        (caddaar state))
+         (regs-address     (cadddaar state))
+         (flags            (cadar state))
+
+         (a-reg            (caddar state))
+         (b-reg            (cadddar state))
+         (i-reg            (caddddar state))
+         (data-out         (cadddddar state))
+         (addr-out         (caddddddar state))
+         (last-reset-      (cadddddddar state))
+         (last-dtack-      (caddddddddar state))
+         (last-hold-       (cadddddddddar state))
+         (pc-reg           (caddddddddddar state))
+         (cntl-state       (cadddddddddddar state))
+         (mem              (caadr state))
+         (cntl             (cadadr state))
+         (clock            (caddadr state))
+         (count            (cadddadr state))
+         (dtack            (caddddadr state))
+         (last-rw-         (cadddddadr state))
+         (last-address     (caddddddadr state))
+         (last-data        (cadddddddadr state))
+         (instr (read-mem  
+                 (read-regs (caddddddddddar state)
+                            (list
+                             (caaar state) (cadaar state) (caddaar state)
+                             (cadddaar state)))
+                 (caadr state)))
+         (microcycles (microcycles state)))
+        (fm9001-state-as-a-list))
+   (disable fm9001-state-structure macrocycle-invariant
+            t_fetch1)
+   (enable map-up regs flags pc-reg open-nth fm9001-step*)
+   (expand (microcycles state))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;   Final Correctness Proofs 
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  The proof that the register-transfer specification implements the
+;;;  behavioral specification.
+
+(prove-lemma FM9001-interpreter-correct (rewrite)
+  (let
+    ((clock-cycles (total-microcycles state inputs instructions)))
+    (implies
+     (and (fm9001-state-structure state)
+          (macrocycle-invariant state pc)
+          (operating-inputs-p inputs clock-cycles))
+     (equal (map-up
+             (run-fm9001
+              state
+              inputs
+              clock-cycles))
+            (FM9001-interpreter
+             (map-up state)
+             pc
+             instructions))))
+  ;; Hint
+  ((induct (total-microcycles state inputs instructions))
+   (disable fm9001-state-structure microcycles macrocycle-invariant)))
+
+;;;   The above, and CHIP-SYSTEM=RUN-FM9001 (see "chip.events"), yields this
+;;;   lemma that the DUAL-EVAL netlist implements the FM9001 specification.
+
+(prove-lemma chip-system=fm9001-interpreter (rewrite)
+  (let 
+    ((rtl-inputs (map-up-inputs inputs)))
+    (let
+      ((clock-cycles (total-microcycles state rtl-inputs instructions)))
+      (implies
+       (and (chip-system& netlist)
+            (fm9001-state-structure state)
+            (macrocycle-invariant state pc)
+            (chip-system-operating-inputs-p inputs clock-cycles)
+            (operating-inputs-p rtl-inputs clock-cycles))
+       (equal (map-up (simulate-dual-eval-2
+                       'chip-system inputs state netlist clock-cycles))
+              (fm9001-interpreter (map-up state) pc instructions)))))
+  ;;Hint
+  ((disable fm9001-state-structure macrocycle-invariant map-up
+            chip-system-invariant)))
+   
+;;;   Note that when register 15 is the program counter, FM9001-INTERPRETER
+;;;   is the same as FM9001.
+
+(prove-lemma fm9001=fm9001-interpreter ()
+  (equal (fm9001 state n)
+         (fm9001-interpreter state (make-list 4 t) n))
+  ((enable fm9001 fm9001-interpreter)
+   (disable fm9001-step)))
+
+;;;  MAP-DOWN-RELATION simply states that the register file, flags, and memory
+;;;  of the low-level-state are equal to the corresponding things in the
+;;;  high-level state.
+
+(defn map-down-relation (high-level-state low-level-state)
+  (let ((high-level-p-state   (car high-level-state))
+        (high-level-mem-state (cadr high-level-state))
+        (low-level-p-state   (car low-level-state))
+        (low-level-mem-state (cadr low-level-state)))
+    (and (equal (regs high-level-p-state)
+                (car (regs low-level-p-state)))
+         (equal (flags high-level-p-state)
+                (flags low-level-p-state))
+         (equal high-level-mem-state
+                (car low-level-mem-state)))))
+
+(disable map-down-relation)
+        
+;;;  A minimal hypothesis about the high-level-state.
+
+(defn high-level-state-structure (state)
+  (and (properp state)
+       (properp (car state))
+       (equal (length (car state)) 2)
+       (equal (length state) 2)))
+
+(disable high-level-state-structure)
+
+(prove-lemma map-down-relation-lemma (rewrite)
+  (implies
+   (and (high-level-state-structure high-level-state)
+        (map-down-relation high-level-state low-level-state))
+   (equal (map-up low-level-state)
+          high-level-state))
+  ;;Hint
+  ((enable map-down-relation high-level-state-structure map-up regs flags
+           open-nth)))
+
+;;;  These two lemmas mimic the 2 major results above, except that we use
+;;;  MAP-DOWN-RELATION to relate the high- and low-level states rather than the
+;;;  MAP-UP function. 
+
+(prove-lemma FM9001-interpreter-correct$map-down (rewrite)
+  (implies
+   (and (high-level-state-structure high-level-state)
+        (map-down-relation high-level-state low-level-state)
+        (fm9001-state-structure low-level-state)
+        (macrocycle-invariant low-level-state pc)
+        (operating-inputs-p
+         inputs (total-microcycles low-level-state inputs n))) 
+   (equal (map-up
+           (run-fm9001
+            low-level-state
+            inputs
+            (total-microcycles low-level-state inputs n)))
+          (FM9001-interpreter
+           high-level-state
+           pc
+           n)))
+  ;;Hint
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (use (map-down-relation-lemma)
+        (fm9001-interpreter-correct (state low-level-state)
+                                    (instructions n)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    FM9001=CHIP-SYSTEM
+;;;
+;;;   The proofs that follow were originally what we thought of as the "final"
+;;;   correctness results.  On further analysis, these really aren't very
+;;;   satisfying because they presume that any high-level state can be mapped
+;;;   down to a very specific low-level-state.  (You *could* do it with the
+;;;   scan chain ...). All we can really guarantee about the machine is that
+;;;   you can reset it, and then move forward at the end of the reset sequence.
+;;;   We leave these events here for historical interest. 
+;;;   
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  
+(defn fm9001-machine-statep (p-state)
+  (let ((regs (car p-state))
+        (flags (cadr p-state)))
+    (and (properp p-state)
+         (equal (length p-state) 2)
+         (all-ramp-mem 4 regs)
+         (memory-okp 4 32 regs)
+         (bvp flags)
+         (equal (length flags) 4))))
+
+(defn fm9001-statep (state)
+  (let ((p-state (car  state))
+        (memory  (cadr state)))
+    (and (properp state)
+         (equal (length state) 2)
+         (fm9001-machine-statep p-state)
+         (memory-okp 32 32 memory))))
+
+(defn p-map-down (p-state)
+  (let ((regs  (car  p-state))
+        (flags (cadr p-state)))
+    (list
+     (list regs f (make-list 32 f) (make-list 4 t))   
+     flags
+     (read-mem (make-list 4 t) regs)    ; a-reg
+     (make-list 32 f)                   ; b-reg
+     (make-list 32 f)                   ; i-reg
+     (make-list 32 f)                   ; data-out
+     (read-mem (make-list 4 t) regs)    ; addr-out
+     t                                  ; reset
+     t                                  ; dtack
+     t                                  ; hold
+     (make-list 4 t)                    ; pc-reg
+     (cv_fetch1 t                       ; cntl-state
+                (list t t t t)
+                (make-list 32 f)
+                (list t f f f)
+                (make-list 4 t)))))
+
+(defn mem-map-down (memory)
+  (list memory 0 0 0 t t (make-list 32 f) (make-list 32 (x))))
+
+(defn map-down (state)
+  (let ((p-state (car  state))
+        (memory  (cadr state)))
+    (list
+     (p-map-down p-state)
+     (mem-map-down memory))))
+
+(prove-lemma map-up-inverts-map-down (rewrite)
+  (implies (fm9001-statep state)
+           (equal (map-up (map-down state)) state))
+  ((enable regs flags nth)
+   (disable make-list *1*make-list cv_fetch1 *1*cv_fetch1
+            memory-okp *1*memory-okp all-ramp-mem)))
+
+(prove-lemma fm9001-statep-implies-fm9001-state-structure (rewrite)
+  (implies (fm9001-statep state)
+           (fm9001-state-structure (map-down state)))
+  ((disable make-list *1*make-list cv_fetch1 *1*cv_fetch1
+            memory-okp *1*memory-okp all-ramp-mem)))
+
+(prove-lemma fm9001-statep-implies-macrocycle-invariant-lemma1 (rewrite)
+  (equal (equal (cv_fetch1 t 
+                           (list t t t t) 
+                           (make-list 32 f) 
+                           (list t f f f) 
+                           (make-list 4 t)) 
+                (cv_fetch1 t 
+                           (make-list 4 t) 
+                           (make-list 32 f) 
+                           z 
+                           (make-list 4 t)))
+         t)
+  ((enable cv_fetch1 carry-in-help c-flag op-code
+           v_fetch1 append mpg make-list)))
+
+(prove-lemma fm9001-statep-implies-macrocycle-invariant (rewrite)
+  (implies (fm9001-statep state)
+           (macrocycle-invariant (map-down state) (make-list 4 t)))
+  ((enable length-make-list properp-make-list bvp-make-list)
+   (disable make-list *1*make-list carry-in-help cv_fetch1 read-mem
+            memory-okp *1*memory-okp all-ramp-mem)))
+
+(prove-lemma fm9001=chip-system-lemma1 (rewrite)
+  (equal (nth 10 (car (map-down state))) (list t t t t))
+  ((enable nth)))
+
+(prove-lemma fm9001=chip-system (rewrite)
+  (implies (and (chip-system& netlist) 
+                (fm9001-statep state)
+                (chip-system-operating-inputs-p
+                 inputs 
+                 (total-microcycles (map-down state) 
+                                    (map-up-inputs inputs) 
+                                    n)) 
+                (operating-inputs-p
+                 (map-up-inputs inputs) 
+                 (total-microcycles (map-down state) 
+                                    (map-up-inputs inputs) 
+                                    n))) 
+           (equal (fm9001 state n) 
+                  (map-up
+                   (simulate-dual-eval-2
+                    'chip-system inputs
+                    (map-down state)
+                    netlist 
+                    (total-microcycles (map-down state) 
+                                       (map-up-inputs inputs) 
+                                       n)))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable fm9001-statep-implies-fm9001-state-structure
+           fm9001-statep-implies-macrocycle-invariant
+           map-up-inverts-map-down)
+   (use (fm9001=fm9001-interpreter)
+        (chip-system=fm9001-interpreter (state (map-down state))
+                                        (instructions n)
+                                        (pc (make-list 4 t))))))
+
+(defn no-holds-reset-or-test (i c)
+  (and (chip-system-operating-inputs-p i c) 
+       (operating-inputs-p (map-up-inputs i) c)))
+
+;;;  Here is an informal statement of the following lemma,
+;;;  FM9001=CHIP-SYSTEM-SUMMARY, which is the chief result proved
+;;;  about the FM9001.  Let H be the hardware netlist that we have
+;;;  constructed for the FM9001.  The lemma states that for each
+;;;  FM9001 user-visible state, S, and for each positive integer, N,
+;;;  there exists a positive integer C such that the result of running
+;;;  the user-model of the FM9001 (the function FM9001) N steps can
+;;;  instead be obtained by simulating H and S under the DUAL-EVAL
+;;;  semantics for C steps.  In precisely stating the theorem, we
+;;;  arrange to supply the DUAL-EVAL semantics with a transform
+;;;  (obtained with MAP-DOWN) of S, and afterwards we do a reverse
+;;;  transformation (with MAP-UP) to obtain the final user-visible
+;;;  state.  Futhermore, in making the statement precise we stipulate
+;;;  that the external stimuli, I, to the chip do not enable a hold, a
+;;;  reset, or a test input for the C clock cycles.  The fact that N
+;;;  and C are different reflects the fact that a single FM9001
+;;;  instruction takes several clock cycles to emulate at the
+;;;  DUAL-EVAL netlist level.  The precise statement of this
+;;;  correctness result is:
+
+(prove-lemma fm9001=chip-system-summary nil
+  (let ((h (chip-system$netlist))
+        (c (total-microcycles (map-down s) (map-up-inputs i) n)))
+  (implies
+   (and (fm9001-statep s)
+        (no-holds-reset-or-test i c))
+   (equal (fm9001 s n) 
+          (map-up
+           (simulate-dual-eval-2 'chip-system i (map-down s) h c)))))
+  ;; Hint
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable no-holds-reset-or-test
+           *1*chip-system$netlist *1*chip-system&)
+   (use (fm9001=chip-system
+         (state s)
+         (netlist (chip-system$netlist))
+         (inputs i)
+         (n n)))))

@@ -1,0 +1,374 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    MEMORY.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  
+;;;  This file defines a tree-based formalization of memory.  This
+;;;  tree-based memory offers advantages over a linear-list formalization.
+;;;  Specifically, reading and writing the memory take O(log n) time and
+;;;  CONS operations respectively, where n is the number of words in the
+;;;  memory.  Also, we are able to "stub-out", or leave unspecified, large
+;;;  sections of the memory.
+;;;  
+;;;  Memory is modeled as a CONS tree, where the leaves of the tree are
+;;;  instances of one of three special shells: the shell constructor ROM
+;;;  tags read-only locations of the memory, while the shell constructor
+;;;  RAM tags read-write locations and STUB represents ``unimplemented''
+;;;  portions.  Each instance of the memory shells includes a value, which
+;;;  is returned when that memory location is read.  RAM cells may be
+;;;  overwritten, but writing to a ROM or STUB cell does not change the
+;;;  memory.  ROM cells may only appear at the leaves of the tree, wheras
+;;;  STUB cells may appear anywhere.  Although our basic definitions do not
+;;;  restrict the types of data stored in memory, we assume throughout the
+;;;  specification of the FM9001 (and enforce) the restriction
+;;;  that only bit-vectors are stored in memory.
+;;;  
+;;;  The bit-vector that specifies the address is used in an obvious way to
+;;;  search the memory tree for the addressed location.  Note, however,
+;;;  that the address is reversed prior to the search.  This allows for
+;;;  more compact storage for sequences of data.  If the address were not
+;;;  reversed, then the memory trees would be subject to branching near the
+;;;  root of the tree.  With reversed addresses, the branching is localized
+;;;  near the leaves. This is an especially important consideration for the
+;;;  main memory of the FM9001.  There, each path through the memory tree
+;;;  to a leaf cell is constructed from 32 CONS cells.
+
+(add-shell rom () romp
+  ((rom-guts (none-of) zero)))
+
+(add-shell ram () ramp
+  ((ram-guts (none-of) zero)))
+
+(add-shell stub () stubp
+  ((stub-guts (none-of) zero)))
+
+;;;    MEMORY-PROPERP -- All memory cells are proper lists of length WIDTH.
+
+(defn memory-properp (n width mem)
+  (if (stubp mem)
+      (and (properp (stub-guts mem))
+           (equal (length (stub-guts mem)) width))
+    (if (zerop n)
+        (cond
+         ((ramp mem) (and (properp (ram-guts mem))
+                          (equal (length (ram-guts mem)) width)))
+         ((romp mem) (and (properp (rom-guts mem))
+                          (equal (length (rom-guts mem)) width)))
+         (t f))
+      (and (listp mem)
+           (memory-properp (sub1 n) width (car mem))
+           (memory-properp (sub1 n) width (cdr mem))))))
+
+(disable memory-properp)
+
+;;;    MEMORY-OKP -- All memory cells are BVP lists with length WIDTH.
+
+(defn memory-okp (n width mem)
+  (if (stubp mem)
+      (and (bvp (stub-guts mem))
+           (equal (length (stub-guts mem)) width))
+    (if (zerop n)
+        (cond
+         ((ramp mem) (and (bvp (ram-guts mem))
+                          (equal (length (ram-guts mem)) width)))
+         ((romp mem) (and (bvp (rom-guts mem))
+                          (equal (length (rom-guts mem)) width)))
+         (t f))
+      (and (listp mem)
+           (memory-okp (sub1 n) width (car mem))
+           (memory-okp (sub1 n) width (cdr mem))))))
+      
+(disable memory-okp)
+
+;;;    READ-MEM 
+
+(defn read-mem1 (v-addr mem)
+  (if (stubp mem)
+      (stub-guts mem)
+      (if (nlistp v-addr)
+          (cond ((ramp mem) (ram-guts mem))
+                ((romp mem) (rom-guts mem))
+                (t 0))
+          (if (nlistp mem)
+              0
+              (if (car v-addr)
+                  (read-mem1 (cdr v-addr) (cdr mem))
+                  (read-mem1 (cdr v-addr) (car mem)))))))
+
+(disable read-mem1)
+
+(defn read-mem (v-addr mem)
+  (read-mem1 (reverse v-addr) mem))
+
+(disable read-mem)
+
+;;;   WRITE-MEM 
+
+(defn write-mem1 (v-addr mem value)
+  (if (stubp mem)
+      mem
+      (if (nlistp v-addr)
+          (cond ((ramp mem) (ram value))
+                (t mem))
+          (if (nlistp mem)
+              mem
+              (if (car v-addr)
+                  (cons (car mem)
+                        (write-mem1 (cdr v-addr) (cdr mem) value))
+                  (cons (write-mem1 (cdr v-addr) (car mem) value)
+                        (cdr mem)))))))
+
+(disable write-mem1)
+
+(defn write-mem (v-addr mem value)
+  (write-mem1 (reverse v-addr) mem value))
+
+(disable write-mem)
+
+;;;   RAMP-MEM  --  A particular address is RAM.
+
+(defn ramp-mem1 (v-addr mem)
+  (if (stubp mem)
+      f
+      (if (nlistp v-addr)
+          (ramp mem)
+          (if (nlistp mem)
+              f
+              (if (car v-addr)
+                  (ramp-mem1 (cdr v-addr) (cdr mem))
+                  (ramp-mem1 (cdr v-addr) (car mem)))))))
+
+(disable ramp-mem1)
+
+(defn ramp-mem (v-addr mem)
+  (ramp-mem1 (reverse v-addr) mem))
+
+(disable ramp-mem)
+
+;;;    ALL-RAMP-MEM  --  The entire memory is RAM.
+
+(defn all-ramp-mem (n mem)
+  (if (stubp mem)
+      f
+    (if (zerop n)
+        (ramp mem)
+      (if (nlistp mem)
+          f
+        (and (all-ramp-mem (sub1 n) (car mem))
+             (all-ramp-mem (sub1 n) (cdr mem)))))))
+
+(disable all-ramp-mem)
+
+;;;    CONSTANT-RAM  --  Sets all RAM cells to VALUE.
+
+(defn constant-ram (mem value)
+  (if (ramp mem)
+      (ram value)
+    (if (nlistp mem)
+        mem
+      (cons (constant-ram (car mem) value)
+            (constant-ram (cdr mem) value)))))
+
+(disable constant-ram)
+
+;;;   LEMMAS
+
+(prove-lemma memory-properp-if (rewrite)
+  (implies
+   (and (memory-properp n width a)
+        (memory-properp n width b))
+   (memory-properp n width (if c a b))))
+
+(prove-lemma memory-okp-if (rewrite)
+  (implies
+   (and (memory-okp n width a)
+        (memory-okp n width b))
+   (memory-okp n width (if c a b))))
+
+(prove-lemma memory-properp-constant-ram (rewrite)
+  (implies
+   (and (memory-properp n width mem)
+        (properp value)
+        (equal width (length value)))
+   (memory-properp n width (constant-ram mem value)))
+  ;;Hint
+  ((enable memory-properp constant-ram)))
+
+(prove-lemma memory-properp-after-write-mem1 (rewrite)
+  (implies
+   (and (memory-properp n width mem)
+        (properp value)
+        (equal width (length value))
+        (equal n (length v-addr)))
+   (memory-properp n width (write-mem1 v-addr mem value)))
+  ;;Hint
+  ((enable memory-properp length write-mem1)))
+
+(prove-lemma memory-properp-after-write-mem (rewrite)
+  (implies
+   (and (memory-properp n width mem)
+        (properp value)
+        (equal width (length value))
+        (equal n (length v-addr)))
+   (memory-properp n width (write-mem v-addr mem value)))
+  ;;Hint
+  ((enable write-mem)))
+
+(prove-lemma memory-okp-after-write-mem1 (rewrite)
+  (implies
+   (and (memory-okp n width mem)
+        (bvp value)
+        (equal width (length value))
+        (equal n (length v-addr)))
+   (memory-okp n width (write-mem1 v-addr mem value)))
+  ;;Hint
+  ((enable memory-okp length write-mem1)))
+
+(prove-lemma memory-okp-after-write-mem (rewrite)
+  (implies
+   (and (memory-okp n width mem)
+        (bvp value)
+        (equal width (length value))
+        (equal n (length v-addr)))
+   (memory-okp n width (write-mem v-addr mem value)))
+  ;;Hint
+  ((enable write-mem)))
+
+(prove-lemma v-iff-v-addr1-v-addr2-read-mem1-write-mem1 (rewrite)
+  (implies
+   (and (v-iff v-addr1 v-addr2)
+        (ramp-mem1 v-addr2 mem)
+        (equal (length v-addr1) (length v-addr2)))
+   (equal (read-mem1 v-addr1 (write-mem1 v-addr2 mem value))
+          value))
+  ;;Hint
+  ((enable v-iff memory-okp read-mem1 write-mem1 ramp-mem1)))
+
+(prove-lemma v-iff-v-addr1-v-addr2-read-mem1-write-mem1-not-ram (rewrite)
+  (implies
+   (and (not (ramp-mem1 v-addr2 mem))
+        (equal (length v-addr1) (length v-addr2)))
+   (equal (read-mem1 v-addr1 (write-mem1 v-addr2 mem value))
+          (read-mem1 v-addr1 mem)))
+  ;;Hint
+  ((enable v-iff memory-okp read-mem1 write-mem1 ramp-mem1)))
+
+(prove-lemma not-v-iff-v-addr1-v-addr2-read-mem1-write-mem1 (rewrite)
+  (implies
+   (not (v-iff v-addr1 v-addr2))
+   (equal (read-mem1 v-addr1 (write-mem1 v-addr2 mem value))
+          (read-mem1 v-addr1 mem)))
+  ;;Hint
+  ((enable v-iff memory-okp read-mem1 write-mem1)))
+
+(prove-lemma read-mem-write-mem ()
+  (implies
+   (equal (length v-addr1) (length v-addr2))
+   (equal (read-mem v-addr1 (write-mem v-addr2 mem value))
+          (if (and (v-iff v-addr1 v-addr2)
+                   (ramp-mem v-addr2 mem))
+              value
+            (read-mem v-addr1 mem))))
+  ;;Hint
+  ((enable read-mem write-mem ramp-mem)))
+
+(prove-lemma properp-read-mem1 (rewrite)
+  (implies
+   (memory-properp (length v-addr) size mem)
+   (and (properp (read-mem1 v-addr mem))
+        (equal (length (read-mem1 v-addr mem)) size)))
+  ;;Hint
+  ((enable memory-properp length read-mem1)))
+
+;;;  This lemma is inapplicable because of the free variable SIZE.
+
+(prove-lemma properp-read-mem ()
+  (implies
+   (memory-properp (length (reverse v-addr)) size mem)
+   (and (properp (read-mem v-addr mem))
+        (equal (length (read-mem v-addr mem)) size)))
+  ;;Hint
+  ((enable read-mem)
+   (disable length-reverse)))
+
+(prove-lemma properp-read-mem-32 (rewrite)
+  (implies (memory-properp (length v-addr) 32 mem)
+           (and (properp (read-mem v-addr mem))
+                (equal (length (read-mem v-addr mem)) 32)))
+  ;;Hint
+  ((use (properp-read-mem (v-addr v-addr) (size 32) (mem mem)))))
+
+(prove-lemma bvp-read-mem1 (rewrite)
+  (implies
+   (memory-okp (length v-addr) size mem)
+   (and (bvp (read-mem1 v-addr mem))
+        (equal (length (read-mem1 v-addr mem)) size)))
+  ;;Hint
+  ((enable memory-okp length read-mem1)))
+
+;;;  This lemma is inapplicable because of the free variable SIZE.
+
+(prove-lemma bvp-read-mem ()
+  (implies
+   (memory-okp (length (reverse v-addr)) size mem)
+   (and (bvp (read-mem v-addr mem))
+        (equal (length (read-mem v-addr mem)) size)))
+  ;;Hint
+  ((enable read-mem)
+   (disable length-reverse)))
+
+(prove-lemma bvp-read-mem-32 (rewrite)
+  (implies (memory-okp (length v-addr) 32 mem)
+           (and (bvp (read-mem v-addr mem))
+                (equal (length (read-mem v-addr mem)) 32)))
+  ;;Hint
+  ((use (bvp-read-mem (v-addr v-addr) (size 32) (mem mem)))))
+
+(prove-lemma all-ramp-mem->ramp-mem1 (rewrite)
+  (implies
+   (all-ramp-mem (length v-addr) mem)
+   (ramp-mem1 v-addr mem))
+  ;;Hint
+  ((enable all-ramp-mem ramp-mem1 length)))
+
+(prove-lemma all-ramp-mem->ramp-mem (rewrite)
+  (implies
+   (all-ramp-mem (length v-addr) mem)
+   (ramp-mem v-addr mem))
+  ;;Hint
+  ((enable all-ramp-mem ramp-mem)))
+
+(prove-lemma all-ramp-mem-after-write-mem1 ()
+  (implies
+   (and (all-ramp-mem n mem)
+        (equal n (length v-addr)))
+   (all-ramp-mem n (write-mem1 v-addr mem value)))
+  ;;Hint
+  ((enable all-ramp-mem write-mem1 length)))
+
+(prove-lemma all-ramp-mem-after-write-mem (rewrite)
+  (implies
+   (and (all-ramp-mem n mem)
+        (equal n (length v-addr)))
+   (all-ramp-mem n (write-mem v-addr mem value)))
+  ;;Hint
+  ((use (all-ramp-mem-after-write-mem1 (v-addr (reverse v-addr))))
+   (enable write-mem)))
+
+(prove-lemma all-ramp-mem-constant-ram (rewrite)
+  (equal (all-ramp-mem n (constant-ram mem value))
+         (all-ramp-mem n mem))
+  ;;Hint
+  ((enable all-ramp-mem constant-ram)))
+
+(prove-lemma memory-okp==>memory-properp (rewrite)
+  (implies
+   (memory-okp n m mem)
+   (memory-properp n m mem))
+  ;;Hint
+  ((enable memory-okp memory-properp)))

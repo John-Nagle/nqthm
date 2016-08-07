@@ -1,0 +1,324 @@
+#|
+
+ Copyright (C) 1994 by Yuan Yu.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Yuan Yu PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS"
+ WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT
+ LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Yuan Yu BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS,
+ LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT
+ OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS
+ OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD
+ PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR
+ FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(note-lib "mc20-2" t)
+;            Proof of the Correctness of a ZERO Program
+#|
+
+This program zeros an integer array.
+
+/* zeros an array */
+zero(a, n)
+int a[], n;
+{ 
+  int i;
+  for (i = 0; i < n; ++i)
+    a[i] = 0;
+}
+
+Here, in symbolic form, is the above program in MC68k instructions. The 
+machine code is produced by "gcc -O".
+
+a6@8,  the first argument which is the starting address of the array A.
+a6@12, the second argument which is the number of the elements we are zeroing. 
+a6@-4, the local variable i which serves as a counter.
+
+0x2328 <zero>:	        linkw a6,#0
+0x232c <zero+4>:	moveal a6@(8),a0
+0x2330 <zero+8>:	movel a6@(12),d1
+0x2334 <zero+12>:	clrl d0
+0x2336 <zero+14>:	cmpl d0,d1
+0x2338 <zero+16>:	ble 0x2344 <zero+28>
+0x233a <zero+18>:	clrl 0(a0)[d0.l*4]
+0x233e <zero+22>:	addql #1,d0
+0x2340 <zero+24>:	cmpl d0,d1
+0x2342 <zero+26>:	bgt 0x233a <zero+18>
+0x2344 <zero+28>:	unlk a6
+0x2346 <zero+30>:	rts
+
+The machine code of the above program is:
+
+<zero>:      0x4e56  0x0000  0x206e  0x0008  0x222e  0x000c  0x4280  0xb280
+<zero+16>:   0x6f0a  0x42b0  0x0c00  0x5280  0xb280  0x6ef6  0x4e5e  0x4e75
+
+'(78      86      0       0       32      110     0       8
+  34      46      0       12      66      128     178     128
+  111     10      66      176     12      0       82      128
+  178     128     110     246     78      94      78      117)
+|#
+
+; machine code for ZERO.
+(defn zero-code ()
+  '(78      86      0       0       32      110     0       8
+    34      46      0       12      66      128     178     128
+    111     10      66      176     12      0       82      128
+    178     128     110     246     78      94      78      117))
+
+(defn clr-lst (i n lst)
+  (if (lessp i n)
+      (clr-lst (add1 i) n (put-nth 0 i lst))
+    lst)
+  ((lessp (difference n i))))
+
+(defn zero1-t (i n)
+  (if (lessp i n)
+      (splus 4 (zero1-t (add1 i) n))
+    4)
+  ((lessp (difference n i))))
+
+(defn zero-t (n)
+  (if (zerop n) 8 (splus 8 (zero1-t 1 n))))
+  
+(defn zero-induct (s i n lst)
+  (if (lessp i n)
+      (zero-induct (stepn s 4) (add1 i) n (put-nth 0 i lst))
+    t)
+  ((lessp (difference n i))))
+
+(defn zero-statep (s a n lst)
+  (and (equal (mc-status s) 'running)
+       (evenp (mc-pc s))
+       (rom-addrp (mc-pc s) (mc-mem s) 32)
+       (mcode-addrp (mc-pc s) (mc-mem s) (zero-code))
+       (ram-addrp (sub 32 4 (read-sp s)) (mc-mem s) 16)
+       (mem-lst 4 a (mc-mem s) n lst)
+       (ram-addrp a (mc-mem s) (times 4 n))
+       (disjoint a (times 4 n) (sub 32 4 (read-sp s)) 16)
+       (equal a (read-mem (add 32 (read-sp s) 4) (mc-mem s) 4))
+       (equal n (iread-mem (add 32 (read-sp s) 8) (mc-mem s) 4))
+       (uint-rangep (times 4 n) 32)
+       (numberp n)))
+
+(defn zero-s0p (s a i n lst)
+  (and (equal (mc-status s) 'running)
+       (evenp (mc-pc s))
+       (rom-addrp (sub 32 24 (mc-pc s)) (mc-mem s) 32)
+       (mcode-addrp (sub 32 24 (mc-pc s)) (mc-mem s) (zero-code))
+       (ram-addrp (read-an 32 6 s) (mc-mem s) 16)
+       (mem-lst 4 a (mc-mem s) n lst)       
+       (ram-addrp a (mc-mem s) (times 4 n))
+       (disjoint a (times 4 n) (read-an 32 6 s) 16)
+       (equal a (read-an 32 0 s))
+       (equal i (nat-to-int (read-dn 32 0 s) 32))
+       (equal n (nat-to-int (read-dn 32 1 s) 32))
+       (uint-rangep (times 4 n) 32)
+       (numberp i)
+       (numberp n)
+       (leq i n)))
+
+; from s to exit: s --> sn.
+(prove-lemma zero-s-sn (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (zerop n))
+	      (and (equal (mc-status (stepn s 8)) 'running)
+		   (equal (mc-pc (stepn s 8)) (rts-addr s))
+		   (mem-lst 4 a (mc-mem (stepn s 8)) n lst)
+		   (equal (read-rn 32 14 (mc-rfile (stepn s 8)))
+			  (read-rn 32 14 (mc-rfile s)))
+		   (equal (read-rn 32 15 (mc-rfile (stepn s 8)))
+			  (add 32 (read-rn 32 15 (mc-rfile s)) 4)))))
+
+(prove-lemma zero-s-sn-rfile (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (d2-7a2-5p rn)
+		   (zerop n))
+	      (equal (read-rn oplen rn (mc-rfile (stepn s 8)))
+		     (read-rn oplen rn (mc-rfile s)))))
+
+(prove-lemma zero-s-sn-mem (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (disjoint (sub 32 4 (read-sp s)) 16 x k)
+		   (zerop n))			   
+	      (equal (read-mem x (mc-mem (stepn s 8)) k)
+		     (read-mem x (mc-mem s) k))))
+
+; from s to s0: s --> s0.		      
+(prove-lemma zero-s-s0 ()
+     (implies (and (zero-statep s a n lst)
+		   (not (zerop n)))
+	      (zero-s0p (stepn s 8) a 1 n (put-nth 0 0 lst))))
+
+(prove-lemma zero-s-s0-other (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (not (zerop n)))
+	      (and (equal (linked-rts-addr (stepn s 8)) (rts-addr s))
+		   (equal (linked-a6 (stepn s 8)) (read-an 32 6 s))
+		   (equal (read-rn 32 14 (mc-rfile (stepn s 8)))
+			  (sub 32 4 (read-sp s)))))) 
+
+(prove-lemma zero-s-s0-rfile (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (d2-7a2-5p rn)
+		   (not (zerop n)))
+	      (equal (read-rn oplen rn (mc-rfile (stepn s 8)))
+		     (read-rn oplen rn (mc-rfile s)))))
+
+(prove-lemma zero-s-s0-mem (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (disjoint (sub 32 4 (read-sp s)) 16 x k)
+		   (disjoint a (times 4 n) x k)
+		   (not (zerop n)))			   
+	      (equal (read-mem x (mc-mem (stepn s 8)) k)
+		     (read-mem x (mc-mem s) k))))
+
+; from s0 to exit:  s0 --> sn. By induction.
+; base case: s0 --> sn, if i >= n.
+(prove-lemma zero-s0-sn-base (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (not (lessp i n)))
+	      (and (equal (mc-status (stepn s 4)) 'running)
+		   (equal (mc-pc (stepn s 4)) (linked-rts-addr s))
+		   (mem-lst 4 a (mc-mem (stepn s 4)) n lst)
+		   (equal (read-rn 32 14 (mc-rfile (stepn s 4)))
+			  (linked-a6 s))
+		   (equal (read-rn 32 15 (mc-rfile (stepn s 4)))
+			  (add 32 (read-an 32 6 s) 8)))))
+
+(prove-lemma zero-s0-sn-mem-base (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (not (lessp i n)))
+	      (equal (read-mem x (mc-mem (stepn s 4)) k)
+		     (read-mem x (mc-mem s) k))))
+
+(prove-lemma zero-s0-sn-rfile-base (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (d2-7a2-5p rn)
+		   (not (lessp i n)))
+	      (equal (read-rn oplen rn (mc-rfile (stepn s 4)))
+		     (read-rn oplen rn (mc-rfile s)))))
+
+; induction case: s0 --> s0, if i < n.
+(prove-lemma zero-s0-s0 (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (lessp i n))
+	      (and (zero-s0p (stepn s 4) a (add1 i) n (put-nth 0 i lst))
+		   (equal (read-rn oplen 14 (mc-rfile (stepn s 4)))
+			  (read-rn oplen 14 (mc-rfile s)))
+		   (equal (linked-a6 (stepn s 4)) (linked-a6 s))
+		   (equal (linked-rts-addr (stepn s 4)) (linked-rts-addr s))))
+     ((enable iplus)))
+
+(prove-lemma zero-s0-s0-mem (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (disjoint a (times 4 n) x k)
+		   (lessp i n))
+	      (equal (read-mem x (mc-mem (stepn s 4)) k)
+		     (read-mem x (mc-mem s) k))))
+
+(prove-lemma zero-s0-s0-rfile (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (d2-7a2-5p rn)
+		   (lessp i n))
+	      (equal (read-rn oplen rn (mc-rfile (stepn s 4)))
+		     (read-rn oplen rn (mc-rfile s)))))
+
+(disable zero-statep)
+(disable zero-s0p)
+
+; put together: s0 --> sn.
+(prove-lemma zero-s0-sn (rewrite)
+     (implies 
+      (zero-s0p s a i n lst)
+      (and (equal (mc-status (stepn s (zero1-t i n))) 'running)
+	   (equal (mc-pc (stepn s (zero1-t i n))) (linked-rts-addr s))
+	   (mem-lst 4 a (mc-mem (stepn s (zero1-t i n))) n (clr-lst i n lst))
+	   (equal (read-rn 32 14 (mc-rfile (stepn s (zero1-t i n))))
+		  (linked-a6 s))
+	   (equal (read-rn 32 15 (mc-rfile (stepn s (zero1-t i n))))
+		  (add 32 (read-an 32 6 s) 8))))
+     ((induct (zero-induct s i n lst))
+      (disable linked-rts-addr linked-a6)))
+
+(prove-lemma zero-s0-sn-mem (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (disjoint (read-an 32 6 s) 16 x k)
+		   (disjoint a (times 4 n) x k))
+	      (equal (read-mem x (mc-mem (stepn s (zero1-t i n))) k)
+		     (read-mem x (mc-mem s) k)))
+     ((induct (zero-induct s i n lst))))
+
+(prove-lemma zero-s0-sn-rfile (rewrite)
+     (implies (and (zero-s0p s a i n lst)
+		   (d2-7a2-5p rn))
+	      (equal (read-rn oplen rn (mc-rfile (stepn s (zero1-t i n))))
+		     (read-rn oplen rn (mc-rfile s))))
+     ((induct (zero-induct s i n lst))))
+
+; the correctness of the program ZERO.			       
+(prove-lemma zero-correctness (rewrite)
+     (implies 
+      (zero-statep s a n lst)
+      (and (equal (mc-status (stepn s (zero-t n))) 'running)
+	   (equal (mc-pc (stepn s (zero-t n))) (rts-addr s))
+	   (mem-lst 4 a (mc-mem (stepn s (zero-t n))) n (clr-lst 0 n lst))
+	   (equal (read-an 32 6 (stepn s (zero-t n)))
+		  (read-an 32 6 s))
+	   (equal (read-an 32 7 (stepn s (zero-t n)))
+		  (add 32 (read-an 32 7 s) 4))))
+     ((use (zero-s-s0))
+      (disable put-nth rts-addr linked-rts-addr linked-a6)))
+
+(prove-lemma zero-mem (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (disjoint (sub 32 4 (read-sp s)) 16 x k)
+		   (disjoint a (times 4 n) x k))
+	      (equal (read-mem x (mc-mem (stepn s (zero-t n))) k)
+		     (read-mem x (mc-mem s) k)))
+     ((use (zero-s-s0))))
+
+(prove-lemma zero-rfile (rewrite)
+     (implies (and (zero-statep s a n lst)
+		   (d2-7a2-5p rn))
+	      (equal (read-rn oplen rn (mc-rfile (stepn s (zero-t n))))
+		     (read-rn oplen rn (mc-rfile s))))
+     ((use (zero-s-s0))))
+
+(disable zero-t)
+
+; we next need to prove that clr-lst does clear the list.       
+(prove-lemma zero-lst-la1 (rewrite)
+     (implies (lessp j i)
+	      (equal (get-nth j (clr-lst i n lst))
+		     (get-nth j lst)))
+     ((induct (clr-lst i n lst))
+      (enable get-nth-0)))     
+
+(prove-lemma zero-lst-la2 (rewrite)
+     (equal (get-nth i (clr-lst i n lst))
+	    (if (lessp i n) 0 (get-nth i lst)))
+     ((expand (clr-lst i n lst))
+      (enable get-nth-0)))     
+
+; clr-lst does clear the list.
+(prove-lemma clr-lst-clear (rewrite)
+     (implies (and (leq i j)
+		   (lessp j n))
+	      (equal (get-nth j (clr-lst i n lst)) 0))
+     ((enable get-nth-0)))
+
+(prove-lemma clr-lst-clear-0 (rewrite)
+     (implies (lessp j n)
+	      (equal (get-nth j (clr-lst 0 n lst)) 0))
+     ((enable get-nth-0)))

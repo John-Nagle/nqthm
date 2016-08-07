@@ -1,0 +1,392 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PRIMITIVES.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   We create and prove DUAL-EVAL lemmas for all of the primitives.  These
+;;;   lemmas are kept disabled since each is stored under the function symbol
+;;;   DUAL-EVAL.   RESULT-AND-STATE-LEMMAS is defined in "primitives.lisp".
+
+(result-and-state-lemmas)
+
+;;;   Below are definitions of some simple circuits which we think of as
+;;;   primitives, even though they are constructed from more than 1 macrocell.
+
+;;;    B-BUF
+
+(defn b-buf* ()
+  '(b-buf (in) (out)
+          ((g0 (out- out) b-nbuf (in)))
+          nil))
+
+(module-predicate b-buf*)
+
+(module-netlist b-buf*)
+
+(prove-lemma b-buf$value (rewrite)
+  (implies
+   (b-buf& netlist)
+   (equal (dual-eval 0 'b-buf (list in) state netlist)
+          (list (f-buf in))))
+  ;;hint
+  ((enable b-buf& boolp-b-gates b-buf boolp b-nbuf$value)))
+
+(disable b-buf$value)
+
+;;;   B-BUF-PWR -- In the LSI Logic implementation, this "super-buffer" can
+;;;   drive 64 loads in 1.6ns.
+
+(defn b-buf-pwr* ()
+  '(b-buf-pwr (in) (out)
+              ((g0 (out-) b-not (in))
+               (g1 (out)  b-not-b4ip (out-)))
+              nil))
+
+(module-predicate b-buf-pwr*)
+
+(module-netlist b-buf-pwr*)
+
+(prove-lemma b-buf-pwr$value (rewrite)
+  (implies
+   (b-buf-pwr& netlist)
+   (equal (dual-eval 0 'b-buf-pwr (list in) state netlist)
+          (list (f-buf in))))
+  ;;hint
+  ((enable b-buf-pwr& boolp-b-gates b-buf b-not$value b-not-b4ip$value)))
+
+(disable b-buf-pwr$value)
+
+
+;;;   DP-RAM-16x32
+;;;
+;;;   We prefer to think of the DP-RAM-16x32 arguments as being 
+;;;   structured as two addresses, the write enable, and
+;;;   the data.
+
+(prove-lemma dp-ram-16x32-args-crock (rewrite)
+  (implies
+   (and (equal (length a) 4) (properp a)
+        (equal (length b) 4) (properp b)
+        (equal (length c) 32) (properp c))
+   (equal (append a (append b (cons x c)))
+          (append (list-as-collected-nth a 4 0)
+                  (append (list-as-collected-nth b 4 0)
+                          (cons x
+                                (list-as-collected-nth c 32 0))))))
+  ;;Hint
+  ((use (equal-length-4-as-collected-nth (l a))
+        (equal-length-4-as-collected-nth (l b))
+        (equal-length-32-as-collected-nth (l c)))
+   (disable open-list-as-collected-nth)))
+
+(disable dp-ram-16x32-args-crock)
+
+(prove-lemma dp-ram-16x32$structured-value (rewrite)
+  (implies
+   (and (dp-ram-16x32& netlist)
+        (equal (length a) 4) (properp a)
+        (equal (length b) 4) (properp b)
+        (equal (length c) 32) (properp c))
+   (equal (dual-eval 0 'dp-ram-16x32 (append a (append b (cons x c)))
+                     state netlist)
+          (dual-port-ram-value 32 4 (append a (append b (cons x c)))
+                               state)))
+   ;;Hint
+   ((enable dp-ram-16x32-args-crock dp-ram-16x32$value)
+    (disable car-cdr-elim dual-port-ram-value)))
+
+(disable dp-ram-16x32$structured-value)
+
+(prove-lemma dp-ram-16x32$structured-state (rewrite)
+  (implies
+   (and (dp-ram-16x32& netlist)
+        (equal (length a) 4) (properp a)
+        (equal (length b) 4) (properp b)
+        (equal (length c) 32) (properp c))
+   (equal (dual-eval 2 'dp-ram-16x32 (append a (append b (cons x c)))
+                     state netlist)
+          (dual-port-ram-state 32 4 (append a (append b (cons x c)))
+                               state)))
+   ;;Hint
+   ((enable dp-ram-16x32-args-crock dp-ram-16x32$state)
+    (disable car-cdr-elim dual-port-ram-state)))
+
+(disable dp-ram-16x32$structured-state)
+
+
+
+;;;   MEM-32x32
+;;;
+;;;   We prefer to think of the MEM-32x32 arguments as being 
+;;;   structured as an address, data-bus, a strobe, and a read-write
+;;;   signal.
+
+
+(prove-lemma mem-32x32-args-crock (rewrite)
+  (implies
+   (and (equal (length addr) 32)  (properp addr)
+        (equal (length data) 32)  (properp data))
+   (equal (cons rw-
+                (cons strobe-
+                      (append addr data)))
+          (cons rw-
+                (cons strobe-
+                      (append (list-as-collected-nth addr 32 0)
+                              (list-as-collected-nth data 32 0))))))
+  ;;Hint
+  ((use (equal-length-32-as-collected-nth (l addr))
+        (equal-length-32-as-collected-nth (l data)))
+   (disable open-list-as-collected-nth)))
+
+(disable mem-32x32-args-crock)
+
+(prove-lemma list-32-nth-collapse (rewrite)
+  (implies (and (properp args)
+                (equal (length args) 32))
+           (equal (list (nth 0 args) 
+                        (nth 1 args) 
+                        (nth 2 args) 
+                        (nth 3 args) 
+                        (nth 4 args) 
+                        (nth 5 args) 
+                        (nth 6 args) 
+                        (nth 7 args) 
+                        (nth 8 args) 
+                        (nth 9 args) 
+                        (nth 10 args) 
+                        (nth 11 args) 
+                        (nth 12 args) 
+                        (nth 13 args) 
+                        (nth 14 args) 
+                        (nth 15 args) 
+                        (nth 16 args) 
+                        (nth 17 args) 
+                        (nth 18 args) 
+                        (nth 19 args) 
+                        (nth 20 args) 
+                        (nth 21 args) 
+                        (nth 22 args) 
+                        (nth 23 args) 
+                        (nth 24 args) 
+                        (nth 25 args) 
+                        (nth 26 args) 
+                        (nth 27 args) 
+                        (nth 28 args) 
+                        (nth 29 args) 
+                        (nth 30 args) 
+                        (nth 31 args))
+                  args))
+  ((use (equal-length-32-as-collected-nth (l args)))))
+
+(disable list-32-nth-collapse)
+
+
+(prove-lemma mem-32x32$structured-value-1 (rewrite)
+  (implies
+   (and (mem-32x32& netlist)
+        (equal (length addr) 32)   (properp addr)
+        (equal (length data) 32)   (properp data))
+   (equal (dual-eval 0 'mem-32x32
+                     (cons rw-
+                           (cons strobe-
+                                 (append addr data)))
+                     state netlist)
+          (memory-value state strobe- rw- 
+                        (list (nth 0 addr) 
+                              (nth 1 addr) 
+                              (nth 2 addr) 
+                              (nth 3 addr) 
+                              (nth 4 addr) 
+                              (nth 5 addr) 
+                              (nth 6 addr) 
+                              (nth 7 addr) 
+                              (nth 8 addr) 
+                              (nth 9 addr) 
+                              (nth 10 addr) 
+                              (nth 11 addr) 
+                              (nth 12 addr) 
+                              (nth 13 addr) 
+                              (nth 14 addr) 
+                              (nth 15 addr) 
+                              (nth 16 addr) 
+                              (nth 17 addr) 
+                              (nth 18 addr) 
+                              (nth 19 addr) 
+                              (nth 20 addr) 
+                              (nth 21 addr) 
+                              (nth 22 addr) 
+                              (nth 23 addr) 
+                              (nth 24 addr) 
+                              (nth 25 addr) 
+                              (nth 26 addr) 
+                              (nth 27 addr) 
+                              (nth 28 addr) 
+                              (nth 29 addr) 
+                              (nth 30 addr) 
+                              (nth 31 addr)) 
+                        (list (nth 0 data) 
+                              (nth 1 data) 
+                              (nth 2 data) 
+                              (nth 3 data) 
+                              (nth 4 data) 
+                              (nth 5 data) 
+                              (nth 6 data) 
+                              (nth 7 data) 
+                              (nth 8 data) 
+                              (nth 9 data) 
+                              (nth 10 data) 
+                              (nth 11 data) 
+                              (nth 12 data) 
+                              (nth 13 data) 
+                              (nth 14 data) 
+                              (nth 15 data) 
+                              (nth 16 data) 
+                              (nth 17 data) 
+                              (nth 18 data) 
+                              (nth 19 data) 
+                              (nth 20 data) 
+                              (nth 21 data) 
+                              (nth 22 data) 
+                              (nth 23 data) 
+                              (nth 24 data) 
+                              (nth 25 data) 
+                              (nth 26 data) 
+                              (nth 27 data) 
+                              (nth 28 data) 
+                              (nth 29 data) 
+                              (nth 30 data) 
+                              (nth 31 data)))))
+  ;;Hint
+  ((enable mem-32x32$value
+           mem-32x32-args-crock
+           mem-value
+           open-subrange)
+   (disable car-cdr-elim memory-value)))
+
+(disable mem-32x32$structured-value-1) 
+
+(prove-lemma mem-32x32$structured-value (rewrite)
+  (implies
+   (and (mem-32x32& netlist)
+        (equal (length addr) 32)   (properp addr)
+        (equal (length data) 32)   (properp data))
+   (equal (dual-eval 0 'mem-32x32
+                     (cons rw-
+                           (cons strobe-
+                                 (append addr data)))
+                     state netlist)
+          (memory-value state strobe- rw- addr data)))
+  ;;Hint
+  ((enable mem-value list-32-nth-collapse
+           mem-32x32$structured-value-1)
+   (disable car-cdr-elim memory-value)))
+
+(disable mem-32x32$structured-value)
+
+
+(prove-lemma mem-32x32$structured-state-1 (rewrite)
+  (implies
+   (and (mem-32x32& netlist)
+        (equal (length addr) 32)   (properp addr)
+        (equal (length data) 32)   (properp data))
+   (equal (dual-eval 2 'mem-32x32
+                     (cons rw-
+                           (cons strobe-
+                                 (append addr data)))
+                     state netlist)
+          (next-memory-state state strobe- rw- 
+                             (list (nth 0 addr) 
+                                   (nth 1 addr) 
+                                   (nth 2 addr) 
+                                   (nth 3 addr) 
+                                   (nth 4 addr) 
+                                   (nth 5 addr) 
+                                   (nth 6 addr) 
+                                   (nth 7 addr) 
+                                   (nth 8 addr) 
+                                   (nth 9 addr) 
+                                   (nth 10 addr) 
+                                   (nth 11 addr) 
+                                   (nth 12 addr) 
+                                   (nth 13 addr) 
+                                   (nth 14 addr) 
+                                   (nth 15 addr) 
+                                   (nth 16 addr) 
+                                   (nth 17 addr) 
+                                   (nth 18 addr) 
+                                   (nth 19 addr) 
+                                   (nth 20 addr) 
+                                   (nth 21 addr) 
+                                   (nth 22 addr) 
+                                   (nth 23 addr) 
+                                   (nth 24 addr) 
+                                   (nth 25 addr) 
+                                   (nth 26 addr) 
+                                   (nth 27 addr) 
+                                   (nth 28 addr) 
+                                   (nth 29 addr) 
+                                   (nth 30 addr) 
+                                   (nth 31 addr)) 
+                             (list (nth 0 data) 
+                                   (nth 1 data) 
+                                   (nth 2 data) 
+                                   (nth 3 data) 
+                                   (nth 4 data) 
+                                   (nth 5 data) 
+                                   (nth 6 data) 
+                                   (nth 7 data) 
+                                   (nth 8 data) 
+                                   (nth 9 data) 
+                                   (nth 10 data) 
+                                   (nth 11 data) 
+                                   (nth 12 data) 
+                                   (nth 13 data) 
+                                   (nth 14 data) 
+                                   (nth 15 data) 
+                                   (nth 16 data) 
+                                   (nth 17 data) 
+                                   (nth 18 data) 
+                                   (nth 19 data) 
+                                   (nth 20 data) 
+                                   (nth 21 data) 
+                                   (nth 22 data) 
+                                   (nth 23 data) 
+                                   (nth 24 data) 
+                                   (nth 25 data) 
+                                   (nth 26 data) 
+                                   (nth 27 data) 
+                                   (nth 28 data) 
+                                   (nth 29 data) 
+                                   (nth 30 data) 
+                                   (nth 31 data)))))
+  ;;Hint
+  ((enable mem-32x32$state
+           mem-32x32-args-crock
+           mem-state
+           open-subrange)
+   (disable car-cdr-elim next-memory-state)))
+
+(disable mem-32x32$structured-state-1) 
+
+(prove-lemma mem-32x32$structured-state (rewrite)
+  (implies
+   (and (mem-32x32& netlist)
+        (equal (length addr) 32)   (properp addr)
+        (equal (length data) 32)   (properp data))
+   (equal (dual-eval 2 'mem-32x32
+                     (cons rw-
+                           (cons strobe-
+                                 (append addr data)))
+                     state netlist)
+          (next-memory-state state strobe- rw- addr data)))
+  ;;Hint
+  ((enable mem-state list-32-nth-collapse
+           mem-32x32$structured-state-1)
+   (disable car-cdr-elim memory-value)))
+
+(disable mem-32x32$structured-state)

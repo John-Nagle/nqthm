@@ -1,0 +1,5363 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;
+;;;    PREDICATE.EVENTS
+;;;
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Here we attempt to define a predicate that recognizes well-formed
+;;;  circuits.  Syntactically, this is straightforward; however, for
+;;;  bi-directional busses the ordering of primitives may result in
+;;;  different evaluations.  There is also the concern about
+;;;  combinational circularities in our circuit descriptions.
+;;;  Hopefully, the predicates below do not admit such circuits.
+
+;;;  The name of the predicate is TOP-LEVEL-PREDICATE.  It has one
+;;;  parameter, a netlist (the normal HDL circuit description).
+
+;;;  A second predicate LSI-TOP-LEVEL-PREDICATE has additional checks
+;;;  for LSI Logic's requirements.  It has three parameters:
+;;;    netlist - a netlist, in which all names are litatoms
+;;;    token-size - maximum allowed name length (should be 64)
+;;;    max-hierarchical-name-length - (should be 255)
+;;;
+;;;  The netlist predicates work in two stages.  First, they check the
+;;;  netlist for syntax errors (functions NETLIST-SYNTAX-OK,
+;;;  LSI-NETLIST-SYNTAX-OK).  Then, they check for other errors by
+;;;  attempting to construct a database of netlist properties
+;;;  (function NETLIST-PROPERTIES).
+
+;;;  Also included is function NETLIST-DATABASE, which constructs a
+;;;  database of netlist properties similar to the primitive database.
+;;;  The netlist database does not contain LSI-NAME, NEW-STATES, and
+;;;  RESULTS properties, but it does contain all the other primitive
+;;;  properties.  NETLIST-DATABASE assumes there are no syntax errors
+;;;  in the netlist.
+
+;;;  Correct results from all the functions mentioned above depend on
+;;;  a well-formed primitive database.  This is determined by function
+;;;  PRIMP-DATABASE-PREDICATE (no parameters).
+
+;;;  Test data for the predicates is in file predicate.tests.
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Syntax Requirements for Hardware Description Language
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; The netlist syntax is:
+;;;
+;;;   <netlist> ::= ( <module>* )
+;;;
+;;;   <module> ::= ( <module name> <module inputs> <module outputs>
+;;;                  <module occurrences> <module state names>
+;;;                  [ <annotation> ] )
+;;;
+;;;   <module name> ::= <name>
+;;;
+;;;   <module inputs> ::= ( <name>* )
+;;;
+;;;   <module outputs> ::= ( <name>* )
+;;;
+;;;   <module occurrences> ::= ( <occurrence>+ )
+;;;
+;;;   <module state names> ::= <name> | ( <name> <name>+ )
+;;;
+;;;   <annotation> ::= ( ( <key> . <value> )* )
+;;;
+;;;   <occurrence> ::= ( <occurrence name> <occurrence outputs>
+;;;                      <occurrence function> <occurrence inputs>
+;;;                      [ <annotation> ] )
+;;;
+;;;   <occurrence name> ::= <name>
+;;;
+;;;   <occurrence outputs> ::= ( <name>* )
+;;;
+;;;   <occurrence function> ::= <name>
+;;;
+;;;   <occurrence inputs> ::= ( <name>* )
+;;;
+;;;   <name> ::= <simple name> | <indexed name>
+;;;
+;;;   <simple name> is a litatom
+;;;
+;;;   <indexed name> is a shell object, constructed by
+;;;                  (index <simple name> <number>),
+;;;                  where <number> is a numberp
+;;;
+;;;   <key> is unrestricted
+;;;
+;;;   <value> is unrestricted
+;;;
+
+;;;
+;;; Additional syntax requirements are:
+;;;
+;;;   1.  There are no duplicate <module name>'s in the <netlist>, and no
+;;;       <module name> is the same as a primitive name.
+;;;
+;;;   2.  There are no duplicate signal names within a <module> except for
+;;;       IO-signals (intersection of <module inputs> and <module outputs>).
+;;;       The signals of a module are <module inputs> and <occurrence outputs>
+;;;       from all the <module occurrences>.  
+;;;
+;;;   3.  All <module outputs> are generated once and only once as
+;;;       <occurrence outputs> within the <module>.  
+;;;
+;;;   4.  All <occurrence inputs> within a <module> are signals of the module.
+;;;
+;;;   5.  <Module state names> are a subset of the module's
+;;;       <occurrence name>'s.
+;;;
+;;;   6.  There are no duplicate <occurrence name>'s within a module.
+;;;
+;;;   7.  Every <occurrence function> names either a primitive or a <module>
+;;;       defined in the <netlist> before the <module> where the
+;;;       <occurrence function> appears.  
+;;;
+;;;   8.  Numbers of <occurrence inputs> and <occurrence outputs> are the same
+;;;       as the numbers of inputs and outputs required by the definition of
+;;;       the module or the description of the primitive named by the
+;;;       <occurrence function>.
+
+
+(defn name-okp (name)
+  (if (litatom name)
+      T
+      (and (indexp name)
+           (litatom (i-name name)))))
+
+(disable name-okp)
+
+(defn bad-names (name-list)
+  (if (listp name-list)
+      (let ((name   (car name-list))
+            (result (bad-names (cdr name-list))))
+        (if (name-okp name)
+            result
+            (insert name result)))
+      nil))
+
+(disable bad-names)
+
+(defn name-list-errors (name-list duplicates-ok?)
+  (list (nlistp-or-err (bad-names name-list) 'bad-names)
+        (if duplicates-ok?
+            T
+            (no-duplicates-or-err name-list 'duplicates))
+        (nil-or-err (last-cdr name-list) 'not-proper-list)))
+
+(disable name-list-errors)
+
+(defn name-list-ok (name-list label duplicates-ok?)
+  (err-and (name-list-errors name-list duplicates-ok?)
+           label))
+
+(disable name-list-ok)
+
+(defn occ-arg-length-error (fn expected-args actual-args label)
+  (let ((f-length (length expected-args))
+        (a-length (length actual-args)))
+    (T-or-err (equal f-length a-length)
+              label
+              (list 'occ-function fn
+                    (list 'expected f-length)
+                    (list 'got      a-length)))))
+
+(disable occ-arg-length-error)
+
+(defn occ-form-ok (occ o-length)
+  (err-and (list (T-or-err (or (equal 4 o-length)
+                               (equal 5 o-length))
+                           'bad-occurrence-length o-length)
+                 (nil-or-err (last-cdr occ) 'not-proper-list))
+           'occurrence-form))
+
+(disable occ-form-ok)
+
+(defn occ-name-ok (o-name o-length)
+  (if (leq 1 o-length)
+      (label-error (T-or-err (name-okp o-name) 'bad-name o-name)
+                   'occurrence-name)
+      T))
+
+(disable occ-name-ok)
+
+(defn occ-outputs-ok (o-outs o-length)
+  (if (leq 2 o-length)
+      (name-list-ok o-outs 'occurrence-outputs F)
+      T))
+
+(disable occ-outputs-ok)
+
+(defn occ-inputs-ok (o-ins o-length)
+  (if (leq 4 o-length)
+      (name-list-ok o-ins 'occurrence-inputs T)
+      T))
+
+(disable occ-inputs-ok)
+
+(defn occ-function-ok (o-fn o-ins o-outs o-length netlist)
+
+  (cond ((lessp o-length 3)
+         T)
+
+        ((primp o-fn)
+         (let ((f-ins  (primp2 o-fn 'inputs))
+               (f-outs (primp2 o-fn 'outputs)))
+
+           (err-and (list (if (leq 4 o-length)
+                              (occ-arg-length-error o-fn f-ins o-ins
+                                                    'wrong-number-of-inputs)
+                              T)
+                          (occ-arg-length-error o-fn f-outs o-outs
+                                                'wrong-number-of-outputs))
+                    'occurrence-function)))
+
+        (T (let ((module (lookup-module o-fn netlist)))
+             (if (listp module)
+                 (let ((f-ins  (module-inputs  module))
+                       (f-outs (module-outputs module)))
+
+                   (err-and
+                    (list (if (leq 4 o-length)
+                              (occ-arg-length-error o-fn f-ins o-ins
+                                                    'wrong-number-of-inputs)
+                              T)
+                          (occ-arg-length-error o-fn f-outs o-outs
+                                                'wrong-number-of-outputs))
+                    'occurrence-function))
+
+                 (pred-error 'unknown-occurrence-function o-fn))))))
+
+(disable occ-function-ok)
+
+(defn occ-annotation-ok (o-anno o-length)
+  (if (equal o-length 5)
+      (label-error (T-or-err (alistp o-anno) 'not-alist o-anno)
+                   'occurrence-annotation)
+      T))
+
+(disable occ-annotation-ok)
+
+(defn occ-syntax-errors (occ netlist)
+  ;; occ is an occurrence from a module
+
+  (let ((o-name (occ-name       occ))
+        (o-outs (occ-outputs    occ))
+        (o-fn   (occ-function   occ))
+        (o-ins  (occ-inputs     occ))
+        (o-anno (occ-annotation occ))
+
+        (o-length (length occ)))
+
+    (list (occ-form-ok occ o-length)
+
+          (occ-name-ok    o-name o-length)
+          (occ-outputs-ok o-outs o-length)
+          (occ-inputs-ok  o-ins  o-length)
+
+          (occ-function-ok o-fn o-ins o-outs o-length netlist)
+
+          (occ-annotation-ok o-anno o-length))))
+
+(disable occ-syntax-errors)
+
+(defn occ-syntax-ok (occ netlist) ; occ is a module occurrence
+  (let ((o-name (occ-name occ)))
+    (err-and (occ-syntax-errors occ netlist)
+             (list 'occurrence o-name))))
+
+(disable occ-syntax-ok)
+
+
+;;; In OCC-BODY-SYNTAX-ERRORS, the parameters are as follows:
+;;;    body - the list of occurrences from a module (or a tail of it).
+;;;    occ-data - an alist containing:
+;;;      signals - a list of defined signals, consisting of module inputs and
+;;;                outputs of occurrences previous to body.
+;;;      pending-IO - a list of IO signals that have not yet appeared as
+;;;                   outputs.  
+;;;      non-depends - a list of signals that were not defined when they were
+;;;                    used as inputs of occurrences previous to body.  The
+;;;                    outputs of those occurrences should not have depended on
+;;;                    the undefined inputs, but that check is made elsewhere.
+;;;      occ-names - a list of the names of occurrences previous to body.
+;;;    outputs - a list of the outputs of the module.
+;;;    states - a list of the state names of the module.
+;;;    netlist - the netlist
+
+(defn initial-occ-syntax-data (m-ins m-outs)
+  (let ((IO-signals (intersection m-ins m-outs)))
+    (list (cons 'signals      m-ins)
+          (cons 'pending-IO   IO-signals)
+          (cons 'non-depends  nil)
+          (cons 'occ-names    nil))))
+
+(disable initial-occ-syntax-data)
+
+(defn update-occ-syntax-data (occ occ-data)
+  (let ((o-name (occ-name    occ))
+        (o-outs (occ-outputs occ))
+        (o-ins  (occ-inputs  occ))
+
+        (signals      (value 'signals     occ-data))
+        (pending-IO   (value 'pending-IO  occ-data))
+        (non-depends  (value 'non-depends occ-data))
+        (occ-names    (value 'occ-names   occ-data)))
+
+    (list (cons 'signals     (append (if (listp pending-IO)
+                                         (set-diff o-outs pending-IO)
+                                         o-outs)
+                                     signals))
+
+          (cons 'pending-IO  (set-diff pending-IO o-outs))
+
+          (cons 'non-depends (append (set-diff o-ins signals)
+                                     non-depends))
+
+          (cons 'occ-names   (cons o-name occ-names)))))
+
+(disable update-occ-syntax-data)
+
+(defn composite-occ-body-syntax-errors (body occ-data outputs states)
+  (let ((signals     (value 'signals     occ-data))
+        (pending-IO  (value 'pending-IO  occ-data))
+        (non-depends (value 'non-depends occ-data))
+        (occ-names   (value 'occ-names   occ-data)))
+
+    (list (nil-or-err body 'not-proper-list)
+
+          (nlistp-or-err pending-IO 'IO-signals-not-in-outputs)
+          (subset-or-err outputs signals 'outputs-not-in-signals)
+          (subset-or-err non-depends signals 'non-depends-not-in-signals)
+          (subset-or-err states occ-names 'states-not-in-occ-names)
+
+          (no-duplicates-or-err signals 'duplicates-in-signals)
+          (no-duplicates-or-err occ-names 'duplicates-in-occ-names))))
+
+(disable composite-occ-body-syntax-errors)
+
+(defn occ-body-syntax-errors (body occ-data outputs states netlist)
+  (if (nlistp body)
+      (composite-occ-body-syntax-errors body occ-data outputs states)
+
+      (let ((occ (car body)))
+
+        (cons (occ-syntax-ok occ netlist)
+              (occ-body-syntax-errors (cdr body)
+                                      (update-occ-syntax-data occ occ-data)
+                                      outputs states netlist)))))
+
+(disable occ-body-syntax-errors)
+
+(defn module-form-ok (module m-length)
+  (err-and (list (T-or-err (or (equal m-length 5)
+                               (equal m-length 6))
+                           'bad-module-length m-length)
+                 (nil-or-err (last-cdr module) 'not-proper-list))
+           'module-form))
+
+(disable module-form-ok)
+
+(defn module-name-ok (m-name m-length netlist)
+  (if (leq 1 m-length)
+      (err-and (list (T-or-err (name-okp m-name) 'bad-name m-name)
+
+                     (T-or-err (not (lookup-module m-name netlist))
+                               'duplicate-module-defns m-name)
+
+                     (T-or-err (not (primp m-name))
+                               'module-name-same-as-primitive m-name))
+               'module-name)
+      T))
+
+(disable module-name-ok)
+
+(defn module-inputs-ok (m-ins m-length)
+  (if (leq 2 m-length)
+      (name-list-ok m-ins 'module-inputs F)
+      T))
+
+(disable module-inputs-ok)
+
+(defn module-outputs-ok (m-outs m-length)
+  (if (leq 3 m-length)
+      (name-list-ok m-outs 'module-outputs F)
+      T))
+
+(disable module-outputs-ok)
+
+(defn states-list-or-nil (m-states m-length)
+  (if (leq 5 m-length)
+      (m-states-list m-states)
+      nil))
+
+(disable states-list-or-nil)
+
+(defn module-occurrences-ok (m-occs m-ins m-outs m-states m-length netlist)
+  (if (leq 4 m-length)
+      (err-and
+       (cons (T-or-err (listp m-occs) 'no-occurrences m-occs)
+             (occ-body-syntax-errors m-occs
+                                     (initial-occ-syntax-data m-ins m-outs)
+                                     m-outs
+                                     (states-list-or-nil m-states m-length)
+                                     netlist))
+       'module-occurrences)
+      T))
+
+(disable module-occurrences-ok)
+
+(defn module-statenames-ok (m-states m-length)
+  (if (leq 5 m-length)
+      (err-and (cons (T-or-err (if (listp m-states) (listp (cdr m-states)) T)
+                               'list-of-length-1-not-allowed
+                               m-states)
+                     (name-list-errors (m-states-list m-states) F))
+               'module-statenames)
+      T))
+
+(disable module-statenames-ok)
+
+(defn module-annotation-ok (m-anno m-length)
+  (if (equal m-length 6)
+      (label-error (T-or-err (alistp m-anno) 'not-alist m-anno)
+                   'module-annotation)
+      T))
+
+(disable module-annotation-ok)
+
+(defn module-syntax-errors (module netlist)
+  (let ((m-name   (module-name        module))
+        (m-ins    (module-inputs      module))
+        (m-outs   (module-outputs     module))
+        (m-occs   (module-occurrences module))
+        (m-states (module-statenames  module))
+        (m-anno   (module-annotation  module))
+
+        (m-length (length module)))
+
+    (list (module-form-ok module m-length)
+
+          (module-name-ok m-name m-length netlist)
+
+          (module-inputs-ok  m-ins  m-length)
+          (module-outputs-ok m-outs m-length)
+
+          (module-occurrences-ok m-occs m-ins m-outs m-states m-length
+                                 netlist)
+
+          (module-statenames-ok m-states m-length)
+
+          (module-annotation-ok m-anno   m-length))))
+
+(disable module-syntax-errors)
+
+(defn module-syntax-ok (module netlist)
+  (let ((m-name (module-name module)))
+    (err-and (module-syntax-errors module netlist)
+             (list 'module m-name))))
+
+(disable module-syntax-ok)
+
+(defn netlist-syntax-errors (netlist)
+  (if (listp netlist)
+      (let ((module   (car netlist))
+            (net-rest (cdr netlist)))
+        (cons (module-syntax-ok module net-rest)
+              (netlist-syntax-errors net-rest)))
+      (list
+       (nil-or-err netlist 'not-proper-list))))
+
+(disable netlist-syntax-errors)
+
+(defn netlist-syntax-ok (netlist)
+  (err-and (netlist-syntax-errors netlist)
+           'netlist-syntax-errors))
+
+(disable netlist-syntax-ok)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Syntax Requirements for LSI Logic's Network Description Language
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  LSI Logic's Network Description Language (NDL) has the following
+;;;  additional syntax requirements:  
+;;; 
+;;;  1.  A <name> is a standard litatom beginning with an upper case letter
+;;;      and containing only upper case letters, digits, hyphens (-), and
+;;;      underscores (_).  A <name> can contain at most 64 characters
+;;;      (token-size).  No name can be an NDL keyword.  
+;;; 
+;;;  2.  LSI Logic uses hierarchical names to provide a unique name for each
+;;;      signal in the circuit.  The hierarchical name is composed by appending
+;;;      /<occurrence name> for each occurrence in an instance tree until a
+;;;      primitive is reached; at that point /<name> is appended, where <name>
+;;;      is the name of a signal in the occurrence that is an instance of the
+;;;      primitive.  No hierarchical name can contain more than 255 characters
+;;;      (hierarchical-size).
+;;; 
+;;;  3.  No signal name (module input or occurrence output, including module
+;;;      outputs) can be the same as an occurrence name except that if an
+;;;      occurrence has only one output, then the output name can be the same
+;;;      as the name of that occurrence.  
+;;; 
+;;;  4.  No signal name or occurrence name in a module can be the same as the
+;;;      name of any function used within the module.  If the function
+;;;      is a primitive, LSI Logic's name for it is the one that must
+;;;      not be used as a signal or occurrence name.
+
+
+(defn letterp (char)
+  (member char
+          (unpack 'ABCDEFGHIJKLMNOPQRSTUVWXYZ)))
+
+(disable letterp)
+
+(defn digitp (char)
+  (member char
+          (cdr (unpack 'a0123456789))))
+
+(disable digitp)
+
+(defn bad-lsi-name-chars (char-list special-characters)
+  (if (listp char-list)
+      (let ((char (car char-list))
+            (rslt (bad-lsi-name-chars (cdr char-list) special-characters)))
+
+        (if (or (letterp char)
+                (digitp char)
+                (member char special-characters))
+            rslt
+            (insert char rslt)))
+      nil))
+
+(disable bad-lsi-name-chars)
+
+(defn lsi-keywords ()
+  '(action angle annotations bloat block bus cell celstat chksum clk_line
+    direction dummy end flip function hm_bidi hm_input hm_output library name
+    nc net pin powercells priority psecured region scale technology tsecured
+    via wire))
+
+(disable lsi-keywords)
+(disable *1*lsi-keywords)
+
+;;; Following keywords cannot be used as named powers, as global signal names,
+;;; in LCMP analyzed comment parameters, or in WIRED statements:
+;;;
+;;;     acpow acpower bd bidirect bidirects check compile dcpow dcpower
+;;;     def define def_global def_globals del delay delays delete desc
+;;;     description dir  directory filmgr in initialize input inputs level
+;;;     list load mod module opt option options out output outputs power
+;;;     powers probe security simsub str strength tab table tdl use 
+;;;     use_global use_globals wired
+;;;
+;;; also keywords:  #in #inp #input #inputs #out #output #outputs
+
+
+(defn lsi-name-ok (name token-size)
+  (cond ((member name (lsi-keywords))
+         (pred-error 'lsi-name-is-keyword name))
+
+        ((litatom name)
+         (let ((unpacked-name (unpack name))
+               (special-characters (cdr (unpack 'a-_))))
+           (err-and 
+            (list (let ((nlength (length unpacked-name)))
+                    (T-or-err (leq nlength token-size)
+                              'name-too-long
+                              (list (list 'name-length        nlength)
+                                    (list 'max-allowed-length token-size))))
+
+                  (T-or-err (letterp (car unpacked-name))
+                            'name-begins-with-nonletter
+                            (car unpacked-name))
+
+                  (nlistp-or-err (bad-lsi-name-chars (cdr unpacked-name)
+                                                     special-characters)
+                                 'illegal-chars-in-name)
+
+                  (let ((lc (last-cdr unpacked-name)))
+                    (T-or-err (equal lc 0)
+                              'not-standard-litatom
+                              (list 'last-cdr lc))))
+
+            (list 'bad-lsi-name name))))
+
+      (T (pred-error 'lsi-name-not-litatom name))))
+
+(disable lsi-name-ok)
+
+(defn lsi-bad-names (name-list token-size)
+  (if (listp name-list)
+      (cons (lsi-name-ok   (car name-list) token-size)
+            (lsi-bad-names (cdr name-list) token-size))
+      nil))
+
+(disable lsi-bad-names)
+
+(defn lsi-name-list-errors (name-list token-size duplicates-ok?)
+  (list (err-and (lsi-bad-names name-list token-size) 'bad-lsi-names)
+        (if duplicates-ok?
+            T
+            (no-duplicates-or-err name-list 'duplicates))
+        (nil-or-err (last-cdr name-list) 'not-proper-list)))
+
+(disable lsi-name-list-errors)
+
+(defn lsi-name-list-ok (name-list token-size label duplicates-ok?)
+  (err-and (lsi-name-list-errors name-list token-size duplicates-ok?)
+           label))
+
+(disable lsi-name-list-ok)
+
+(defn lsi-function-name (fname)
+  (if (and (primp fname)
+           (primp-lookup fname 'lsi-name))
+      (let ((lsi-entry (primp2 fname 'lsi-name)))
+        (if (listp lsi-entry)
+            (car lsi-entry)
+            lsi-entry))
+      fname))
+
+(disable lsi-function-name)
+
+
+(defn name-length (name)
+  (length (unpack name)))
+
+(disable name-length)
+
+(defn hierarchical-name-max (n1 n2)
+  (cond ((and (nlistp n1) (nlistp n2))
+         0)
+        ((nlistp n1)
+         n2)
+        ((nlistp n2)
+         n1)
+        ((lessp (car n1) (car n2))
+         n2)
+        (T n1)))
+
+(disable hierarchical-name-max)
+
+(defn max-hierarchical-length-and-name (names)
+  (if (listp names)
+      (let ((n1   (car names))
+            (rest (cdr names)))
+        (hierarchical-name-max
+           (list (add1 (name-length n1)) n1)
+           (max-hierarchical-length-and-name rest)))
+      0))
+
+(disable max-hierarchical-length-and-name)
+
+(defn max-occ-hierarchical-name (occ hierarchical-table hierarchical-size)
+  (let ((o-name (occ-name     occ))
+        (o-outs (occ-outputs  occ))
+        (o-fn   (occ-function occ))
+        (o-ins  (occ-inputs   occ)))
+    (let ((base (if (primp o-fn)
+                    (max-hierarchical-length-and-name (append o-ins o-outs))
+                    (value o-fn hierarchical-table))))
+      (if (listp base)
+          (let ((length (plus (add1 (name-length o-name)) (car base)))
+                (name   (cons o-name (cdr base))))
+            (if (leq length hierarchical-size)
+                (cons length name)
+                (pred-error 'hierarchical-name-too-long
+                            (list (list 'name-length length)
+                                  (list 'max-allowed-length hierarchical-size)
+                                  (list 'name name)))))
+          0))))
+
+(disable max-occ-hierarchical-name)
+
+
+;; In LSI-OCC-SYNTAX-OK, the parameters are as follows:
+;;    occ - an occurrence from a module.
+;;    hierarchical-name-error - a net-errorp if any hierarchical name in occ
+;;                              was too long.  
+;;    occ-data - an alist containing:
+;;      signals - a list of defined signals, consisting of module inputs and
+;;                outputs of previous occurrences.
+;;      occ-names - a list of the names of previous occurrences.
+;;    netlist - the netlist.
+;;    token-size - the maximum number of characters allowed in a name.
+
+(defn lsi-occ-name-ok (o-name o-length o-outs occ-data token-size)
+  (if (leq 1 o-length)
+      (let ((signals (value 'signals occ-data)))
+        (err-and (list (lsi-name-ok o-name token-size)
+                         
+                       (T-or-err (not (member o-name signals))
+                                 'occ-name-is-signal o-name)
+
+                       (T-or-err (or (equal (cdr o-outs) nil)
+                                     (not (member o-name o-outs)))
+                                 'occ-name-is-same-as-output-name o-name))
+
+                 'occurrence-name))
+      T))
+
+(disable lsi-occ-name-ok)
+
+(defn lsi-occ-outputs-ok (o-outs o-length occ-data token-size)
+  (if (leq 2 o-length)
+      (let ((occ-names (value 'occ-names occ-data)))
+        (err-and (list (lsi-name-list-ok o-outs token-size 'occ-outputs F)
+                       (disjoint-or-err o-outs occ-names
+                                        'occ-outputs-in-occ-names))
+                 'occurrence-outputs))
+      T))
+
+(disable lsi-occ-outputs-ok)
+
+(defn lsi-occ-inputs-ok (o-ins o-length token-size)
+  (if (leq 4 o-length)
+      (lsi-name-list-ok o-ins token-size 'occurrence-inputs T)
+      T))
+
+(disable lsi-occ-inputs-ok)
+
+(defn lsi-occ-syntax-ok (occ hierarchical-name-error occ-data netlist
+                         token-size) 
+  
+  (let ((o-name (occ-name       occ))
+        (o-outs (occ-outputs    occ))
+        (o-fn   (occ-function   occ))
+        (o-ins  (occ-inputs     occ))
+        (o-anno (occ-annotation occ))
+
+        (o-length (length occ)))
+
+    (err-and
+     (list (occ-form-ok occ o-length)
+
+           (lsi-occ-name-ok    o-name o-length o-outs occ-data token-size)
+           (lsi-occ-outputs-ok o-outs o-length occ-data token-size)
+           (lsi-occ-inputs-ok  o-ins  o-length token-size)
+
+           (occ-function-ok o-fn o-ins o-outs o-length netlist)
+
+           (occ-annotation-ok o-anno o-length)
+
+           hierarchical-name-error)
+     (list 'occurrence o-name))))
+
+(disable lsi-occ-syntax-ok)
+
+
+;;; In LSI-OCC-BODY-SYNTAX-CHECK, the parameters are as follows:
+;;;    body - the list of occurrences from a module (or a tail of it).
+;;;    occ-data - an alist containing:
+;;;      signals - a list of defined signals, consisting of module inputs and
+;;;                outputs of occurrences previous to body.
+;;;      pending-IO - a list of IO signals that have not yet appeared as
+;;;                   outputs.  
+;;;      non-depends - a list of signals that were not defined when they were
+;;;                    used as inputs of occurrences previous to body.  The
+;;;                    outputs of those occurrences should not have depended
+;;;                    on the undefined inputs, but that check is made
+;;;                    elsewhere.
+;;;      occ-names - a list of the names of occurrences previous to body.
+;;;      occ-fns - a list of the names of occurrence functions from
+;;;                occurrences previous to body.  On primitives, the names
+;;;                are the LSI function names from the primitives database. 
+;;;      hierarchical-name - biggest hierarchical name from previous
+;;;                          occurrences, in form (<length> . <name>+).
+;;;    outputs - a list of the outputs of the module.
+;;;    states - a list of the state names of the module.
+;;;    netlist - the netlist
+;;;    token-size - the maximum number of characters allowed in a name.
+;;;    hierarchical-table - table containing biggest hierarchical names for
+;;;                         subordinate modules, in form (<length> . <name>+).
+;;;    hierarchical-size - the maximum number of characters allowed in a
+;;;                        hierarchical name.
+
+(defn initial-lsi-occ-syntax-data (m-ins m-outs)
+  (list* (cons 'occ-fns nil)
+         (cons 'hierarchical-name 0)
+         (initial-occ-syntax-data m-ins m-outs)))
+
+(disable initial-lsi-occ-syntax-data)
+
+(defn update-lsi-occ-syntax-data (occ o-hname occ-data)
+  (let ((o-fn (occ-function occ))
+        (occ-fns           (value 'occ-fns           occ-data))
+        (hierarchical-name (value 'hierarchical-name occ-data)))
+
+    (list* (cons 'occ-fns (cons (lsi-function-name o-fn) occ-fns))
+           (cons 'hierarchical-name
+                 (hierarchical-name-max hierarchical-name o-hname))
+           (update-occ-syntax-data occ occ-data))))
+
+(disable update-lsi-occ-syntax-data)
+
+(defn lsi-occ-body-syntax-check (body occ-data outputs states netlist
+                                 token-size
+                                 hierarchical-table hierarchical-size)
+  (if (nlistp body)
+      (let ((signals   (value 'signals   occ-data))
+            (occ-fns   (value 'occ-fns   occ-data))
+            (occ-names (value 'occ-names occ-data)))
+
+        (append (composite-occ-body-syntax-errors body occ-data outputs
+                                                  states)
+
+                (list (alist-entry 'hierarchical-name occ-data)
+
+                      (disjoint-or-err signals   occ-fns
+                                       'signal-occ-fn-overlap)
+                      (disjoint-or-err occ-names occ-fns
+                                       'occ-name-occ-fn-overlap))))
+
+      (let ((occ (car body)))
+        (let ((o-hname (max-occ-hierarchical-name occ hierarchical-table
+                                                  hierarchical-size)))
+
+          (cons (lsi-occ-syntax-ok occ o-hname occ-data netlist token-size)
+                (lsi-occ-body-syntax-check
+                   (cdr body)
+                   (update-lsi-occ-syntax-data occ o-hname occ-data)
+                   outputs states netlist token-size
+                   hierarchical-table hierarchical-size))))))
+
+(disable lsi-occ-body-syntax-check)
+
+(defn lsi-module-name-ok (m-name m-length token-size netlist)
+  (if (leq 1 m-length)
+      (err-and (list (lsi-name-ok m-name token-size)
+
+                     (T-or-err (not (lookup-module m-name netlist))
+                               'duplicate-module-defns m-name)
+
+                     (T-or-err (not (primp m-name))
+                               'module-name-same-as-primitive m-name))
+               'module-name)
+      T))
+
+(disable lsi-module-name-ok)
+
+(defn lsi-module-inputs-ok (m-ins m-length token-size)
+  (if (leq 2 m-length)
+      (lsi-name-list-ok m-ins token-size 'module-inputs F)
+      T))
+
+(disable lsi-module-inputs-ok)
+
+(defn lsi-module-outputs-ok (m-outs m-length token-size)
+  (if (leq 3 m-length)
+      (lsi-name-list-ok m-outs token-size 'module-outputs F)
+      T))
+
+(disable lsi-module-outputs-ok)
+
+(defn lsi-module-occurrences-check (m-occs m-ins m-outs m-states m-length
+                                    netlist token-size
+                                    hierarchical-table hierarchical-size)
+  (if (leq 4 m-length)
+      (cons (T-or-err (listp m-occs) 'no-occurrences m-occs)
+            (lsi-occ-body-syntax-check m-occs
+                                       (initial-lsi-occ-syntax-data m-ins
+                                                                    m-outs)
+                                       m-outs
+                                       (states-list-or-nil m-states m-length)
+                                       netlist token-size
+                                       hierarchical-table hierarchical-size))
+      T))
+
+(disable lsi-module-occurrences-check)
+
+(defn lsi-module-syntax-check (module netlist token-size hierarchical-table
+                               hierarchical-size)
+
+  (let ((m-name   (module-name        module))
+        (m-ins    (module-inputs      module))
+        (m-outs   (module-outputs     module))
+        (m-occs   (module-occurrences module))
+        (m-states (module-statenames  module))
+        (m-anno   (module-annotation  module))
+
+        (m-length (length module)))
+
+    (let ((occ-result (lsi-module-occurrences-check m-occs m-ins m-outs
+                                                    m-states m-length
+                                                    netlist token-size
+                                                    hierarchical-table
+                                                    hierarchical-size)))
+
+        (list (cons m-name (value 'hierarchical-name occ-result))
+              (err-and 
+               (list (module-form-ok module m-length)
+
+                     (lsi-module-name-ok m-name m-length token-size netlist)
+
+                     (lsi-module-inputs-ok  m-ins  m-length token-size)
+                     (lsi-module-outputs-ok m-outs m-length token-size)
+
+                     (err-and occ-result 'module-occurrences)
+
+                     (module-statenames-ok m-states m-length)
+
+                     (module-annotation-ok m-anno   m-length))
+
+               (list 'module m-name))))))
+
+(disable lsi-module-syntax-check)
+
+(defn lsi-netlist-syntax-check (netlist token-size hierarchical-size)
+  (if (listp netlist)
+      (let ((table (lsi-netlist-syntax-check (cdr netlist) token-size
+                                             hierarchical-size)))
+        (append (lsi-module-syntax-check (car netlist) (cdr netlist)
+                                         token-size table
+                                         hierarchical-size)
+                table))
+      (list
+       (nil-or-err netlist 'not-proper-list))))
+
+(disable lsi-netlist-syntax-check)
+
+(defn lsi-netlist-syntax-ok (netlist token-size hierarchical-size)
+  (err-and (lsi-netlist-syntax-check netlist token-size hierarchical-size)
+           'lsi-netlist-syntax-errors))
+
+(disable lsi-netlist-syntax-ok)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Netlist Database
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; The netlist database functions assume that the primitive database is ok,
+;;; and that there are no syntax errors in the netlist.  
+
+
+(defn primitive-properties ()
+  '(delays drives input-types inputs loadings lsi-name new-states
+    out-depends output-types outputs results state-types states
+    gates pads primitives transistors))
+
+(disable primitive-properties)
+(disable *1*primitive-properties)
+
+(defn all-module-props ()
+  '(delays drives input-types inputs loadings out-depends output-types
+    outputs state-types states gates pads primitives transistors))
+
+(disable all-module-props)
+(disable *1*all-module-props)
+
+
+;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;
+;;    Netlist Database Utilities
+;;
+;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;; Representation for property value if it had an error or was undefined
+(add-shell unknown nil unknownp ())
+
+(defn value-or-unknown (key alist)
+  (if (boundp key alist)
+      (value key alist)
+      (unknown)))
+
+(disable value-or-unknown)
+
+(defn collect-value-or-unknown (keys alist)
+  (if (listp keys)
+      (cons (value-or-unknown         (car keys) alist)
+            (collect-value-or-unknown (cdr keys) alist))
+      nil))
+
+(disable collect-value-or-unknown)
+
+
+;; Representatin of IO-signal output
+(add-shell IO-out nil IO-outp
+           ((IO-out-signal (none-of) false))) ; (one-of litatom indexp)
+
+(defn mark-IO-out (name IO-outs)
+  (if (member name IO-outs)
+      (IO-out name)
+      name))
+
+(disable mark-IO-out)
+
+(defn mark-IO-outs-0 (names IO-outs)
+  (if (listp names)
+      (cons (mark-IO-out    (car names) IO-outs)
+            (mark-IO-outs-0 (cdr names) IO-outs))
+      nil))
+
+(disable mark-IO-outs-0)      
+
+(defn mark-IO-outs (names IO-outs)
+  (if (disjoint IO-outs names)
+      names
+      (mark-IO-outs-0 names IO-outs)))
+
+(disable mark-IO-outs)
+
+(defn unmark-IO-out (name)
+  (if (IO-outp name)
+      (IO-out-signal name)
+      name))
+
+(disable unmark-IO-out)
+
+(defn unmark-IO-outs (names)
+  (if (listp names)
+      (let ((n (unmark-IO-out  (car names)))
+            (r (unmark-IO-outs (cdr names))))
+        (if (and (equal n (car names))
+                 (equal r (cdr names)))
+            names
+            (cons n r)))
+      names))
+
+(disable unmark-IO-outs)
+
+(defn value2 (s in-map out-map)
+  (if (boundp s in-map)
+      (value s in-map)
+      (value (unmark-IO-out s) out-map)))
+
+(disable value2)
+
+(defn collect-value2 (lst in-map out-map)
+  (if (listp lst)
+      (cons (value2         (car lst) in-map out-map)
+            (collect-value2 (cdr lst) in-map out-map))
+      nil))
+
+(disable collect-value2)
+
+(defn signal-namep (x)
+  (or (litatom x) (indexp x) (IO-outp x)))
+
+(disable signal-namep)
+
+
+(defn parent-synonym0 (name slist used-names)
+  (cond ((member name used-names) name)
+        ((boundp name slist)
+         (let ((v (value name slist)))
+           (if (signal-namep v)
+               (parent-synonym0 v slist (cons name used-names))
+               name)))
+        (T name))
+  ((lessp (count (unbind-list used-names slist)))))
+
+(disable parent-synonym0)
+
+(defn parent-synonym (name slist)
+  (parent-synonym0 name slist nil))
+
+(disable parent-synonym)
+
+(defn parent-synonyms-list (lst slist)
+  (if (listp lst)
+      (cons (parent-synonym       (car lst) slist)
+            (parent-synonyms-list (cdr lst) slist))
+      lst))
+
+(disable parent-synonyms-list)
+
+
+(defn extract-names (lst)
+  (cond ((nlistp lst) nil)
+        ((signal-namep (car lst))
+         (insert (car lst) (extract-names (cdr lst))))
+        (t (extract-names (cdr lst)))))
+
+(disable extract-names)
+
+
+;;;  EXTERNALIZE-PARENTS makes the parent synonym for all outputs that
+;;;  are synonyms of an internal signal be the first output that is a
+;;;  synonym for the internal signal.  For example, in the following,
+;;;
+;;;    (FANOUT-4 (A) 
+;;;             (Z0 Z1 Z2 Z3) 
+;;;             ((AA (AA) B-BUF (A)) 
+;;;              (G0 (Z0) ID (AA)) 
+;;;              (G1 (Z1) ID (AA)) 
+;;;              (G2 (Z2) ID (AA)) 
+;;;              (G3 (Z3) ID (AA))) 
+;;;             NIL)
+;;;
+;;;  Z0 gets the drive value of internal signal AA, and the other
+;;;  outputs, Z1, Z2, and Z3, are marked as synonyms of Z0.
+
+(defn externalize-parents (names alist inputs outputs)
+  ;; guard: names is a subset of outputs
+
+  (if (listp names)
+      (let ((out1 (car names)))
+        (let ((p1 (parent-synonym out1 alist)))
+
+          (let ((new-alist
+                 (if (or (member p1 inputs) (member p1 outputs))
+                     alist
+                     (let ((v (value-or-unknown p1 alist)))
+                       (list* (cons p1 out1)
+                              (cons out1 v)
+                              (unbind out1 (unbind p1 alist)))))))
+
+            (externalize-parents (cdr names) new-alist inputs outputs))))
+
+      alist))
+
+(disable externalize-parents)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Module Input/Output Types
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Below are functions that check the types of module inputs and outputs.
+;;;
+;;;  Known input types:
+;;;    (BOOLP CLK FREE LEVEL PARAMETRIC TRI-STATE TTL TTL-TRI-STATE)
+;;;
+;;;  Known output types:
+;;;    ((<an input name>)
+;;;     BOOLP CLK LEVEL PARAMETRIC TRI-STATE TTL TTL-TRI-STATE)
+
+;;;  Contradictory type requirements give an error.  IO signals must
+;;;  have tri-state output types and either tri-state or free input
+;;;  types.  T-wire inputs must have tri-state input and output types.
+;;;  Otherwise, the output type of a signal is required to be a
+;;;  subtype of its input type.
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Type Comparison Functions
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn subtype (x y)
+  (cond ((equal y 'free)
+         t)
+
+        ((equal x 'boolp)
+         (member y '(boolp tri-state ttl-tri-state ttl)))
+
+        ((equal x 'ttl-tri-state)
+         (member y '(tri-state ttl-tri-state)))
+
+        (t (equal x y))))
+
+(disable subtype)
+
+(defn types-compatiblep (t1 t2)
+  (cond ((equal t1 t2)
+         T)
+
+        ((or (equal t1 'free) (equal t2 'free))
+         T)
+
+        ((equal t1 'tri-state)
+         (equal t2 'ttl-tri-state))
+
+        ((equal t2 'tri-state)
+         (equal t1 'ttl-tri-state))
+
+        (T F)))
+
+(disable types-compatiblep)
+
+(defn tri-state-typep (type)
+  (member type
+          '(tri-state ttl-tri-state)))
+
+(disable tri-state-typep)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Type Lookup Functions
+;;; ~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn type-value0 (n alist free used-names)
+  (if (or (member n used-names)
+          (not (boundp n alist)))
+
+      (if free 'free (list n))
+
+      (let ((type (value n alist)))
+
+        (if (listp type)
+            (type-value0 (car type) alist free
+                         (cons n used-names))
+            type)))
+
+  ((lessp (count (unbind-list used-names alist)))))
+
+(disable type-value0)
+
+(defn type-value (n alist free)
+  (type-value0 n alist free nil))
+
+(disable type-value)
+
+(defn input-type (name alist)
+  (type-value (unmark-IO-out name) alist T))
+
+(disable input-type)
+
+(defn output-type (name out-map in-map)
+  (let ((type (type-value name out-map F)))
+    (if (listp type)
+        (type-value (car type) in-map F)
+        type)))
+
+(disable output-type)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Updating Occurrence List Input and Output Types
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn initial-occ-in-types ()
+  nil)
+
+(defn initial-occ-out-types ()
+  nil)
+
+
+(defn add-in-type (name type type-map)
+  (let ((name (unmark-IO-out name)))
+
+    (cond ((equal type 'free)
+           type-map)
+
+          ((boundp name type-map)
+           (let ((old-type (value name type-map)))
+             ;; (not (equal old-type 'free))
+
+             (cond ((or (unknownp old-type)
+                        (subtype old-type type))
+                    type-map)
+
+                   ((or (unknownp type)
+                        (subtype type old-type))
+                    (cons (cons name type)
+                          (unbind name type-map)))
+
+                   (T (list* (pred-error (list 'signal name)
+                                         (list (list 'old-type old-type)
+                                               (list 'new-type type)))
+                             (cons name (unknown))
+                             (unbind name type-map))))))
+
+          (T (cons (cons name type) type-map)))))
+
+(disable add-in-type)
+
+(defn add-in-types (inputs types type-map)
+  (if (listp inputs)
+      (add-in-types (cdr inputs) (cdr types)
+                    (add-in-type (car inputs) (car types)
+                                 type-map))
+      type-map))
+
+(disable add-in-types)
+
+(defn update-in-types (in-types o-ins o-fn-props)
+  (let ((o-in-types (value 'input-types o-fn-props)))
+    (add-in-types o-ins o-in-types in-types)))
+
+(disable update-in-types)
+
+
+(defn add-out-type (name type arg-map type-map)
+  (cons (cons name
+              (if (listp type)
+                  (collect-value type arg-map)
+                  type))
+        type-map))
+
+(disable add-out-type)
+
+(defn add-out-types (outputs types arg-map type-map)
+  (if (listp outputs)
+      (add-out-types (cdr outputs) (cdr types) arg-map
+                     (add-out-type (car outputs) (car types)
+                                   arg-map type-map))
+      type-map))
+
+(disable add-out-types)
+
+(defn update-out-types (out-types o-outs o-fn-props in-map)
+  (let ((o-out-types (value 'output-types o-fn-props)))
+    (add-out-types o-outs o-out-types in-map out-types)))
+
+(disable update-out-types)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Composing Occurrence List Input and Output Types
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn IO-type-error (name in-type out-type)
+  (pred-error (list (if (IO-outp name) 'IO-signal 'signal)
+                    (unmark-IO-out name))
+
+              (list (list 'input-type  in-type)
+                    (list 'output-type out-type))))
+
+(disable IO-type-error)
+
+(defn IO-types-compatible (name in-type out-type t-wire-ins)
+  (cond ((unknownp in-type) 
+         (unknownp out-type))
+
+        ((unknownp out-type)
+         (unknownp in-type))
+
+        ((IO-outp name)
+         (if (and (tri-state-typep out-type)
+                  (subtype out-type in-type))
+             T
+             (IO-type-error name in-type out-type)))
+
+        ((member name t-wire-ins)
+         (if (and (tri-state-typep in-type)
+                  (types-compatiblep in-type out-type))
+             T
+             (IO-type-error name in-type out-type)))
+
+        ((subtype out-type in-type)
+         T)
+
+        (T (IO-type-error name in-type out-type))))
+
+(disable IO-types-compatible)
+
+(defn ok-in-type (ok name out-type in-map)
+  (cond ((or (not ok) (net-errorp ok))
+         (set-value (unmark-IO-out name) (unknown) in-map))
+
+        ((IO-outp name)
+         (set-value (unmark-IO-out name) out-type in-map))
+
+        (T in-map)))
+
+(disable ok-in-type)
+
+(defn ok-out-type (ok name out-map)
+  (cond ((net-errorp ok)
+         (cons ok (set-value name (unknown) out-map)))
+
+        (ok
+         out-map)
+
+        (T (set-value name (unknown) out-map))))
+
+(disable ok-out-type)
+
+(defn transfer-in-type (name out-type in-map)
+  (if (listp out-type)
+      (add-in-type (car out-type)
+                   (input-type name in-map)
+                   in-map)
+      in-map))
+
+(disable transfer-in-type)
+
+(defn compose-type (name type maps t-wire-ins)
+  (let ((in-map  (car maps))
+        (out-map (cdr maps)))
+
+      (let ((in-type  (input-type name in-map))
+
+            (out-type (if (listp type)
+                          (output-type (car type) out-map in-map)
+                          type)))
+
+        (let ((ok (IO-types-compatible name in-type
+                                       (if (listp out-type)
+                                           'free
+                                           out-type)
+                                       t-wire-ins)))
+
+          (cons (ok-in-type  ok name out-type in-map)
+                (ok-out-type ok name out-map))))))
+
+(disable compose-type)
+
+(defn composed-type-maps (out-types in-map out-map t-wire-ins)
+  (if (listp out-types)
+      (let ((entry (car out-types)))
+
+        (let ((name (car entry))
+              (type (cdr entry)))
+
+          (compose-type name type
+                        (composed-type-maps (cdr out-types)
+                                            (transfer-in-type name type
+                                                              in-map)
+                                            out-map t-wire-ins)
+                        t-wire-ins)))
+
+      (cons in-map out-map)))
+
+(disable composed-type-maps)
+
+(defn compose-IO-types (in-map out-map t-wire-ins)
+  (composed-type-maps out-map in-map out-map t-wire-ins))
+
+(disable compose-IO-types)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Collecting Module Input and Output Types
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn collect-in-types (names alist)
+  (if (listp names)
+      (cons (type-value (car names) alist T)
+            (collect-in-types (cdr names) alist))
+      nil))
+
+(disable collect-in-types)
+
+(defn collect-out-type (name out-map inputs in-map)
+  (let ((type (output-type name out-map in-map)))
+    (if (and (listp type)
+             (not (member (car type) inputs)))
+        (unknown)                       ; error in out-depends
+        type)))
+
+(disable collect-out-type)
+
+(defn collect-out-types (outputs out-map inputs in-map)
+  (if (listp outputs)
+      (cons (collect-out-type  (car outputs) out-map inputs in-map)
+            (collect-out-types (cdr outputs) out-map inputs in-map))
+      nil))
+
+(disable collect-out-types)
+
+(defn in-types-error (in-map)
+  (err-and in-map 'input-type-conflicts))
+
+(disable in-types-error)
+
+(defn out-types-error (out-map)
+  (err-and out-map 'IO-type-conflicts))
+
+(disable out-types-error)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Module Loadings and Drives
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; <loading> ::= <number> | (<number> pf)
+;;; 
+;;; <drive> ::=   <number> | <name> | (<number> mA)
+;;;             | ( UNKNOWN ) ;; There was an error.
+;;;             | (MIN <drive> <drive>+)
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~
+;;;  Recognizer Functions
+;;; ~~~~~~~~~~~~~~~~~~~~~~
+
+(defn mAp (dr)
+  ;; (<number> [(point <number>)] mA)
+
+  (case (length dr)
+    (2 (and (numberp (car dr))
+            (equal (cadr dr) 'mA)
+            (equal (cddr dr) nil)))
+
+    (3 (and (numberp (car dr))
+            (let ((fr (cadr dr)))
+              (and (equal (length fr) 2)
+                   (equal (car fr) 'point)
+                   (numberp (cadr fr))))
+            (equal (caddr dr) 'mA)
+            (equal (cdddr dr) nil)))
+
+    (otherwise F)))
+
+(disable mAp)
+      
+(defn pfp (ld)
+  ;; (<number> pf)
+
+  (if (equal (length ld) 2)
+      (and (numberp (car ld))
+           (equal (cadr ld) 'pf)
+           (equal (cddr ld) nil))
+      f))
+
+(disable pfp)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~
+;;;  Conversion Functions
+;;; ~~~~~~~~~~~~~~~~~~~~~~
+
+(defn mA-to-pf (x)
+  ; (guard (mAp x)) => x is (<number> [(point <number>)] mA)
+
+  (list (plus (times (car x) 10)
+              (cadadr x))
+        'pf))
+
+(disable mA-to-pf)
+
+(defn pf-to-mA (x)
+  ; (guard (pfp x)) => (<number> pf)
+
+  (let ((r (remainder (car x) 10)))
+    (if (zerop r)
+        (list (quotient (car x) 10) 'mA)
+        (list (quotient (car x) 10) (list 'point r) 'mA))))
+
+(disable pf-to-mA)
+
+(defn std-load-to-pf (x)
+  (list (times x 10) 'pf))
+
+(disable std-load-to-pf)
+
+(defn pf-to-std-load (x)
+  (let ((r (quotient (car x) 10)))
+
+    (if (lessp (remainder (car x) 10) 5)
+        r
+        (plus r 1))))
+
+(disable pf-to-std-load)
+
+(defn mA-to-std-drive (x)
+  (car x))
+
+(disable mA-to-std-drive)
+
+(defn std-drive-to-mA (x)
+  (list x 'mA))
+
+(disable std-drive-to-mA)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~
+;;;  Arithmetic Functions
+;;; ~~~~~~~~~~~~~~~~~~~~~~
+
+(defn zero-loadingp (a)
+  (if (pfp a)
+      (zerop (car a))
+      (zerop a)))
+
+(disable zero-loadingp)
+
+(defn pf-plus (a b)
+  ;; guard: (and (pfp a) (pfp b))
+  (list (plus (car a) (car b)) 'pf))
+
+(disable pf-plus)
+
+(defn pf-difference (a b)
+  ;; guard: (and (pfp a) (pfp b))
+  (list (difference (car a) (car b)) 'pf))
+
+(disable pf-difference)
+
+(defn pf-lessp (a b)
+  ;; guard: (and (pfp a) (pfp b))
+  (lessp (car a) (car b)))
+
+(disable pf-lessp)
+
+(defn mA-lessp (a b)
+  ;; guard: (and (mAp a) (mAp b))
+  (cond ((lessp (car a) (car b)) t)
+        ((equal (car a) (car b))
+         (lessp (cadadr a) (cadadr b)))
+        (t f)))
+
+(disable mA-lessp)
+
+(defn loading-plus (x y)
+  (cond ((numberp x)
+         (cond ((numberp y)
+                (plus x y))
+               ((pfp y)
+                (pf-plus (std-load-to-pf x) y))
+               (T x)))
+
+        ((pfp x)
+         (cond ((pfp y)
+                (pf-plus x y))
+               ((numberp y)
+                (pf-plus x (std-load-to-pf y)))
+               (T x)))
+
+        ((or (numberp y) (pfp y))
+         y)
+
+        (T 0)))
+
+(disable loading-plus)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Updating Occurrence List Loadings and Drives
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; <occurrence list LOADINGS property value>
+;;;   ::= ( ( <occurrence input name> . <loading> )* )
+;;;
+;;; <occurrence list DRIVES property value>
+;;;   ::= ( ( <occurrence output name> . <drive> )* )
+;;;
+;;; IO-signal output is represented as ( IO-OUT <signal name> ).
+
+
+(defn initial-occ-loadings ()
+  nil)
+
+(defn initial-occ-drives ()
+  nil)
+
+
+(defn add-loading (name loading load-map)
+  (if (zero-loadingp loading)
+      load-map
+
+      (if (boundp name load-map)
+          (let ((old-loading (value name load-map)))
+            (cons (cons name (loading-plus loading old-loading))
+                  (unbind name load-map)))
+
+          (cons (cons name loading) load-map))))
+
+(disable add-loading)
+
+(defn add-loadings (names loadings load-map)
+  (if (listp names)
+      (add-loadings (cdr names) (cdr loadings)
+                    (add-loading (car names) (car loadings) load-map))
+      load-map))
+
+(disable add-loadings)
+
+(defn update-loadings (loadings o-ins o-fn-props)
+  (let ((o-loads (value 'loadings o-fn-props)))
+    (add-loadings o-ins o-loads loadings)))
+
+(disable update-loadings)
+
+
+(defn local-drive (drive listp in-map out-map drive-map)
+  (cond (listp
+         (if (listp drive)
+             (cons (local-drive (car drive) F in-map out-map drive-map)
+                   (local-drive (cdr drive) T in-map out-map drive-map))
+             nil))
+
+        ((signal-namep drive)
+         (let ((n (value2 drive in-map out-map)))
+           (parent-synonym n drive-map)))
+
+        ((and (listp drive) (equal (car drive) 'min))
+         (cons 'min
+               (local-drive (cdr drive) T in-map out-map drive-map)))
+
+        (T drive)))
+
+(disable local-drive)
+
+(defn add-drives (outputs drives in-map out-map drive-map)
+  (if (listp outputs)
+      (let ((new-drive (cons (car outputs)
+                             (local-drive (car drives) F
+                                          in-map out-map drive-map))))
+        (add-drives (cdr outputs) (cdr drives) in-map out-map
+                    (cons new-drive drive-map)))
+      drive-map))
+
+(disable add-drives)
+
+(defn update-drives (drives o-outs o-fn-props in-map out-map)
+  (let ((o-drives (value 'drives o-fn-props)))
+    (add-drives o-outs o-drives in-map out-map drives)))
+
+(disable update-drives)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Composing Occurrence Loadings and Drives
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn transfer-loading (drive listp load loadings)
+  (cond (listp (if (listp drive)
+                   (transfer-loading
+                     (cdr drive) T load
+                     (transfer-loading (car drive) F load loadings))
+                   loadings))
+
+        ((signal-namep drive)
+         (add-loading drive load loadings))
+
+        ((and (listp drive) (equal (car drive) 'min))
+         (transfer-loading (cdr drive) T load loadings))
+
+        (T loadings)))
+
+(disable transfer-loading)
+
+
+;;; TRANSFER-LOADINGS copies loadings from signals to their parent synonyms.
+;;; DRIVES is ordered so that if the drive value of any signal S depends on
+;;; other signals, they all appear after S in DRIVES.
+
+(defn transfer-loadings (loadings drives)
+  (if (listp drives)
+      (let ((e (car drives)))
+      (let ((n (car e))
+            (v (cdr e)))
+        (transfer-loadings (transfer-loading v F (value n loadings) loadings)
+                           (cdr drives))))
+
+      loadings))
+
+(disable transfer-loadings)
+
+
+;;; NET-DRIVES subtracts loads from drive values, returning an error
+;;; if a signal is overloaded.  
+;
+(defn literal-net-drive (drive load label)
+  (cond ((numberp drive)
+         (let ((ld (cond ((numberp load)
+                          load)
+                         ((pfp load)
+                          (pf-to-std-load load))
+                         (T 0))))
+           (if (lessp drive ld)
+               (pred-error label
+                           (list (list 'drive drive)
+                                 (list* 'loading load
+                                        (if (equal load ld) nil (list ld)))))
+               (difference drive ld))))
+
+        ((mAp drive)
+         (let ((drpf (mA-to-pf drive))
+               (ldpf (cond ((pfp load)
+                            load)
+                           ((numberp load)
+                            (std-load-to-pf load))
+                           (T '(0 pf)))))
+           (if (pf-lessp drpf ldpf)
+               (pred-error label
+                           (list (list 'drive drive drpf)
+                                 (list* 'loading load
+                                        (if (equal load ldpf)
+                                            nil
+                                            (list ldpf)))))
+               (pf-to-mA (pf-difference drpf ldpf)))))
+
+        (T (unknown))))
+
+(disable literal-net-drive)
+
+(defn net-min-args (a load listp)
+  (cond (listp (if (listp a)
+                   (union (net-min-args (car a) load F)
+                          (net-min-args (cdr a) load T))
+                   nil))
+
+        ((or (numberp a) (mAp a))
+         (list (literal-net-drive a load 'min-arg)))
+
+        ((and (listp a) (equal (car a) 'min))
+         (net-min-args (cdr a) load T))
+
+        (T (list a))))
+
+(disable net-min-args)
+
+(defn add-net-min-drive (name args load drive-map)
+  (let ((args (net-min-args args load T)))
+
+    (let ((err (err-and args (list 'signal name))))
+
+      (if (net-errorp err)
+          (let ((args (extract-names args)))
+            (if (listp args)
+                (list* err
+                       (cons name
+                             (cons 'min
+                                   (cons (unknown) args)))
+                       drive-map)
+                (cons err drive-map)))
+
+          (cons (cons name (cons 'min args))
+                drive-map)))))
+
+(disable add-net-min-drive)
+
+(defn add-net-drive (drive loadings drive-map)
+  (if (listp drive)
+      (let ((n  (car drive))
+            (v  (cdr drive)))
+
+        (let ((ld (value n loadings)))
+
+          (cond ((or (numberp v) (mAp v))
+                 (let ((r (literal-net-drive v ld (list 'signal n))))
+                   (cons (if (net-errorp r) r (cons n r))
+                         drive-map)))
+
+                ((equal (car v) 'min)
+                 (add-net-min-drive n (cdr v) ld drive-map))
+
+                (T (cons drive drive-map)))))
+
+      (cons drive drive-map)))          ; an error
+
+(disable add-net-drive)
+
+(defn net-drives-simple (drs lds)
+  (if (listp drs)
+      (add-net-drive (car drs) lds
+                     (net-drives-simple (cdr drs) lds))
+      nil))
+
+(disable net-drives-simple)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Collecting module loadings and drives
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn type-loading (load type)
+  (cond ((member type '(boolp clk level parametric tri-state))
+         (if (pfp load) (pf-to-std-load load) load))
+
+        ((member type '(ttl ttl-tri-state))
+         (if (numberp load) (std-load-to-pf load) load))
+
+        (T load)))
+
+(disable type-loading)
+
+(defn collect-loadings (names types loadings)
+  (if (listp names)
+      (cons (type-loading (value (car names) loadings) (car types))
+            (collect-loadings (cdr names) (cdr types) loadings))
+      nil))
+
+(disable collect-loadings)
+
+(defn loadings-error (loadings)
+  (err-and loadings 'bad-loadings))
+
+(disable loadings-error)
+
+
+(defn collect-min-args (A listp drives used-names inputs outputs)
+  (cond (listp
+         (if (listp A)
+             (union (collect-min-args (car A) F drives used-names
+                                      inputs outputs)
+                    (collect-min-args (cdr A) T drives used-names
+                                      inputs outputs))
+             nil))
+
+        ((signal-namep A)
+         (cond ((member A inputs)
+                (list A))
+               ((and (not (or (member A outputs)
+                              (member A used-names)))
+                     (boundp A drives))
+                (collect-min-args (value A drives) F drives
+                                  (cons A used-names) inputs outputs))
+               (T (list (unknown)))))
+
+        ((and (listp A) (equal (car A) 'min))
+         (collect-min-args (cdr A) T drives used-names
+                           inputs outputs))
+
+        ((or (numberp A) (mAp A))
+         (list A))
+
+        (T (list (unknown))))
+
+  ((ord-lessp (cons (add1 (count (unbind-list used-names drives)))
+                    (count A)))))
+
+(disable collect-min-args)
+
+(defn numeric-drives (drs)
+  (if (listp drs)
+      (let ((d-1  (car drs))
+            (rest (cdr drs)))
+
+        (if (or (numberp d-1) (mAp d-1))
+            (cons d-1 (numeric-drives rest))
+
+            (numeric-drives rest)))
+      nil))
+
+(disable numeric-drives)
+
+(defn type-drive (drive type)
+  (cond ((member type '(boolp clk level parametric tri-state))
+         (if (mAp drive) (mA-to-std-drive drive) drive))
+
+        ((member type '(ttl ttl-tri-state))
+         (if (numberp drive) (std-drive-to-mA drive) drive))
+
+        (T drive)))
+
+(disable type-drive)
+
+(defn drive-lessp (x y)
+  (cond ((and (numberp x) (numberp y))
+         (lessp x y))
+
+        ((and (mAp x) (mAp y))
+         (mA-lessp x y))
+
+        (t f)))
+
+(disable drive-lessp)
+
+(defn drive-min (lst type)
+  (cond ((nlistp lst)
+         (unknown))
+
+        ((nlistp (cdr lst))
+         (type-drive (car lst) type))
+
+        (T
+         (let ((r1 (type-drive (car lst) type))
+               (r2 (drive-min (cdr lst) type)))
+
+           (if (drive-lessp r1 r2)
+               r1
+               r2)))))
+
+(disable drive-min)
+
+(defn make-drive-min (args type drives inputs outputs)
+  (let ((new-args (collect-min-args args T drives nil inputs outputs)))
+
+    (let ((names   (extract-names  new-args))
+          (numbers (numeric-drives new-args)))
+
+      (cond ((nlistp names)
+             (drive-min numbers type))
+
+            ((nlistp numbers)
+             (if (listp (cdr names))
+                 (cons 'min names)
+                 (list* 'min (unknown) names)))
+
+            (t (let ((n (drive-min numbers type)))
+                 (list* 'min n names)))))))
+
+(disable make-drive-min)
+
+(defn collect-drives-0 (names output-types drives inputs outputs)
+  (if (listp names)
+      (let ((v (value-or-unknown (car names) drives)))
+
+        (cons (cond ((or (numberp v) (mAp v))
+                     (type-drive v (car output-types)))
+
+                    ((signal-namep v)
+                     (parent-synonym v drives))
+
+                    ((and (listp v) (equal (car v) 'min))
+                     (make-drive-min (cdr v) (car output-types)
+                                     drives inputs outputs))
+
+                    (t (unknown)))
+
+              (collect-drives-0 (cdr names) (cdr output-types)
+                                drives inputs outputs)))
+      nil))
+
+(disable collect-drives-0)
+
+(defn collect-drives (outputs output-types drives inputs)
+  (collect-drives-0 outputs output-types
+                    (externalize-parents outputs drives inputs outputs)
+                    inputs outputs))
+
+(disable collect-drives)
+
+(defn drives-error (drives)
+  (err-and drives 'bad-drives))
+
+(disable drives-error)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Module Delays
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Primitive delay:
+;;;    <primitive delay> ::=
+;;;         <input name>
+;;;       | ( OR <input name> <input name> )
+;;;       | ( ( <slope,LH> <pintercept,LH> )
+;;;           ( <slope,HL> <pintercept,HL> ) )
+;;; 
+;;;    <slope> ::= <number> | ( <number> PS-PF )
+;;; 
+;;;    <pintercept> ::= <number>
+;;; 
+;;; 
+;;;  Module delay:
+;;;    <module delay> ::=   <input or output name>
+;;;                       | ( UNKNOWN ) ;; There was an error.
+;;;                       | ( OR <module delay> <module delay>+ )
+;;;                       | ( ( <slope,LH> <mintercept,LH> )
+;;;                           ( <slope,HL> <mintercept,HL> )
+;;;                           <delay dependency>* )
+;;; 
+;;;    <mintercept> ::= <number> | ( RANGE <number> <number> )
+;;; 
+;;;    <delay dependency> ::=   <input or output name>
+;;;                           | ( UNKNOWN ) ;; There was an error.
+;;;                           | ( OR <delay dependency> <delay dependency>+ )
+;;;                           | ( RANGE <number> <number> <delay dependency>* )
+;;;                           | <number>
+;;; 
+;;;  Occurrence data delay:
+;;;    <occurrence data delay> ::= <module delay>
+;;; 
+;;;  IO-signal output is represented as ( IO-OUT <signal name> ).
+ 
+ 
+;;;  In the normal case, delay to produce a signal S is given by 
+;;;  
+;;;     ( ( <slope,LH> (range min-LH-intercept max-LH-intercept ) )
+;;;       ( <slope,HL> (range min-HL-intercept max-HL-intercept ) )
+;;;       <delay dependency>* )
+;;;
+;;;  where the <delay dependency>'s represent the amount of time
+;;;  required to produce the inputs signal S depends on.  The <delay
+;;;  dependency>'s normally have the form
+;;;
+;;;      (range min-input-delay max-input-delay <delay dependency>*)
+;;;
+;;;  When all <delay dependency>'s are completely determined, the
+;;;  minimum and maximum amount of time to produce all the inputs is
+;;;  added to the minimum and maximum intercept values of the S delay.
+;;;
+;;;  The problem with this approach is that many of the <delay
+;;;  dependency>'s are not fully determined in a large netlist.  For
+;;;  the CHIP-SYSTEM netlist, adding delays increased the size of the
+;;;  database produced by NETLIST-DATABASE from about 500,000
+;;;  characters to about 10,000,000 characters.
+;;;
+;;;  To reduce the volume of the delay representation, we introduce
+;;;  the following approximation into the delay intercept and
+;;;  dependency computations.
+;;;
+;;;     ((slope-LH (range LH-min LH-max))
+;;;      (slope-HL (range HL-min HL-max))
+;;;      (range min-in-1 max-in-1 <in-1-dep-1> <in-1-dep-2> ... <in-1-dep-m1>)
+;;;      (range min-in-2 max-in-2 <in-2-dep-1> <in-2-dep-2> ... <in-2-dep-m2>)
+;;;      ...
+;;;      (range min-in-n max-in-n <in-n-dep-1> <in-n-dep-2> ... <in-n-dep-mn>)
+;;;      <name-dep-1> <name-dep-2> ... <name-dep-n2>)
+;;;  ~=
+;;;    ((slope-LH (range (plus LH-min (max min-in-1 min-in-2 ... min-in-n))
+;;;                  (plus LH-max (max max-in-1 max-in-2 ... max-in-n))))
+;;;     (slope-HL (range (plus HL-min (max min-in-1 min-in-2 ... min-in-n))
+;;;                  (plus HL-max (max max-in-1 max-in-2 ... max-in-n))))
+;;;     <in-1-dep-1> <in-1-dep-2> ... <in-1-dep-m1>
+;;;     <in-2-dep-1> <in-2-dep-2> ... <in-2-dep-m2>
+;;;     ...
+;;;     <in-n-dep-1> <in-n-dep-2> ... <in-n-dep-mn>
+;;;     <name-dep-1> <name-dep-2> ... <name-dep-n2>)
+;;;
+;;;  The approximation tends to make both the minimum and the maximum
+;;;  intercept values higher than they should be.  With the
+;;;  approximation, the CHIP-SYSTEM database has 922,130 characters.
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Extraction, Construction, and Recognizer Functions
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn ps-pfp (x)
+  (and (properp x)
+       (equal (length x) 2)
+       (numberp (car x))
+       (equal (cadr x) 'ps-pf)))
+
+(disable ps-pfp)
+
+
+(defn delay-LH (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (car d)
+      F))
+
+(disable delay-LH)
+
+(defn delay-HL (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (cadr d)
+      F))
+
+(disable delay-HL)
+
+(defn delay-slope-LH (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (caar d)
+      F))
+
+(disable delay-slope-LH)
+
+(defn delay-slope-HL (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (caadr d)
+      F))
+
+(disable delay-slope-HL)
+
+(defn delay-intercept-LH (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (cadar d)
+      F))
+
+(disable delay-intercept-LH)
+
+(defn delay-intercept-HL (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (cadadr d)
+      F))
+
+(disable delay-intercept-HL)
+
+(defn delay-dependencies (d)
+  ;; d is a <module delay>
+  (if (and (listp d)
+           (not (equal (car d) 'or)))
+      (cddr d)
+      nil))
+
+(disable delay-dependencies)
+
+(defn make-delay-0 (LH HL deps)
+  (list* LH HL deps))
+
+(disable make-delay-0)
+
+(defn make-delay (s-LH i-LH s-HL i-HL deps)
+  (make-delay-0 (list s-LH i-LH)
+                (list s-HL i-HL)
+                deps))
+
+(disable make-delay)
+
+(defn determined-delayp (d)
+  ;; d is a <module delay>
+  (and (listp d)
+       (not (equal (car d) 'or))
+       (nlistp (delay-dependencies d))))
+
+(disable determined-delayp)
+
+
+(defn make-range (lo hi deps)
+  (if (and (equal lo hi)
+           (nlistp deps))
+      lo
+      (list* 'range lo hi deps)))
+
+(disable make-range)
+
+(defn rangep (x)
+  (if (listp x)
+      (equal (car x) 'range)
+      ;; (and (equal (car x) 'range)
+      ;;      (listp (cddr x))
+      ;;      (numberp (cadr x))
+      ;;      (numberp (caddr x))
+      ;;      (delay-dependenciesp (cdddr x)))
+      F))
+
+(disable rangep)
+
+(defn range-min (x)
+  (if (rangep x)
+      (cadr x)
+      x))
+
+(disable range-min)
+
+(defn range-max (x)
+  (if (rangep x)
+      (caddr x)
+      x))
+
+(disable range-max)
+
+(defn range-dependencies (x)
+  (if (rangep x)
+      (cdddr x)
+      nil))
+
+(disable range-dependencies)
+
+(defn determined-rangep (x)
+  (if (rangep x)
+      (nlistp (range-dependencies x))
+      (numberp x)))
+
+(disable determined-rangep)
+
+
+;;; ~~~~~~~~~~~~~~~~~~
+;;;  Delay arithmetic
+;;; ~~~~~~~~~~~~~~~~~~
+
+(defn per-std-load-delay-slope (slope)
+  (if (ps-pfp slope)
+      (times (car slope) 10)
+      slope))
+
+(disable per-std-load-delay-slope)
+ 
+(defn per-pf-delay-slope (slope)
+  (if (numberp slope)
+      (let ((r (quotient slope 10)))
+        (list (if (lessp (remainder slope 10) 5)
+                  r
+                  (add1 r))
+              'ps-pf))
+      slope))
+
+(disable per-pf-delay-slope)
+
+(defn range-plus (i1 i2 deps)
+  (make-range (plus (range-min i1) (range-min i2))
+              (plus (range-max i1) (range-max i2))
+              deps))
+
+(disable range-plus)
+
+(defn slope-times-load (slope load)
+  (cond ((numberp slope)
+         (cond ((numberp load)
+                (times slope load))
+               ((pfp load)
+                (times slope (pf-to-std-load load)))
+               (T 0)))
+
+        ((ps-pfp slope)
+         (cond ((pfp load)
+                (times (car slope) (car load)))
+               ((numberp load)
+                (times (car slope) (car (std-load-to-pf load))))
+               (T 0)))
+
+        (T 0)))
+
+(disable slope-times-load)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Updating Occurrence List Delays
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn initial-occ-delays ()
+  nil)
+
+(prove-lemma local-delay-count-help-0 (rewrite)
+  (implies (listp x)
+           (equal (count x)
+                  (add1 (plus (count (car x)) (count (cdr x)))))))
+
+(prove-lemma local-delay-count-help (rewrite)
+  (implies (listp x)
+           (equal (equal (count x) 0)
+                  F)))
+
+(disable local-delay-count-help-0)
+
+
+(enable range-dependencies)
+(enable delay-dependencies)
+
+(defn local-delay (delay out-depends listp in-map out-map delay-map)
+  (cond (listp
+         (if (listp delay)
+             (cons (local-delay (car delay) out-depends F
+                                in-map out-map delay-map)
+                   (local-delay (cdr delay) out-depends T
+                                in-map out-map delay-map))
+             nil))
+
+        ((signal-namep delay)
+         (parent-synonym (value2 delay in-map out-map)
+                         delay-map))
+
+        ((nlistp delay)
+         delay)
+
+        ((equal (car delay) 'or)
+         (cons 'or
+               (local-delay (cdr delay) F T in-map out-map delay-map)))
+
+        ((rangep delay)
+         (let ((rdeps (range-dependencies delay)))
+           (if (listp rdeps)
+               (make-range (range-min delay) (range-max delay)
+                           (local-delay rdeps F T in-map out-map delay-map))
+               delay)))
+
+        (T;; regular slope-intercept delay
+         (let ((deps (delay-dependencies delay)))
+           (let ((rdeps (if (listp deps) deps out-depends)))
+             (if (listp rdeps)
+                 (make-delay-0 (delay-LH delay) (delay-HL delay)
+                               (local-delay rdeps F T
+                                            in-map out-map delay-map))
+                 delay)))))
+
+  ((ord-lessp (cons (add1 (count out-depends)) (count delay)))))
+
+(disable local-delay-count-help)
+(disable range-dependencies)
+(disable delay-dependencies)
+(disable local-delay)
+
+
+(defn add-delays (outputs delays out-depends in-map out-map delay-map)
+  (if (listp outputs)
+      (let ((new-delay (cons (car outputs)
+                             (local-delay (car delays) (car out-depends)
+                                          F in-map out-map delay-map))))
+        
+        (add-delays (cdr outputs) (cdr delays) (cdr out-depends)
+                    in-map out-map (cons new-delay delay-map)))
+      delay-map))
+
+(disable add-delays)
+
+(defn update-delays (delays o-outs o-fn-props in-map out-map)
+  (let ((o-delays      (value 'delays      o-fn-props))
+        (o-out-depends (value 'out-depends o-fn-props)))
+
+    (add-delays o-outs o-delays o-out-depends in-map out-map delays)))
+
+(disable update-delays)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Composing Occurrence Delays
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn add-load-delay (delay load)
+  (if (zero-loadingp load)
+      delay
+
+      (let ((s-LH (delay-slope-LH     delay))
+            (i-LH (delay-intercept-LH delay))
+            (s-HL (delay-slope-HL     delay))
+            (i-HL (delay-intercept-HL delay))
+            (deps (delay-dependencies delay)))
+
+        (make-delay s-LH
+                    (range-plus i-LH (slope-times-load s-LH load) nil)
+                    s-HL
+                    (range-plus i-HL (slope-times-load s-HL load) nil)
+                    deps))))
+
+(disable add-load-delay)
+
+(defn loaded-delay (delay load listp)
+  (cond (listp
+         (if (listp delay)
+             (cons (loaded-delay (car delay) load F)
+                   (loaded-delay (cdr delay) load T))
+             nil))
+
+        ((nlistp delay)
+         delay)
+
+        ((equal (car delay) 'or)
+         (cons 'or (loaded-delay (cdr delay) load T)))
+
+        (T;; regular slope-intercept delay
+         (add-load-delay delay load))))
+
+(disable loaded-delay)
+
+(defn loaded-delays (delays loadings)
+  (if (listp delays)
+      (let ((entry  (car delays))
+            (result (loaded-delays (cdr delays) loadings)))
+
+        (if (nlistp entry)              ; an error
+            (cons entry result)
+
+            (let ((name  (car entry))
+                  (value (cdr entry)))
+
+              (let ((load (value name loadings)))
+
+                (cons (cons name
+                            (loaded-delay value load F))
+                      result)))))
+
+      delays))
+
+(disable loaded-delays)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Collecting Module Delays
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn merge-input-delays (r1 r2 or-args?)
+  ;; guard: (and (mergeable-input-delay-p r1 or-args? (x))
+  ;;             (mergeable-input-delay-p r2 or-args? (x)))
+
+  (cond ((or (rangep r1) (numberp r1))
+         (if (or (rangep r2) (numberp r2))
+             (make-range (if or-args?
+                             (min (range-min r1) (range-min r2))
+                           (max (range-min r1) (range-min r2)))
+
+                         (max (range-max r1) (range-max r2))
+
+                         (union (range-dependencies r1)
+                                (range-dependencies r2)))
+
+           (make-range (range-min r1) (range-max r1)
+                       (insert r2 (range-dependencies r1)))))
+
+        ((or (rangep r2) (numberp r2))
+         (make-range (range-min r2) (range-max r2)
+                     (insert r1 (range-dependencies r2))))
+
+        (T (make-range 0 0 (insert r1 (list r2))))))
+
+(disable merge-input-delays)
+
+(defn mergeable-input-delay-p (d approxp)
+  (if approxp
+      (or (rangep d)
+          (numberp d)
+          (signal-namep d))
+    (determined-rangep d)))
+
+(disable mergeable-input-delay-p)
+
+(defn insert-input-delay (d dlist or-args? approxp)
+  ;; **** This function is a mess, unclear, and
+  ;; **** does not weed out unnecessary values well.
+  (cond ((unknownp d)
+         dlist)
+
+        ((nlistp dlist)
+         (if (and or-args? (equal (car d) 'or))
+             (cdr d)
+           (list d)))
+
+        ((and or-args? (listp d) (equal (car d) 'or))
+         (insert-input-delay (cadr d)
+                             (insert (car dlist)
+                                     (union (cddr d) (cdr dlist)))
+                             or-args? approxp))
+
+        ((mergeable-input-delay-p d (and approxp (not or-args?)))
+         (if (mergeable-input-delay-p (car dlist) (and approxp (not or-args?)))
+             (cons (merge-input-delays d (car dlist) or-args?)
+                   (cdr dlist))
+           (cons d dlist)))
+
+        ((mergeable-input-delay-p (car dlist) (and approxp (not or-args?)))
+         (cons (car dlist)
+               (insert d (cdr dlist))))
+
+        (T (insert d dlist))))
+
+(disable insert-input-delay)
+
+(defn literal-delay-to-range (d)
+  (let ((iLH (delay-intercept-LH d))
+        (iHL (delay-intercept-HL d))
+        (dep (delay-dependencies d)))
+
+    (make-range (min (range-min iLH) (range-min iHL))
+                (max (range-max iLH) (range-max iHL))
+                dep)))
+
+(disable literal-delay-to-range)
+
+(defn or-delay-args-to-ranges (args result)
+  (if (listp args)
+      (let ((arg1 (car args))
+        
+    (new-result (or-delay-args-to-ranges (cdr args) result)))
+
+        (cond ((nlistp arg1)
+               (insert-input-delay arg1 new-result T F))
+
+              ((equal (car arg1) 'or)
+               (or-delay-args-to-ranges (cdr arg1) new-result))
+
+              (T (insert-input-delay (literal-delay-to-range arg1)
+                                     new-result T F))))
+
+      result))
+
+(disable or-delay-args-to-ranges)
+
+(defn make-delay-or (args)
+  (cond ((nlistp args)
+         (unknown))
+
+        ((listp (cdr args))
+         (cons 'or args))
+
+        ((signal-namep (car args))
+         (list* 'or (unknown) args))
+
+        (T (car args))))
+
+(disable make-delay-or)
+
+(defn delay-to-range (d)
+  (cond ((nlistp d)
+         d)
+
+        ((equal (car d) 'or)
+         (make-delay-or (or-delay-args-to-ranges (cdr d) nil)))
+
+        (T (literal-delay-to-range d))))
+
+(disable delay-to-range)
+
+(enable range-dependencies)
+
+(defn addable-input-delay (in-delays approxp)
+  (if (and (listp in-delays)
+           (nlistp (cdr in-delays)))
+      (let ((d (car in-delays)))
+        (if (if approxp
+                (or (rangep d) (numberp d))
+              (determined-rangep d))
+            d
+          F))
+    F))
+
+(disable addable-input-delay)
+
+
+(defn input-delay0 (dep delays inputs outputs or-args? list? used-names
+                    approxp)
+  (cond (list?
+         (if (listp dep)
+             (insert-input-delay
+              (input-delay0 (car dep) delays inputs outputs
+                            or-args? F used-names approxp)
+              (input-delay0 (cdr dep) delays inputs outputs
+                            or-args? T used-names approxp)
+              or-args? approxp)
+           nil))
+
+        ((nlistp dep)
+         (cond ((numberp dep)
+                dep)
+               ((member dep inputs)
+                dep)
+               ((member dep used-names)
+                (unknown))
+               ((member dep outputs)
+                (if or-args?
+                    (unknown)
+                  (parent-synonym dep delays)))
+               ((boundp dep delays)
+                (input-delay0 (delay-to-range (value dep delays))
+                              delays inputs outputs or-args? F
+                              (cons dep used-names) approxp))
+               (T (unknown))))
+
+        ((equal (car dep) 'or)
+         (make-delay-or (input-delay0 (cdr dep) delays inputs outputs
+                                      T T used-names approxp)))
+
+        ((rangep dep)
+         (let ((in-delays (input-delay0 (range-dependencies dep)
+                                        delays inputs outputs
+                                        F T used-names approxp)))
+           (let ((in-delay (addable-input-delay in-delays approxp)))
+             (if in-delay
+                 (range-plus dep in-delay
+                             (range-dependencies in-delay))
+               (make-range (range-min dep) (range-max dep)
+                           in-delays)))))
+
+        (T (unknown)))
+
+  ((ord-lessp (cons (add1 (count (unbind-list used-names delays)))
+                    (count dep)))))
+
+(disable range-dependencies)
+(disable input-delay0)
+
+
+(defn input-delay (dep delays inputs outputs or-args? list? used-names
+                   approxp)
+  (let ((r (input-delay0 dep delays inputs outputs or-args? list? used-names
+                         approxp)))
+    (let ((r1 (car r)))
+      (if (and (listp r) (rangep r1))
+          (if (and (equal (range-min r1) 0)
+                   (equal (range-max r1) 0))
+              (union (range-dependencies r1)
+                     (cdr r))
+            r)
+        r))))
+
+(disable input-delay)
+
+
+(defn type-delay-slope (slope type)
+  (cond ((member type '(boolp clk level parametric tri-state))
+         (per-std-load-delay-slope slope))
+        ((member type '(ttl ttl-tri-state))
+         (per-pf-delay-slope slope))
+        (T slope)))
+
+(disable type-delay-slope)
+
+(defn make-output-delay (delay type input-delay-list approxp)
+  (let ((i-LH (delay-intercept-LH delay))
+        (i-HL (delay-intercept-HL delay))
+        (s-LH (type-delay-slope (delay-slope-LH delay) type))
+        (s-HL (type-delay-slope (delay-slope-HL delay) type)))
+
+    (let ((d-in (addable-input-delay input-delay-list approxp)))
+
+      (if d-in
+
+          (make-delay s-LH (range-plus i-LH d-in nil)
+                      s-HL (range-plus i-HL d-in nil)
+                      (range-dependencies d-in))
+
+        (make-delay s-LH i-LH s-HL i-HL input-delay-list)))))
+
+(disable make-output-delay)
+
+(defn or-delay-args (A listp type delays used-names inputs outputs approxp)
+  (cond (listp
+         (if (listp A)
+             (union (or-delay-args (car A) F type delays used-names
+                                   inputs outputs approxp)
+                    (or-delay-args (cdr A) T type delays used-names
+                                   inputs outputs approxp))
+             nil))
+
+        ((signal-namep A)
+         (cond ((member A inputs)
+                (list A))
+               ((and (not (or (member A outputs)
+                              (member A used-names)))
+                     (boundp A delays))
+                (or-delay-args (value A delays) F type
+                               delays (cons A used-names)
+                               inputs outputs approxp))
+               (T (list (unknown)))))
+
+        ((nlistp A)
+         (list (unknown)))
+
+        ((equal (car A) 'or)
+         (or-delay-args (cdr A) T type delays used-names
+                        inputs outputs approxp))
+
+        (T ;; regular slope-intercept-delay
+         (list
+          (make-output-delay A type
+                             (input-delay (delay-dependencies A)
+                                          delays inputs outputs
+                                          F T used-names approxp)
+                             approxp))))
+
+  ((ord-lessp (cons (add1 (count (unbind-list used-names delays)))
+                    (count A)))))
+
+(disable or-delay-args)
+
+(defn output-delay (name type delays inputs outputs approxp)
+  (let ((v (value-or-unknown name delays)))
+
+    (cond ((signal-namep v)
+           (parent-synonym v delays))
+
+          ((nlistp v)
+           (unknown))
+
+          ((equal (car v) 'or)
+           (make-delay-or (or-delay-args (cdr v) T type delays (list name)
+                                         inputs outputs approxp)))
+
+          (T;; regular slope-intercept-delay
+           (make-output-delay v type
+                              (input-delay (delay-dependencies v)
+                                           delays inputs outputs
+                                           F T (list name) approxp)
+                              approxp)))))
+
+(disable output-delay)
+
+(defn collect-delays-0 (names types delays inputs outputs approxp)
+  (if (listp names)
+      (cons (output-delay (car names) (car types) delays
+                          inputs outputs approxp)
+            (collect-delays-0 (cdr names) (cdr types) delays
+                              inputs outputs approxp))
+      nil))
+
+(disable collect-delays-0)
+
+(defn collect-delays (outputs output-types delays inputs approxp)
+  (collect-delays-0 outputs output-types
+                    (externalize-parents outputs delays inputs outputs)
+                    inputs outputs approxp))
+
+(disable collect-delays)
+
+(defn delays-error (delays)
+  (err-and delays 'bad-delays))
+
+(disable delays-error)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Module Output Dependencies
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; <occurrence list OUT-DEPENDS property value>
+;;;   ::= ( <list of used signals>
+;;;         ( <signal name> . <output-dependency>* )* )
+
+;;;  An <output-dependency> is the name of a module input, on which
+;;;  the signal depends.  It is an error if a used signal S
+;;;  (occurrence input or module output) depends on an unknown signal
+;;;  (including signals generated after S in the occurrence list).
+;;;  The output dependency computation gives errors for circularities
+;;;  (wiring loops or feedback) in circuit descriptions.
+
+
+(defn initial-occ-out-depends (m-ins m-outs)
+  (cons m-outs
+        (pairlist m-ins (listify m-ins))))
+
+(disable initial-occ-out-depends)
+
+(defn add-out-depends (outputs out-depends arg-map deps-map)
+  (if (listp outputs)
+      (let ((out1 (car outputs))
+
+            (od-1 (collect-value (car out-depends) arg-map)))
+
+        (let ((new-entry (cons out1 (union-values od-1 deps-map)))
+              (new-error (all-bound-or-err od-1 deps-map
+                                           (list 'output out1))))
+
+          (add-out-depends (cdr outputs) (cdr out-depends) arg-map
+                           (list* new-entry new-error deps-map))))
+
+      deps-map))
+
+(disable add-out-depends)
+
+(defn update-out-depends (out-depends o-outs o-fn-props o-ins arg-map)
+  (let ((o-out-depends (value 'out-depends o-fn-props)))
+
+    (cons (union o-ins (car out-depends))
+          (add-out-depends o-outs o-out-depends arg-map (cdr out-depends)))))
+
+(disable update-out-depends)
+
+
+(defn collect-out-depends (outputs dependencies)
+  (let ((map (cdr dependencies)))
+    (collect-value outputs map)))
+
+(disable collect-out-depends)
+
+(defn collect-out-depends-errors (deps-map used-signals)
+  (if (listp deps-map)
+      (let ((entry  (car deps-map))
+
+            (result (collect-out-depends-errors (cdr deps-map) used-signals)))
+
+        (if (net-errorp entry)
+            (let ((sname (cadr (error-label entry))))
+
+              (if (member sname used-signals)
+                  (cons entry result)
+
+                  result))
+
+            result))
+
+      nil))
+
+(disable collect-out-depends-errors)
+
+(defn out-depends-error (dependencies)
+  (let ((used-signals (car dependencies))
+        (real-map     (cdr dependencies)))
+
+    (nlistp-or-err (collect-out-depends-errors real-map used-signals)
+                   'unbound-output-dependencies)))
+
+(disable out-depends-error)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Module State Types
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  It is an error if the states listed in a module definition are
+;;;  not the same as the states for which types are computed.
+
+
+(defn initial-occ-state-types ()
+  nil)
+
+(defn update-state-types (state-types o-name o-fn-props)
+  (if (boundp 'state-types o-fn-props)
+      (cons (cons o-name
+                  (value 'state-types o-fn-props))
+            state-types)
+
+      state-types))
+
+(disable update-state-types)
+
+(defn collect-state-types (states state-types)
+  (if (or (listp states)
+          (equal states nil))
+
+      (collect-value-or-unknown states state-types)
+
+      (value-or-unknown states state-types)))
+
+(disable collect-state-types)
+
+(defn state-types-error (state-types states)
+  (let ((cstate-list (strip-cars state-types))
+        (mstate-list (m-states-list states)))
+
+    (T-or-err (set-equal cstate-list mstate-list)
+              'bad-state-types
+              (list (list 'module-states states)
+                    (list 'computed-states cstate-list)))))
+
+(disable state-types-error)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Module Tri-State Signal Checks
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; 1.  A signal can be an input to at most one T-WIRE primitive.
+;;; 
+;;; 2.  A signal that is an input to a T-WIRE primitive cannot be used for any
+;;;     other purpose (occurrence input or module output).
+;;;
+;;; 3.  No IO-signal can be an input or an output of primitive ID (which
+;;;     declares aliases for signal names).
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Updating tri-state data
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  Free signals are all module outputs and those occurrence inputs
+;;;  that are not inputs to primitive t-wire.
+
+(defn initial-occ-tri-state-data (m-outs)
+  (list (cons 'free-signals m-outs)
+        (cons 't-wire-ins   nil)
+        (cons 'synonyms     nil)))
+
+(disable initial-occ-tri-state-data)
+
+
+(defn function-t-wire-ins (fn data)
+  (cond ((boundp 'tri-state-data data)
+         (value 't-wire-ins (value 'tri-state-data data)))
+
+        ((equal fn 't-wire)
+         (value 'inputs data))
+
+        (T ;; data are the properties of a primitive
+         nil)))
+
+(disable function-t-wire-ins)
+
+(defn function-synonyms (fn data)
+  (cond ((boundp 'tri-state-data data)
+         (value 'synonyms (value 'tri-state-data data)))
+
+        ((equal fn 'id)
+         (pairlist (value 'outputs data)
+                   (value 'inputs  data)))
+
+        (T ;; data are the properties of a primitive
+         nil)))
+
+(disable function-synonyms)
+
+(defn add-synonyms (f-synonyms in-map out-map slist)
+  (if (listp f-synonyms)
+      (let ((s (car f-synonyms)))
+
+        (add-synonyms (cdr f-synonyms) in-map out-map
+                      (cons (cons (value  (car s) out-map)
+                                  (value2 (cdr s) in-map out-map))
+                            slist)))
+      slist))
+
+(disable add-synonyms)
+
+(defn update-tri-state-data (data o-ins o-fn o-fn-data in-map out-map)
+  (let ((old-free-signals (value 'free-signals data))
+        (old-t-wire-ins   (value 't-wire-ins   data))
+        (old-synonyms     (value 'synonyms     data)))
+
+    (let ((occ-t-wire-ins (collect-value2 (function-t-wire-ins o-fn o-fn-data)
+                                          in-map out-map)))
+
+      (let ((occ-free-signals (cond ((listp occ-t-wire-ins)
+                                     (set-diff o-ins occ-t-wire-ins))
+                                    ((equal o-fn 'id)
+                                     nil)
+                                    (T o-ins)))
+
+            (new-synonyms (add-synonyms (function-synonyms o-fn o-fn-data)
+                                        in-map out-map old-synonyms)))
+
+        (list (cons 'free-signals
+                    (union occ-free-signals old-free-signals))
+
+              (cons 't-wire-ins
+                    (append occ-t-wire-ins old-t-wire-ins))
+
+              (cons 'synonyms
+                    new-synonyms))))))
+
+(disable update-tri-state-data)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Composing tri-state data
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn IO-signal-renames (synonyms IO-signals slist)
+  (if (listp synonyms)
+      (let ((e (car synonyms))
+            (r (IO-signal-renames (cdr synonyms) IO-signals slist)))
+
+      (let ((n (car e))
+            (s (parent-synonym (cdr e) slist)))
+
+        (if (and (or (IO-outp n) (IO-outp s)
+                     (member s IO-signals))
+                 (not (equal n s)))
+
+            (cons (cons n s) r)
+
+            r)))
+      nil))
+
+(disable IO-signal-renames)
+
+(defn IO-rename-error (synonyms IO-signals)
+  (nlistp-or-err (IO-signal-renames synonyms IO-signals synonyms)
+                 'renamed-IO-signals))
+
+(disable IO-rename-error)
+
+(defn t-wire-error (free-signals t-wire-ins)
+  (err-and (list (disjoint-or-err (remove-duplicates t-wire-ins)
+                                  free-signals
+                                  't-wire-ins-used-elsewhere)
+                 (no-duplicates-or-err t-wire-ins
+                                       'duplicate-t-wire-inputs))
+           't-wire-errors))
+
+(disable t-wire-error)
+
+(defn compose-tri-state-data (data IO-signals)
+  (let ((free-signals (value 'free-signals data))
+        (t-wire-ins   (value 't-wire-ins   data))
+        (synonyms     (value 'synonyms     data)))
+
+    (let ((new-fs (parent-synonyms-list free-signals synonyms))
+          (new-ts (parent-synonyms-list t-wire-ins   synonyms)))
+
+      (list (cons 'free-signals new-fs)
+            (cons 't-wire-ins   new-ts)
+            (cons 'synonyms     synonyms)
+
+            (IO-rename-error synonyms IO-signals)
+            (t-wire-error new-fs new-ts)))))
+
+(disable compose-tri-state-data)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Collecting tri-state data
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn collect-synonyms (m-outs synonyms)
+  (if (listp m-outs)
+      (let ((out1 (car m-outs))
+            (rslt (collect-synonyms (cdr m-outs) synonyms)))
+
+        (let ((p1 (parent-synonym out1 synonyms)))
+
+          (if (equal out1 p1)
+              rslt
+
+              (cons (cons out1 p1) rslt))))
+
+      nil))
+
+(disable collect-synonyms)
+
+(defn collect-tri-state-data (m-ins m-outs data)
+  (let ((t-wire-ins (value 't-wire-ins data))
+        (synonyms   (value 'synonyms   data)))
+
+    (list (cons 't-wire-ins
+                (intersection m-ins t-wire-ins))
+
+          (cons 'synonyms
+                (collect-synonyms m-outs
+                                  (externalize-parents m-outs synonyms
+                                                       m-ins m-outs))))))
+
+(disable collect-tri-state-data)
+
+(defn tri-state-errors (data)
+  (let ((e1 (error-entry data 'renamed-IO-signals))
+        (e2 (error-entry data 't-wire-errors)))
+
+    (cond ((and (net-errorp e1) (net-errorp e2))
+           (list e1 e2))
+
+          ((net-errorp e1)
+           e1)
+
+          ((net-errorp e2)
+           e2)
+
+          (T nil))))
+
+(disable tri-state-errors)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Collecting Occurrence Properties
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn initial-occ-data (props m-ins m-outs)
+  (if (listp props)
+      (let ((prop1 (car props))
+
+            (result1 (initial-occ-data (cdr props) m-ins m-outs)))
+
+        (let ((entry1 (case prop1
+
+                        (delays
+                         (cons 'delays
+                               (initial-occ-delays)))
+
+                        (drives
+                         (cons 'drives
+                               (initial-occ-drives)))
+
+                        (input-types
+                         (cons 'input-types
+                               (initial-occ-in-types)))
+
+                        (loadings
+                         (cons 'loadings
+                               (initial-occ-loadings)))
+
+                        (out-depends
+                         (cons 'out-depends
+                               (initial-occ-out-depends m-ins m-outs)))
+
+                        (output-types
+                         (cons 'output-types
+                               (initial-occ-out-types)))
+
+                        (state-types
+                         (cons 'state-types
+                               (initial-occ-state-types)))
+
+                        (tri-state-data
+                         (cons 'tri-state-data
+                               (initial-occ-tri-state-data m-outs)))
+
+                        (otherwise (if (member prop1
+                                               '(gates pads primitives
+                                                       transistors))
+                                       (cons prop1 0)
+                                       nil)))))
+          (if (listp entry1)
+              (cons entry1 result1)
+              result1)))
+
+      nil))
+
+(disable initial-occ-data)
+
+(defn update-oprop-binding (o-name o-ins o-outs o-fn o-fn-props in-map out-map
+                            binding)
+  (if (listp binding)
+      (let ((p-name  (car binding))
+            (p-value (cdr binding)))
+
+        (cons p-name
+
+              (case p-name
+                (delays
+                 (update-delays p-value o-outs o-fn-props in-map out-map))
+
+                (drives
+                 (update-drives p-value o-outs o-fn-props in-map out-map))
+
+                (input-types
+                 (update-in-types p-value o-ins o-fn-props))
+
+                (loadings
+                 (update-loadings p-value o-ins o-fn-props))
+
+                (out-depends
+                 (update-out-depends p-value o-outs o-fn-props o-ins in-map))
+
+                (output-types
+                 (update-out-types p-value o-outs o-fn-props in-map))
+
+                (state-types
+                 (update-state-types p-value o-name o-fn-props))
+
+                (tri-state-data
+                 (update-tri-state-data p-value o-ins o-fn o-fn-props
+                                        in-map out-map))
+
+                (otherwise
+                 (if (member p-name '(gates pads primitives transistors))
+                     (plus (value p-name o-fn-props) p-value)
+                     p-value)))))
+
+      binding))
+
+(disable update-oprop-binding)
+
+(defn update-occ-bindings (o-name o-ins o-outs o-fn o-fn-props in-map out-map
+                           bindings)
+  (if (listp bindings)
+      (let ((prop-1 (car bindings))
+            (b-rest (cdr bindings)))
+
+        (cons (update-oprop-binding o-name o-ins o-outs o-fn o-fn-props
+                                    in-map out-map prop-1)
+              (update-occ-bindings  o-name o-ins o-outs o-fn o-fn-props
+                                    in-map out-map b-rest)))
+
+      nil))
+
+(disable update-occ-bindings)
+
+
+(defn function-properties (fn database)
+  (if (primp fn)
+      (cdr (primp fn))
+      (value fn database)))
+
+(disable function-properties)
+
+(defn collect-occurrence-data (body bindings IO-outputs IO-signals database)
+  (if (listp body)
+      (let ((occ (car body)))
+
+        (let ((o-name (occ-name     occ))
+              (o-outs (occ-outputs  occ))
+              (o-fn   (occ-function occ))
+              (o-ins  (occ-inputs   occ)))
+
+          (let ((o-fn-props (function-properties o-fn database))
+
+                (o-ins2  (mark-IO-outs o-ins  IO-outputs))
+                (o-outs2 (mark-IO-outs o-outs IO-signals)))
+
+            (let ((in-map  (pairlist (value 'inputs  o-fn-props) o-ins2))
+                  (out-map (pairlist (value 'outputs o-fn-props) o-outs2)))
+
+              (collect-occurrence-data
+               (cdr body)
+               (update-occ-bindings o-name o-ins2 o-outs2 o-fn o-fn-props
+                                    in-map out-map bindings)
+               (append (intersection IO-signals o-outs) IO-outputs)
+               IO-signals database)))))
+
+      bindings))
+
+(disable collect-occurrence-data)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Composing Occurrence Properties
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn composed-IO-types (in-types out-types tri-state-data IO-signals)
+  (cons (cons 'tri-state-data
+              (compose-tri-state-data tri-state-data IO-signals))
+
+        (let ((types (compose-IO-types in-types out-types
+                                       (value 't-wire-ins tri-state-data))))
+          (list (cons 'input-types  (car types))
+                (cons 'output-types (cdr types))))))
+
+(disable composed-IO-types)
+
+(defn composed-loadings-drives-delays (loadings drives delays)
+  (let ((cloads (transfer-loadings loadings drives)))
+
+    (list (cons 'delays
+                (loaded-delays delays cloads))
+
+          (cons 'drives
+                (net-drives-simple drives cloads))
+
+          (cons 'loadings cloads))))
+
+(disable composed-loadings-drives-delays)
+
+(defn add-composed-data (prop-name bindings IO-signals result)
+  (cond ((or (boundp prop-name result)
+             (not (boundp prop-name bindings)))
+         result)
+
+        ((member prop-name '(input-types output-types tri-state-data))
+         (append (composed-IO-types (value 'input-types    bindings)
+                                    (value 'output-types   bindings)
+                                    (value 'tri-state-data bindings)
+                                    IO-signals)
+                 result))
+
+        ((member prop-name '(loadings drives delays))
+         (append (composed-loadings-drives-delays
+                    (value 'loadings bindings)
+                    (value 'drives   bindings)
+                    (value 'delays   bindings))
+                 result))
+
+        (t (cons (alist-entry prop-name bindings)
+                 result))))
+
+(disable add-composed-data)
+
+(defn composed-occurrence-data (bindings IO-signals result)
+  (if (listp bindings)
+      (let ((entry (car bindings)))
+
+        (composed-occurrence-data (cdr bindings) IO-signals
+                                  (if (nlistp entry) ; an error
+                                      (cons entry result)
+                                      (add-composed-data (car entry) bindings
+                                                         IO-signals
+                                                         result))))
+
+      result))
+
+(disable composed-occurrence-data)
+
+(defn compose-occurrence-data (bindings IO-signals)
+  (composed-occurrence-data bindings IO-signals nil))
+
+(disable compose-occurrence-data)
+
+
+(defn occurrence-data (props body m-ins m-outs IO-signals database)
+  (let ((bindings (initial-occ-data props m-ins m-outs)))
+
+    (compose-occurrence-data (collect-occurrence-data body bindings nil
+                                                      IO-signals database)
+                             IO-signals)))
+
+(disable occurrence-data)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Collecting Module Properties
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn collect-module-prop (prop-name m-ins in-types m-outs out-types m-states
+                           obindings approximate-delays-p)
+  (let ((entry (alist-entry prop-name obindings)))
+
+    (let ((p-value (cdr entry)))
+
+      (case prop-name
+
+        (delays         (cons 'delays
+                              (collect-delays m-outs out-types p-value
+                                              m-ins approximate-delays-p)))
+
+        (drives         (cons 'drives
+                              (collect-drives m-outs out-types p-value
+                                              m-ins)))
+
+        (input-types    (cons 'input-types in-types))
+
+        (inputs         (cons 'inputs m-ins))
+
+        (loadings       (cons 'loadings
+                              (collect-loadings m-ins in-types p-value)))
+
+        (out-depends    (cons 'out-depends
+                              (collect-out-depends m-outs p-value)))
+
+        (output-types   (cons 'output-types out-types))
+
+        (outputs        (cons 'outputs
+                              (unmark-IO-outs m-outs)))
+
+        (state-types    (if (equal m-states nil)
+                            nil
+                            (cons 'state-types
+                                  (collect-state-types m-states p-value))))
+
+        (states         (if (equal m-states nil)
+                            nil
+                            (cons 'states m-states)))
+
+        (tri-state-data (cons 'tri-state-data
+                              (collect-tri-state-data m-ins m-outs p-value)))
+
+        (otherwise      entry)))))
+
+(disable collect-module-prop)
+
+(defn collect-module-props (props m-ins in-types m-outs out-types m-states
+                            obindings approximate-delays-p)
+  (if (listp props)
+      (let ((prop1   (collect-module-prop  (car props) m-ins in-types
+                                           m-outs out-types m-states
+                                           obindings approximate-delays-p))
+
+            (result1 (collect-module-props (cdr props) m-ins in-types
+                                           m-outs out-types m-states
+                                           obindings approximate-delays-p)))
+
+        (if (listp prop1)
+            (cons prop1 result1)
+            result1))
+
+      nil))
+
+(disable collect-module-props)
+
+(defn module-prop-error (obinding m-states)
+  (if (listp obinding)
+      (let ((p-name  (car obinding))
+            (p-value (cdr obinding)))
+
+        (case p-name
+          (delays         (delays-error      p-value))
+          (drives         (drives-error      p-value))
+          (input-types    (in-types-error    p-value))
+          (loadings       (loadings-error    p-value))
+          (out-depends    (out-depends-error p-value))
+          (output-types   (out-types-error   p-value))
+          (state-types    (state-types-error p-value m-states))
+          (tri-state-data (tri-state-errors  p-value))
+          (otherwise      nil)))
+
+      obinding))
+
+(disable module-prop-error)
+
+(defn collect-module-errors (obindings m-states)
+  (if (listp obindings)
+      (let ((error1 (module-prop-error     (car obindings) m-states))
+            (errors (collect-module-errors (cdr obindings) m-states)))
+
+        (cond ((net-errorp error1)
+               (cons error1 errors))
+
+              ((listp error1)
+               (append error1 errors))
+
+              (t errors)))
+
+      nil))
+
+(disable collect-module-errors)
+
+(defn collect-module-data (props m-name m-ins m-outs m-states obindings
+                           approximate-delays-p)
+  (let ((m-in-types
+         (if (member 'input-types props)
+             (collect-in-types m-ins (value 'input-types obindings))
+             nil))
+
+        (m-out-types
+         (if (member 'output-types props)
+             (collect-out-types m-outs (value 'output-types obindings)
+                                m-ins  (value 'input-types  obindings))
+             nil)))
+
+    (let ((m-data (collect-module-props props m-ins m-in-types m-outs
+                                        m-out-types m-states obindings
+                                        approximate-delays-p))
+
+          (m-err  (nlistp-or-err (collect-module-errors obindings m-states)
+                                 (list 'module m-name))))
+      (if (net-errorp m-err)
+          (list* m-name m-err m-data)
+          (cons m-name m-data)))))
+
+(disable collect-module-data)
+
+(defn module-data (module props database approximate-delays-p)
+  (let ((m-name   (module-name        module))
+        (m-ins    (module-inputs      module))
+        (m-outs   (module-outputs     module))
+        (m-occs   (module-occurrences module))
+        (m-states (module-statenames  module)))
+
+    (let ((IO-signals (intersection m-ins m-outs)))
+
+      (let ((m-outs (mark-IO-outs m-outs IO-signals)))
+
+        (collect-module-data props m-name m-ins m-outs m-states
+                             (occurrence-data props m-occs m-ins m-outs
+                                              IO-signals database)
+                             approximate-delays-p)))))
+
+(disable module-data)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Constructing the Netlist Database
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn module-database (netlist props approximate-delays-p)
+  ;; guard: (and (netlist-syntax-ok netlist)
+  ;;             (set-equal (required-props props) props))
+  (if (listp netlist)
+      (let ((database (module-database (cdr netlist) props
+                                       approximate-delays-p)))
+        (cons (module-data (car netlist) props database
+                           approximate-delays-p)
+              database))
+    nil))
+
+(disable module-database)
+
+
+(defn required-for-prop (prop)
+  (case prop
+
+    (delays
+     '(delays loadings drives input-types output-types
+       inputs outputs tri-state-data))
+
+    (drives
+     '(drives loadings input-types output-types
+       inputs outputs tri-state-data))
+
+    (input-types
+     '(input-types output-types
+       inputs outputs tri-state-data))
+
+    (loadings
+     '(loadings drives input-types output-types
+       inputs outputs tri-state-data))
+
+    (out-depends
+     '(out-depends inputs outputs))
+
+    (output-types
+     '(output-types input-types
+       inputs outputs tri-state-data))
+
+    (otherwise
+     (if (member prop (all-module-props))
+         (list prop)
+         nil))))
+
+(disable required-for-prop)
+
+
+(defn get-required-props (props wanted-props)
+  (if (listp props)
+      (union (required-for-prop  (car props))
+             (get-required-props (cdr props) wanted-props))
+      wanted-props))
+
+(disable get-required-props)
+
+(defn required-props (props)
+  (get-required-props props props))
+
+(disable required-props)
+
+;(prove-lemma double-required-props nil
+;  (set-equal (required-props (required-props p))
+;            (required-props p)))
+
+
+(defn unbind-netlist-props-0 (props database)
+  (if (listp database)
+      (let ((entry  (car database)))
+
+        (let ((m-name  (car entry))
+              (m-alist (cdr entry)))
+        (let ((m-prop1 (car m-alist)))
+
+          (cons (cons m-name
+                      (if (net-errorp m-prop1)
+                          (cons m-prop1
+                                (unbind-list props (cdr m-alist)))
+                          (unbind-list props m-alist)))
+
+                (unbind-netlist-props-0 props
+                                        (cdr database))))))
+
+      nil))
+
+(disable unbind-netlist-props-0)
+
+(defn unbind-netlist-props (props database)
+  (if (listp props)
+      (unbind-netlist-props-0 (reverse props) database)
+      database))
+
+(disable unbind-netlist-props)
+
+
+
+(defn netlist-properties (netlist props approximate-delays-p)
+  ;; The predicate NETLIST-SYNTAX-OK should be used to ensure that the basic
+  ;; syntax and arities of all modules in netlist are correct; the database
+  ;; computation depends on this.  It also depends on the correctness of the
+  ;; primitive database.
+  ;; If APPROXIMATE-DELAYS-P is not F, the approximation described above
+  ;; (under module delays) is applied when computing delays.  
+
+  (let ((props-check (subset-or-err props (all-module-props)
+                                    'unknown-properties)))
+    (if (net-errorp props-check)
+        props-check
+
+        (let ((rprops (required-props props)))
+
+          (let ((database (module-database netlist rprops
+                                           approximate-delays-p)))
+
+            (let ((errs (collect-net-errors database)))
+
+              (if (listp errs)
+                  (pred-error 'netlist-errors errs)
+
+                  (unbind-netlist-props (set-diff rprops props)
+                                        database))))))))
+
+(disable netlist-properties)
+
+
+
+(defn netlist-database (netlist approximate-delays-p)
+  ;; The predicate NETLIST-SYNTAX-OK should be used to ensure that the basic
+  ;; syntax and arities of all modules in netlist are correct; the database
+  ;; computation depends on this.  It also depends on the correctness of the
+  ;; primitive database.
+  ;; If APPROXIMATE-DELAYS-P is not F, the approximation described above
+  ;; (under module delays) is applied when computing delays.  
+
+  (let ((props  (all-module-props)))
+  (let ((rprops (required-props props)))
+
+    (let ((database (module-database netlist rprops approximate-delays-p)))
+
+      (unbind-netlist-props (set-diff rprops props)
+                            database)))))
+
+(disable netlist-database)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    The Predicates
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  RESULT:  A net-errorp is a false result; anything else is a true result.
+
+(defn predicate-properties ()
+  '(drives input-types loadings out-depends output-types state-types))
+
+(disable predicate-properties)
+(disable *1*predicate-properties)
+
+
+(defn top-level-predicate (netlist)
+  (let ((syntax-check (netlist-syntax-ok netlist)))
+    (if (net-errorp syntax-check)
+        syntax-check
+
+        (let ((r (netlist-properties netlist (predicate-properties) T)))
+          (if (net-errorp r)
+              r
+              T)))))
+
+(disable top-level-predicate)
+
+
+
+;;  LSI-TOP-LEVEL-PREDICATE parameters:
+;;    netlist - a netlist, in which all names are litatoms
+;;    token-size - maximum allowed name length (should be 64)
+;;    max-hierarchical-name-length - (should be 255)
+
+(defn lsi-top-level-predicate (netlist token-size
+                               max-hierarchical-name-length)
+  (let ((syntax-check
+         (lsi-netlist-syntax-ok netlist token-size
+                                max-hierarchical-name-length)))
+    (if (net-errorp syntax-check)
+        syntax-check
+
+        (let ((r (netlist-properties netlist (predicate-properties) T)))
+          (if (net-errorp r)
+              r
+              T)))))
+
+(disable lsi-top-level-predicate)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    THE PRIMITIVE PREDICATE
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  The following functions check the primitive database for presence
+;;;  and consistency of properties.  The primitive properties are:
+;;;
+;;;    '(DELAYS DRIVES INPUT-TYPES INPUTS LOADINGS LSI-NAME NEW-STATES
+;;;      OUT-DEPENDS OUTPUT-TYPES OUTPUTS RESULTS STATE-TYPES STATES
+;;;      GATES PADS PRIMITIVES TRANSISTORS)
+;;;
+;;;  PADS is not required, and the three state properties should
+;;;  either all be present or all be absent.
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PRIMITIVE PREDICATE UTILITIES
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn pname-listp (x)
+  (if (listp x)
+      (let ((n (car x))
+            (r (cdr x)))
+        (and (name-okp n)
+             (not (member n r))
+             (pname-listp r)))
+      (equal x nil)))
+
+(disable pname-listp)
+
+(defn function-call-ok (x number-of-args)
+  (if (and (listp x) (litatom (car x)))
+      (if (properp x)
+          (if (numberp number-of-args)
+              (let ((ac (length (cdr x))))
+                (T-or-err (equal ac number-of-args)
+                          (list 'function (car x) 'has number-of-args 'args)
+                          (list 'it 'is 'given ac 'in x)))
+
+              T)
+          (pred-error 'ill-formed-function-call x))
+      (pred-error 'not-function-call x)))
+
+(disable function-call-ok)
+
+(defn IO-label (arg what)
+  (if (numberp arg)
+      (list 'unknown what arg)
+      (list what arg)))
+
+(disable IO-label)
+
+(defn input-label (input)
+  (IO-label input 'input))
+
+(disable input-label)
+
+(defn output-label (output)
+  (IO-label output 'output))
+
+(disable output-label)
+
+(defn state-label (state)
+  (IO-label state 'state))
+
+(disable state-label)
+
+(defn ucar (x)
+  (if (listp x)
+      (car x)
+      (unknown)))
+
+(disable ucar)
+
+(defn ucdr (x)
+  (if (listp x)
+      (cdr x)
+      (unknown)))
+
+(disable ucdr)
+
+(defn IO-car (args)
+  (cond ((listp args) (car args))
+        ((numberp args) args)
+        (T 1)))
+
+(disable IO-car)
+
+(defn IO-cdr (args)
+  (cond ((numberp args)
+         (add1 args))
+        ((nlistp args)
+         2)
+        ((numberp (cdr args)) 
+         nil)
+        (T (cdr args))))
+
+(disable IO-cdr)
+
+(defn out-prop-signals (out-depends inputs)
+  (if (unknownp out-depends)
+      inputs
+      out-depends))
+
+(disable out-prop-signals)
+
+(defn id-out-prop-signals (output-type out-depends inputs)
+  (if (listp output-type)
+      output-type
+      (out-prop-signals out-depends inputs)))
+
+(disable id-out-prop-signals)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PRIMITIVE INPUT AND OUTPUT TYPES
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; Known input types:
+;;; (BOOLP CLK FREE LEVEL PARAMETRIC TRI-STATE TTL TTL-TRI-STATE)
+;;;
+;;; Known output types:
+;;; ((<an input name>) BOOLP CLK LEVEL PARAMETRIC TRI-STATE TTL TTL-TRI-STATE)
+
+
+(defn all-input-types ()
+  '(boolp clk free level parametric tri-state ttl ttl-tri-state))
+
+(disable all-input-types)
+(disable *1*all-input-types)
+
+(defn all-output-types (inputs)
+  (append (listify inputs)
+          (delete* 'free (all-input-types))))
+
+(disable all-output-types)
+
+(defn pin-type-ok (type input IO-signals fname)
+  (label-error (cond ((equal fname 't-wire)
+                      (T-or-err (equal type 'tri-state)
+                                't-wire-input-type-not-tri-state
+                                type))
+
+                     ((member input IO-signals)
+                      (T-or-err (tri-state-typep type)
+                                'bad-IO-signal-type
+                                type))
+
+                     (T (T-or-err (member type (all-input-types))
+                                  'unknown-type
+                                  type)))
+
+               (input-label input)))
+
+(disable pin-type-ok)
+          
+(defn pin-type-errors (types inputs IO-signals fname)
+  (if (listp types)
+      (list* (T-or-err (or (listp inputs) (numberp inputs))
+                       'too-many-input-types
+                       (list (length types) 'extras))
+             (pin-type-ok     (car types) (IO-car inputs) IO-signals fname)
+             (pin-type-errors (cdr types) (IO-cdr inputs) IO-signals fname))
+
+      (list (nil-or-err types 'not-proper-list)
+            (nlistp-or-err inputs 'inputs-without-types))))
+
+(disable pin-type-errors)
+
+(defn pin-types-ok (in-types alist)
+  (let ((inputs  (value 'inputs     alist))
+        (outputs (value 'outputs    alist))
+        (fname   (value 'primp-name alist)))
+
+    (let ((IO-signals (intersection inputs outputs))
+
+          (inputs (if (unknownp inputs) 1 inputs)))
+
+      (err-and (pin-type-errors in-types inputs IO-signals fname)
+               'input-types))))
+
+(disable pin-types-ok)
+
+
+(defn pout-type-ok (type output out-depends inputs
+                    IO-signals fname in-type-map)
+  (label-error
+   (cond ((equal fname 't-wire)
+          (T-or-err (equal type 'tri-state)
+                    't-wire-output-type-not-tri-state
+                    type))
+
+         ((member output IO-signals)
+          (if (tri-state-typep type)
+              (let ((in-type (value output in-type-map)))
+
+                (T-or-err (or (not (tri-state-typep in-type))
+                              (equal type in-type))
+                          'different-IO-signal-in-and-out-types
+                          (list (list 'input-type  in-type)
+                                (list 'output-type type))))
+
+              (pred-error 'bad-IO-signal-type type)))
+
+         ((listp type)
+          (let ((known (out-prop-signals out-depends inputs)))
+
+            (T-or-err (and (properp type)
+                           (equal (length type) 1)
+                           (if (unknownp known)
+                               (name-okp (car type))
+                               (member (car type) known)))
+                      'unknown-type type)))
+
+         (T (T-or-err (member type (all-output-types nil))
+                      'unknown-type
+                      type)))
+
+   (output-label output)))
+
+(disable pout-type-ok)
+
+(defn pout-type-errors (types outputs out-depends inputs IO-signals
+                        fname in-type-map)
+  (if (listp types)
+      (list* (T-or-err (or (listp outputs) (numberp outputs))
+                       'too-many-output-types
+                       (list (length types) 'extras))
+
+             (pout-type-ok (car types) (IO-car outputs) (ucar out-depends)
+                           inputs IO-signals fname in-type-map)
+
+             (pout-type-errors (cdr types) (IO-cdr outputs) (ucdr out-depends)
+                               inputs IO-signals fname in-type-map))
+
+      (list (nil-or-err    types   'not-proper-list)
+            (nlistp-or-err outputs 'outputs-without-types))))
+
+(disable pout-type-errors)
+
+(defn pout-types-ok (out-types alist)
+  (let ((outputs     (value 'outputs     alist))
+        (out-depends (value 'out-depends alist))
+        (inputs      (value 'inputs      alist))
+        (in-types    (value 'input-types alist))
+        (fname       (value 'primp-name  alist)))
+
+    (let ((IO-signals  (intersection inputs outputs))
+          (in-type-map (pairlist inputs in-types))
+
+          (outputs (if (unknownp outputs) 1 outputs)))
+
+      (err-and (pout-type-errors out-types outputs out-depends
+                                 inputs IO-signals fname in-type-map)
+               'output-types))))
+
+(disable pout-types-ok)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    FUNCTIONS USED BY PRIMITIVE DELAYS AND DRIVES
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn p-name-prop-value-ok (name out-type out-depends inputs label)
+  (let ((known (id-out-prop-signals out-type out-depends inputs)))
+                    
+    (T-or-err (if (unknownp known)
+                  (name-okp name)
+                  (member name known))
+              label
+              name)))
+
+(disable p-name-prop-value-ok)
+
+(defn p-t-wire-args-ok (args out-depends inputs label)
+  (let ((known (out-prop-signals out-depends inputs)))
+
+    (err-and (if (unknownp known)
+                 (list (name-list-ok args 'ill-formed-args F))
+
+                 (list (subset-or-err args known 'unknown-args)
+                       (no-duplicates-or-err args 'duplicate-args)
+                       (nil-or-err (last-cdr args) 'not-proper-list)))
+
+             label)))
+
+(disable p-t-wire-args-ok)
+
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PRIMITIVE DELAYS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn phalf-delay-ok (d type label)
+  (if (equal (length d) 2)
+      (err-and (list (cond ((member type
+                                    '(boolp clk level parametric tri-state))
+                            (T-or-err (numberp (car d))
+                                      'slope-not-number
+                                      (list (list 'slope (car d))
+                                            (list 'output-type type))))
+
+                           ((member type '(ttl ttl-tri-state))
+                            (T-or-err (ps-pfp (car d))
+                                      'slope-not-ps-pf
+                                      (list (list 'slope (car d))
+                                            (list 'output-type type))))
+
+                           (T (T-or-err (or (numberp (car d))
+                                            (ps-pfp (car d)))
+                                        'slope-not-number-or-ps-pf
+                                        (car d))))
+
+                     (T-or-err (numberp (cadr d))
+                               'intercept-not-number (cadr d))
+
+                     (nil-or-err (last-cdr d) 'not-proper-list))
+
+               label)
+
+      (pred-error label (list 'length-not-2 d))))
+
+(disable phalf-delay-ok)
+
+(defn pdelay-ok (delay output type out-depends inputs)
+  (label-error
+   (cond ((or (litatom delay) (indexp delay))
+          (p-name-prop-value-ok delay type out-depends inputs
+                                'unknown-delay))
+
+         ((and (listp delay) (equal (car delay) 'or))
+          (p-t-wire-args-ok (cdr delay) out-depends inputs
+                            'bad-or-delay))
+
+         ((equal (length delay) 2)
+          (err-and 
+           (list (nlistp-or-err type 'expected-literal-type)
+                 (phalf-delay-ok (car  delay) type 'low-to-high)
+                 (phalf-delay-ok (cadr delay) type 'high-to-low)
+                 (nil-or-err (last-cdr delay) 'not-proper-list))
+           'bad-literal-delay))
+
+         (T (pred-error 'unknown-delay delay)))
+
+   (output-label output)))
+
+(disable pdelay-ok)
+
+(defn pdelays-errors (delays outputs types out-depends inputs)
+  (if (listp delays)
+      (list* (T-or-err (or (listp outputs) (numberp outputs))
+                       'too-many-delays
+                       (list (length delays) 'extras))
+
+             (pdelay-ok (car delays) (IO-car outputs)
+                        (ucar types) (ucar out-depends)
+                        inputs)
+
+             (pdelays-errors (cdr delays) (IO-cdr outputs)
+                             (ucdr types) (ucdr out-depends)
+                             inputs))
+
+      (list (nil-or-err    delays  'not-proper-list)
+            (nlistp-or-err outputs 'outputs-without-delays))))
+
+(disable pdelays-errors)
+
+(defn pdelays-ok (delays alist)
+  (let ((outputs     (value 'outputs      alist))
+        (out-types   (value 'output-types alist))
+        (out-depends (value 'out-depends  alist))
+        (inputs      (value 'inputs       alist)))
+
+    (let ((outputs (if (unknownp outputs) 1 outputs)))
+
+      (err-and (pdelays-errors delays outputs out-types out-depends inputs)
+               'delays))))
+
+(disable pdelays-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    PRIMITIVE DRIVES
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn pdrive-ok (drive output type out-depends inputs)
+  (label-error
+   (cond ((or (litatom drive) (indexp drive))
+          (p-name-prop-value-ok drive type out-depends inputs
+                                'unknown-drive))
+
+         ((and (listp drive) (equal (car drive) 'min))
+          (p-t-wire-args-ok (cdr drive) out-depends inputs
+                            'bad-min-drive))
+
+         (T
+          (let ((error-msg (list (list 'drive drive)
+                                 (list 'type  type))))
+            (cond ((member type
+                           '(boolp clk level parametric tri-state))
+                   (T-or-err (numberp drive) 'bad-drive error-msg))
+
+                  ((member type '(ttl ttl-tri-state))
+                   (T-or-err (mAp drive) 'bad-drive error-msg))
+
+                  ((or (numberp drive) (mAp drive))
+                   (T-or-err (nlistp type) 'expected-literal-type error-msg))
+
+                  (T (pred-error 'unknown-drive drive))))))
+
+   (output-label output)))
+
+(disable pdrive-ok)
+
+(defn pdrives-errors (drives outputs types out-depends inputs)
+  (if (listp drives)
+      (list* (T-or-err (or (listp outputs) (numberp outputs))
+                       'too-many-drives
+                       (list (length drives) 'extras))
+
+             (pdrive-ok (car drives) (IO-car outputs)
+                        (ucar types) (ucar out-depends)
+                        inputs)
+
+             (pdrives-errors (cdr drives) (IO-cdr outputs)
+                             (ucdr types) (ucdr out-depends)
+                             inputs))
+
+      (list (nil-or-err    drives  'not-proper-list)
+            (nlistp-or-err outputs 'outputs-without-drives))))
+
+(disable pdrives-errors)
+
+(defn pdrives-ok (drives alist)
+  (let ((outputs     (value 'outputs      alist))
+        (out-types   (value 'output-types alist))
+        (out-depends (value 'out-depends  alist))
+        (inputs      (value 'inputs       alist)))
+
+    (let ((outputs (if (unknownp outputs) 1 outputs)))
+
+      (err-and (pdrives-errors drives outputs out-types out-depends inputs)
+               'drives))))
+
+(disable pdrives-ok)
+
+
+;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;
+;;     PRIMITIVE LOADINGS
+;;
+;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn ploading-ok (loading input type)
+  (label-error
+   (T-or-err (cond ((member type
+                            '(boolp clk free level parametric tri-state))
+                    (numberp loading))
+
+                   ((member type '(ttl ttl-tri-state))
+                    (pfp loading))
+
+                   (t (or (numberp loading) (pfp loading))))
+
+             'bad-loading
+
+             (list (list 'loading loading)
+                   (list 'input-type type)))
+
+   (input-label input)))
+
+(disable ploading-ok)
+
+(defn ploadings-errors (loadings inputs types)
+  (if (listp loadings)
+      (list* (T-or-err (or (listp inputs) (numberp inputs))
+                       'too-many-loadings
+                       (list (length loadings) 'extras))
+
+             (ploading-ok (car loadings) (IO-car inputs)
+                          (ucar types))
+
+             (ploadings-errors (cdr loadings) (IO-cdr inputs)
+                               (ucdr types)))
+
+      (list (nil-or-err    loadings 'not-proper-list)
+            (nlistp-or-err inputs   'inputs-without-loadings))))
+
+(disable ploadings-errors)
+
+(defn ploadings-ok (loadings alist)
+  (let ((inputs      (value 'inputs      alist))
+        (input-types (value 'input-types alist)))
+
+    (let ((inputs (if (unknownp inputs) 1 inputs)))
+
+      (err-and (ploadings-errors loadings inputs input-types)
+               'loadings))))
+
+(disable ploadings-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     PRIMITIVE LSI-NAME ENTRY
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn plsi-name-ok (lsi-name-entry alist)
+  (let ((inputs  (value 'inputs  alist))
+        (outputs (value 'outputs alist))
+
+        (lsi-name (if (listp lsi-name-entry)
+                      (car lsi-name-entry)
+                      lsi-name-entry)))
+
+    (err-and (list (lsi-name-ok lsi-name 64)
+                   ;; 64 is the max allowed lsi name length.  
+                   ;; It probably should be a parameter.
+
+                   (if (or (nlistp lsi-name-entry) (unknownp inputs))
+                       T
+                       (T-or-err (set-equal (cdr lsi-name-entry) inputs)
+                                 'input-conflict
+                                 (list (list 'inputs inputs)
+                                       (list 'lsi-inputs
+                                             (cdr lsi-name-entry)))))
+
+                   (if (or (unknownp inputs) (unknownp outputs))
+                       T
+                       (let ((IO-signals (intersection inputs outputs)))
+                         (T-or-err (equal (listp IO-signals)
+                                          (is-head (unpack 'bd)
+                                                   (unpack lsi-name)))
+                                   'bidirect-conflict
+                                   (list (list 'lsi-name lsi-name)
+                                         (list 'IO-signals IO-signals))))))
+
+             'lsi-name)))
+
+(disable plsi-name-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     PRIMITIVE OUT-DEPENDS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn pout-depends-one-ok (out-depends output inputs)
+  (if (unknownp inputs)
+      (name-list-ok out-depends (output-label output) F)
+
+      (err-and (list (subset-or-err out-depends inputs
+                                    'unknown-output-dependencies)
+
+                     (no-duplicates-or-err out-depends 'duplicates)
+
+                     (nil-or-err (last-cdr out-depends) 'not-proper-list))
+
+               (output-label output))))
+
+(disable pout-depends-one-ok)
+
+(defn pout-depends-errors (out-depends outputs inputs)
+  (if (listp out-depends)
+      (list* (T-or-err (or (listp outputs) (numberp outputs))
+                       'too-many-out-depends
+                       (list (length out-depends) 'extras))
+
+             (pout-depends-one-ok (car out-depends) (IO-car outputs) inputs)
+
+             (pout-depends-errors (cdr out-depends) (IO-cdr outputs) inputs))
+
+      (list (nil-or-err    out-depends 'not-proper-list)
+            (nlistp-or-err outputs     'outputs-without-out-depends))))
+
+(disable pout-depends-errors)
+
+(defn pout-depends-ok (out-depends alist)
+  (let ((outputs (value 'outputs alist))
+        (inputs  (value 'inputs  alist)))
+
+    (let ((outputs (if (unknownp outputs) 1 outputs)))
+
+      (err-and (pout-depends-errors out-depends outputs inputs)
+               'out-depends))))
+
+(disable pout-depends-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     PRIMITIVE STATES
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn pstates-ok (states)
+  (cond ((listp states)
+         (err-and (cons (T-or-err (listp (cdr states))
+                                  'list-of-length-1-not-allowed
+                                  states)
+                        (name-list-errors states F))
+                  'states))
+
+        ((equal states nil)
+         T)
+
+        (T (T-or-err (name-okp states)
+                     'states
+                     (list 'bad-name states)))))
+
+(disable pstates-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     PRIMITIVE STATE-TYPES
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+;;;  Function ADDRESSED-STATE is not called, but it is used as a type
+;;;  descriptor in the primitive database.
+
+(defn addressed-state (address-bits word-value)
+  (if (zerop address-bits)
+      word-value
+
+      (cons (addressed-state (sub1 address-bits) word-value)
+            (addressed-state (sub1 address-bits) word-value))))
+
+(disable addressed-state)
+
+(defn boolp-list-ok (lst label)
+  (err-and (list (nlistp-or-err (remove-duplicates (delete* 'boolp lst))
+                                'not-boolp)
+                 (nil-or-err (last-cdr lst) 'not-proper-list))
+           label))
+
+(disable boolp-list-ok)
+
+(defn literal-state-type-ok (type)
+  (cond ((ramp type)
+         (boolp-list-ok (ram-guts type) 'bad-ram-type))
+
+        ((romp type)
+         (boolp-list-ok (rom-guts type) 'bad-rom-type))
+
+        ((stubp type)
+         (boolp-list-ok (stub-guts type) 'bad-stub-type))
+
+        (T
+         (T-or-err (equal type 'boolp) 'unknown-type type))))
+
+(disable literal-state-type-ok)
+
+(defn pmemory-word-call-ok (type)
+  (if (and (listp type)
+           (member (car type) '(ram rom stub)))
+
+      (let ((r (function-call-ok type 1)))
+
+        (if (net-errorp r)
+            r
+
+            (let ((word (cadr type)))
+
+              (label-error (if (equal (car word) 'quote)
+                               (let ((r (function-call-ok word 1)))
+                                 (if (net-errorp r)
+                                     r
+                                     (boolp-list-ok (cadr word)
+                                                    'bad-memory-bit-types)))
+
+                               (pred-error 'unknown-memory-bits-call word))
+
+                           (list 'bad (car type) 'call)))))
+
+      (pred-error 'not-memory-word-call type)))
+
+(disable pmemory-word-call-ok)
+
+(defn paddressed-state-call-ok (type)
+  (if (and (listp type)
+           (equal (car type) 'addressed-state))
+
+      (let ((r (function-call-ok type 2)))
+        (if (net-errorp r)
+            r
+
+            (err-and (list (T-or-err (numberp (cadr type))
+                                     'address-bits-not-number
+                                     (cadr type))
+                           (pmemory-word-call-ok (caddr type)))
+                     '(bad addressed-state call))))
+
+      (pred-error 'not-addressed-state-call type)))
+
+(disable paddressed-state-call-ok)
+
+(defn one-pstate-type-ok (type)
+
+  (cond ((nlistp type)
+         (literal-state-type-ok type))
+
+        ((member (car type) '(ram rom stub))
+         (pmemory-word-call-ok type))
+
+        ((equal (car type) 'addressed-state)
+         (paddressed-state-call-ok type))
+
+        (T (boolp-list-ok type 'bad-type-list))))
+
+(disable one-pstate-type-ok)
+
+(defn pstate-type-list-errors (types fname)
+  (if (listp types)
+      (let ((type (car types))
+            (rest (cdr types)))
+
+        (if (and (equal fname 'mem-32x32)
+                 (member type '(numberp number-listp)))
+            (pstate-type-list-errors rest fname)
+
+            (insert (one-pstate-type-ok type)
+                    (pstate-type-list-errors rest fname))))
+
+      (list (nil-or-err types 'not-proper-list))))
+
+(disable pstate-type-list-errors)
+
+(defn pstate-type-ok (type state fname)
+  (if (or (nlistp type)
+          (member (car type) '(ram rom stub addressed-state)))
+
+      (label-error (one-pstate-type-ok type)
+                   (state-label state))
+
+      (err-and (pstate-type-list-errors type fname)
+               (state-label state))))
+
+(disable pstate-type-ok)
+
+(defn pstate-types-errors (types states fname)
+  (if (listp types)
+      (list* (T-or-err (or (listp states) (numberp states))
+                       'too-many-state-types
+                       (list (length types) 'extras))
+
+             (pstate-type-ok      (car types) (IO-car states) fname)
+
+             (pstate-types-errors (cdr types) (IO-cdr states) fname))
+
+      (list (nil-or-err    types  'not-proper-list)
+            (nlistp-or-err states 'states-without-types))))
+
+(disable pstate-types-errors)
+
+(defn pstate-types-ok (state-types alist)
+  (let ((states (value 'states     alist))
+        (fname  (value 'primp-name alist)))
+
+    (err-and (if (or (listp states) (equal states nil))
+                 (pstate-types-errors  state-types states fname)
+
+                 (list (pstate-type-ok state-types states fname)))
+
+             'state-types)))
+
+(disable pstate-types-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     PRIMITIVE CHECKS FOR DUAL-EVAL FORMS (RESULTS, NEW-STATES)
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn unknown-args (x signals states arg-listp)
+  (cond (arg-listp
+         (if (listp x)
+             (union (unknown-args (car x) signals states F)
+                    (unknown-args (cdr x) signals states T))
+             nil))
+
+        ((nlistp x)
+         (cond ((or (member x signals) (member x states))
+                nil)
+               ((or (unknownp signals) (unknownp states))
+                (if (name-okp x) nil (list x)))
+               (T (list x))))
+
+        ((equal (car x) 'quote) 
+         nil)
+
+        ((litatom (car x))
+         (unknown-args (cdr x) signals states T))
+
+        (T nil)))
+
+(disable unknown-args)
+
+(defn presult-form-errors (x arg-listp)
+  (cond (arg-listp
+         (cond ((listp x)
+                (let ((r1 (presult-form-errors (car x) F))
+                      (r2 (presult-form-errors (cdr x) T)))
+                  (if (net-errorp r1)
+                      (cons r1 r2)
+                      (append r1 r2))))
+
+               ((equal x nil)
+                nil)
+
+               (T (list (pred-error 'not-proper-list x)))))
+
+        ((listp x)
+         (let ((r (function-call-ok x (case (car x)
+                                        (quote 1)
+                                        (cons  2)
+                                        (otherwise (unknown))))))
+           (cond ((net-errorp r)
+                  r)
+                 ((equal (car x) 'quote)
+                  nil)
+                 (T (presult-form-errors (cdr x) T)))))
+
+        (T nil)))
+
+(disable presult-form-errors)
+
+(defn presult-ok (result signals states label)
+  (err-and (cons (nlistp-or-err (unknown-args result signals states F)
+                                'unknown-args)
+
+                 (presult-form-errors (list result) T))
+
+           label))
+
+(disable presult-ok)
+
+
+(defn results-length (x)
+  (cond ((nlistp x)
+         0)
+        ((equal (car x) 'cons)
+         (add1 (results-length (caddr x))))
+        (T 0)))
+
+(disable results-length)
+
+
+(defn presults-errors (results outputs out-depends inputs states label)
+  (cond ((nlistp results)
+         (list (pred-error 'unknown-dual-eval-form results)))
+
+        ((equal results '(quote nil))
+         (list (nlistp-or-err outputs (list 'missing label 'values))))
+
+        ((equal (car results) 'cons)
+         (let ((ok (function-call-ok results 2)))
+           (if (net-errorp ok)
+               (list ok)
+
+               (let ((signals (out-prop-signals (ucar out-depends) inputs)))
+
+                 (list* (T-or-err (or (listp outputs) (numberp outputs))
+                                  'too-many-values
+                                  (list (results-length results)
+                                        'or 'more 'extras))
+
+                        (presult-ok (cadr results) signals states
+                                    (IO-label (IO-car outputs) label))
+
+                        (presults-errors (caddr results) (IO-cdr outputs)
+                                         (ucdr out-depends)
+                                         inputs states label))))))
+
+        ((or (listp outputs) (equal outputs nil))
+         (list (pred-error (list 'evaluation 'should 'return
+                                 (length outputs) 'results)
+                           results)
+
+               (presult-ok results inputs states
+                           (list label 'list outputs))))
+
+        (t (list (presult-ok results inputs states 'unknown-outputs)))))
+
+(disable presults-errors)
+
+
+(defn presults-ok (results alist)
+  (let ((outputs     (value 'outputs     alist))
+        (out-depends (value 'out-depends alist))
+        (inputs      (value 'inputs      alist))
+        (states      (value 'states      alist)))
+
+    (let ((outputs (if (unknownp outputs) 1 outputs))
+          (states  (if (unknownp states)
+                       states
+                       (m-states-list states))))
+
+      (err-and (presults-errors results outputs out-depends
+                                inputs states 'output)
+               'results))))
+
+(disable presults-ok)
+
+
+(defn pnew-states-ok (new-states alist)
+  (let ((states (value 'states alist))
+        (inputs (value 'inputs alist)))
+
+    (err-and (cond ((or (listp states) (equal states nil))
+                    (presults-errors new-states states (unknown)
+                                     inputs states 'state))
+
+                   ((or (litatom states) (indexp states))
+                    (list (presult-ok new-states inputs (list states)
+                                      (state-label states))))
+
+                   (T (presults-errors new-states 1 (unknown)
+                                       inputs (unknown) 'state)))
+
+             'new-states)))
+
+(disable pnew-states-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     CHECK OF ONE PRIMITIVE DATABASE ENTRY
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn primitive-prop-ok (prop alist keys)
+  (if (listp prop)
+      (let ((pname  (car prop))
+            (pvalue (cdr prop)))
+
+        (if (member pname keys)
+            (pred-error 'duplicate-property prop)
+
+            (case pname
+              (delays       (pdelays-ok      pvalue alist))
+              (drives       (pdrives-ok      pvalue alist))
+              (input-types  (pin-types-ok    pvalue alist))
+              (inputs       (name-list-ok    pvalue 'inputs F))
+              (loadings     (ploadings-ok    pvalue alist))
+              (lsi-name     (plsi-name-ok    pvalue alist))
+              (new-states   (pnew-states-ok  pvalue alist))
+              (out-depends  (pout-depends-ok pvalue alist))
+              (output-types (pout-types-ok   pvalue alist))
+              (outputs      (name-list-ok    pvalue 'outputs F))
+              (results      (presults-ok     pvalue alist))
+              (state-types  (pstate-types-ok pvalue alist))
+              (states       (pstates-ok      pvalue))
+              (otherwise    (if (member pname
+                                        '(gates pads primitives transistors))
+                                (T-or-err (numberp pvalue) pname
+                                          (list 'value-not-number pvalue))
+                                (pred-error 'unknown-property pname))))))
+
+      (pred-error 'not-key-value-pair prop)))
+
+(disable primitive-prop-ok)
+
+(defn primitive-prop-errors (props alist keys)
+  (if (listp props)
+      (let ((prop (car props))
+            (rest (cdr props)))
+
+        (cons (primitive-prop-ok prop alist keys)
+              (primitive-prop-errors rest alist (cons (car prop) keys))))
+
+      (let ((mps (set-diff (primitive-properties) keys))
+            (sps '(new-states state-types states)))
+
+        (let ((req-mps (delete* 'pads
+                                (if (subset sps mps)
+                                    (set-diff mps sps)
+                                    mps))))
+
+          (list (nlistp-or-err req-mps 'missing-properties)
+                (nil-or-err    props   'not-proper-list))))))
+
+(disable primitive-prop-errors)
+
+(defn ok-name-list (pname props)
+  (let ((pvalue (value-or-unknown pname props)))
+
+    (if (pname-listp pvalue)
+        pvalue
+        (unknown))))
+
+(disable ok-name-list)
+
+(defn ok-states (props)
+  (if (boundp 'states props)
+      (let ((states (value 'states props)))
+
+        (cond ((or (listp states) (equal states nil))
+               (if (pname-listp states)
+                   states
+                   (unknown)))
+
+              ((name-okp states)
+               states)
+
+              (T (unknown))))
+
+      nil))
+
+(disable ok-states)
+            
+(defn ok-out-depends (ods inputs)
+  (if (listp ods)
+      (let ((od1 (car ods)))
+
+        (cons (if (and (pname-listp od1)
+                       (or (unknownp inputs)
+                           (subset od1 inputs)))
+                  od1
+                  (unknown))
+
+              (ok-out-depends (cdr ods) inputs)))
+
+      nil))
+
+(disable ok-out-depends)
+
+(defn ok-input-types (types)
+  (if (listp types)
+      (let ((t1 (car types)))
+
+        (cons (if (member t1 (all-input-types))
+                  t1
+                  (unknown))
+
+              (ok-input-types (cdr types))))
+
+      nil))
+
+(disable ok-input-types)
+
+(defn ok-output-types (out-types out-depends inputs)
+  (if (listp out-types)
+      (let ((t1 (car out-types)))
+
+        (let ((ok (if (listp t1)
+                      (let ((names (out-prop-signals (ucar out-depends)
+                                                     inputs)))
+                        (and (properp t1)
+                             (equal (length t1) 1)
+                             (if (unknownp names)
+                                 (name-okp (car t1))
+                                 (member (car t1) names))))
+
+                      (member t1 (all-output-types nil)))))
+
+          (cons (if ok t1 (unknown))
+                (ok-output-types (cdr out-types) (ucdr out-depends) inputs))))
+
+      nil))
+
+(disable ok-output-types)
+
+(defn parent-props-alist (primp-entry)
+  (let ((pname (car primp-entry))
+        (props (cdr primp-entry)))
+
+    (let ((inputs  (ok-name-list 'inputs  props))
+          (outputs (ok-name-list 'outputs props))
+
+          (states  (ok-states props)))
+
+      (let ((out-depends (ok-out-depends (value 'out-depends props) inputs)))
+
+        (let ((input-types  (ok-input-types  (value 'input-types  props)))
+              (output-types (ok-output-types (value 'output-types props)
+                                             out-depends inputs)))
+
+          (list (cons 'primp-name   pname)
+                (cons 'inputs       inputs)
+                (cons 'outputs      outputs)
+                (cons 'states       states)
+                (cons 'out-depends  out-depends)
+                (cons 'input-types  input-types)
+                (cons 'output-types output-types)))))))
+
+(disable parent-props-alist)
+
+(defn primitive-ok (p)
+  (if (listp p)
+      (let ((pname (car p))
+            (props (cdr p)))
+
+        (err-and (cons (T-or-err (name-okp pname) 'bad-primitive-name pname)
+                       (primitive-prop-errors props
+                                              (parent-props-alist p)
+                                              nil))
+                 (list 'primitive pname)))
+
+      (pred-error 'not-a-primitive p)))
+
+(disable primitive-ok)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;     PRIMITIVE PREDICATE PROPER
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn primp-database-errors (d)
+  (if (nlistp d)
+      nil
+      (cons (primitive-ok (car d))
+            (primp-database-errors (cdr d)))))
+
+(disable primp-database-errors)
+
+(defn primp-database-predicate ()
+  (err-and (primp-database-errors (primp-database))
+           'primp-database-errors))
+
+(disable primp-database-predicate)
+
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    Functions that are not part of the predicate
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; ~~~~~~~~~~~
+;;;  Utilities
+;;; ~~~~~~~~~~~
+
+(enable boundp)
+
+(defn subnet0 (flg x0 netlist used-modules result)
+  (case flg
+    (0 (let ((mname x0))
+         (if (or (lookup-module mname result)
+                 (member mname used-modules))
+             result
+             (let ((module (lookup-module mname netlist)))
+               (if (listp module)
+                   (let ((r (subnet0 1 (module-occurrences module)
+                                     netlist (cons mname used-modules)
+                                     result)))
+                     (cons module r))
+                   result)))))
+    (1 (let ((occs x0))
+         (if (nlistp occs)
+             result
+             (subnet0 1 (cdr occs) netlist used-modules
+                      (subnet0 0 (occ-function (car occs)) netlist
+                               used-modules result)))))
+    (otherwise f))
+
+  ((ord-lessp (cons (add1 (count (unbind-list used-modules netlist)))
+                    (count x0)))))
+
+(disable boundp)
+(disable subnet0)
+
+(defn subnet (flg x0 netlist)
+  (subnet0 flg x0 netlist nil nil))
+
+(disable subnet)
+
+
+(defn delete-null-entries (database)
+  (if (listp database)
+      (let ((entry (car database))
+            (rest  (cdr database)))
+        (if (listp (cdr entry))
+            (cons entry (delete-null-entries rest))
+            (delete-null-entries rest)))
+      nil))
+
+(disable delete-null-entries)
+
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Count of Gates, Pads, Primitives, or Transistors
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn primitive-count (flg x0 type netlist)
+  (case flg
+
+    (0 (let ((fn x0))
+
+         (cond ((primp fn) (primp2 fn type))
+
+               ((lookup-module fn netlist)
+                (let ((database (netlist-properties (subnet 0 fn netlist)
+                                                    (list type) T)))
+                  (if (net-errorp database)
+                      database
+                      (value type (value fn database)))))
+
+               (T (pred-error 'unknown-module fn)))))
+
+    (1 (let ((body  x0)
+             (props (required-props (list type))))
+
+         (let ((database (module-database (subnet 1 body netlist) props T)))
+
+           (value type
+                  (occurrence-data props body nil nil nil database)))))
+
+    (otherwise (pred-error 'unknown-flag (list (list 'flg flg)
+                                               (list 'x0 x0))))))
+                     
+(disable primitive-count)
+
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~
+;;;  Output Dependencies
+;;; ~~~~~~~~~~~~~~~~~~~~~
+
+(defn out-depends (flg x0 x1 x2 netlist)
+  (case
+    flg
+    (0 (let ((fn   x0)   ; name of a primitive or a module in netlist
+             (args x1))  ; list of dependency lists for fn inputs
+
+         (cond
+          ((primp fn)
+           (list-union-values (primp2 fn 'out-depends)
+                              (pairlist (primp2 fn 'inputs) args)))
+
+          ((lookup-module fn netlist)
+           (let ((database (netlist-properties (subnet 0 fn netlist)
+                                               '(out-depends inputs) T)))
+             (if (net-errorp database)
+                 database
+                 (let ((props (value fn database)))
+                   (list-union-values (value 'out-depends props)
+                                      (pairlist (value 'inputs props)
+                                                args))))))
+
+          (T (pred-error 'unknown-module fn)))))
+
+    (1 (let ((body   x0) ; list of occurrences from a module
+             (m-ins  x1)
+             (m-outs x2)
+             (props  (required-props '(out-depends))))
+
+         (let ((database   (module-database (subnet 1 body netlist) props T))
+               (IO-signals (intersection m-ins m-outs)))
+
+           (let ((m-outs (mark-IO-outs m-outs IO-signals)))
+
+             (value 'out-depends
+                    (occurrence-data props body m-ins m-outs IO-signals
+                                     database))))))
+
+    (otherwise (pred-error 'unknown-flag
+                           (list (list 'flg flg)
+                                 (list 'x0 x0)
+                                 (list 'x1 x1)
+                                 (list 'x2 x2))))))
+
+(disable out-depends)
+
+
+(defn dependency-table (netlist)
+  (netlist-properties netlist '(out-depends) T))
+
+(disable dependency-table)
+
+
+;;;  Function output-dependencies was never part of the predicate.
+
+(defn output-dependencies (module-name args netlist)
+  ;; ARGS is a list of dependencies for MODULE-NAME's inputs.
+  (let ((x (cond ((primp module-name)
+                  (length (primp2 module-name 'inputs)))
+                 ((lookup-module module-name netlist)
+                  (length (module-inputs (lookup-module module-name
+                                                        netlist))))
+                 (T (pred-error 'unknown-module module-name)))))
+    (cond ((net-errorp x) x)
+          ((equal (length args) x)
+           (let ((r (out-depends 0 module-name args nil netlist)))
+             (if (net-errorp r)
+                 r
+                 (list-list-sort r))))
+          (T (pred-error 'wrong-number-of-args
+                         (list (list module-name 'expects x)
+                               (list 'got (length args) args)))))))
+
+(disable output-dependencies)
+
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~
+;;;  Input and Output Types
+;;; ~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn IO-types-collector (types alist)
+  (if (listp types)
+      (let ((type1 (car types)))
+        (let ((real-type1 (if (listp type1)
+                              (value (car type1) alist)
+                              type1)))
+          (cons real-type1
+                (IO-types-collector (cdr types) alist))))
+      nil))
+
+(disable IO-types-collector)
+
+
+(defn IO-types (flg x0 x1 x2 netlist)
+  (case
+    flg
+    (0 (let ((fn        x0)
+             (arg-types x1))
+
+         (cond
+          ((primp fn)
+           (list (primp-lookup fn 'input-types)
+                 (cons 'output-types
+                       (IO-types-collector (primp2 fn 'output-types)
+                                           (pairlist (primp2 fn 'inputs)
+                                                     arg-types)))))
+
+          ((lookup-module fn netlist)
+           (let ((database (netlist-properties
+                              (subnet 0 fn netlist)
+                              '(input-types output-types inputs)
+                              T)))
+             (if (net-errorp database)
+                 database
+
+                 (let ((props (value fn database)))
+
+                   (list (alist-entry 'input-types props)
+                         (cons 'output-types
+                               (IO-types-collector
+                                  (value 'output-types props)
+                                  (pairlist (value 'inputs props)
+                                            arg-types))))))))
+
+          (T (pred-error 'unknown-module fn)))))
+
+    (1 (let ((body   x0)
+             (m-ins  x1)
+             (m-outs x2)
+             (props  (required-props '(input-types output-types))))
+
+         (let ((database   (module-database (subnet 1 body netlist) props T))
+               (IO-signals (intersection m-ins m-outs)))
+
+           (let ((m-outs (mark-IO-outs m-outs IO-signals)))
+
+             (let ((data (occurrence-data props body m-ins m-outs IO-signals
+                                          database)))
+
+               (list (alist-entry 'input-types  data)
+                     (alist-entry 'output-types data)))))))
+
+    (otherwise (pred-error 'unknown-flag
+                           (list (list 'flg flg)
+                                 (list 'x0 x0)
+                                 (list 'x1 x1)
+                                 (list 'x2 x2))))))
+
+(disable IO-types)
+
+
+(defn netlist-type-table (netlist)
+  (netlist-properties netlist '(input-types output-types) T))
+
+(disable netlist-type-table)
+
+
+;; The following 2 functions are utility functions (never part of the
+;; predicate).
+
+(defn arg-types-matchp (actuals formals)
+  (if (or (nlistp actuals) (nlistp formals))
+      (equal actuals formals)
+
+      (let ((actual1 (car actuals))
+            (formal1 (car formals)))
+        (cond ((or (unknownp actual1) (unknownp formal1))
+               F)
+              ((types-compatiblep actual1 formal1)
+               (arg-types-matchp (cdr actuals) (cdr formals)))
+              (T F)))))
+
+(disable arg-types-matchp)
+
+(defn arg-types-okp (fn arg-types netlist)
+  (let ((IO-types (IO-types 0 fn arg-types nil netlist)))
+    (if (boundp 'input-types IO-types)
+        (arg-types-matchp arg-types
+                          (value 'input-types IO-types))
+        f)))
+
+(disable arg-types-okp)
+
+
+
+;;; ~~~~~~~~~~~~~
+;;;  State Types
+;;; ~~~~~~~~~~~~~
+
+(defn state-type-requirement (flg x0 netlist)
+  (case
+    flg
+    (0 (let ((fn x0))
+
+         (cond ((primp fn)
+                (if (primp-lookup fn 'state-types)
+                    (primp2 fn 'state-types)
+                    nil))
+
+               ((lookup-module fn netlist)
+                (let ((database (netlist-properties (subnet 0 fn netlist)
+                                                    '(state-types) T)))
+                  (if (net-errorp database)
+                      database
+
+                      (let ((props (value fn database)))
+
+                        (if (boundp 'state-types props)
+                            (value 'state-types props)
+                            nil)))))
+
+               (T (pred-error 'unknown-module fn)))))
+
+    (1 (let ((body  x0)
+             (props (required-props '(state-types))))
+
+         (let ((database (module-database (subnet 1 body netlist) props T)))
+
+           (value 'state-types
+                  (occurrence-data props body nil nil nil database)))))
+
+    (otherwise (pred-error 'unknown-flag
+                           (list (list 'flg flg)
+                                 (list 'x0 x0))))))
+
+(disable state-type-requirement)
+
+
+(defn netlist-state-types (netlist)
+  (let ((database (netlist-properties netlist '(state-types) T)))
+    (if (net-errorp database)
+        database
+        (delete-null-entries database))))
+
+(disable netlist-state-types)
+
+
+;; The following state-type functions are utility functions 
+;; (never part of the predicate).
+
+(defn type-count (type word-type)
+  (plus (count type) (count word-type)))
+
+(prove-lemma type-count-lessp1 (rewrite)
+  (implies (listp type)
+           (lessp (type-count (car type) (caddr type))
+                  (type-count type x))))
+
+(prove-lemma type-count-lessp2 (rewrite)
+  (implies (listp type)
+           (lessp (type-count (cadr type) F)
+                  (type-count type x))))
+
+(prove-lemma type-count-lessp3 (rewrite)
+  (implies (lessp (count t2) (count t1))
+           (equal (lessp (type-count wtype t2)
+                         (type-count t1 wtype))
+                  T)))
+
+(disable type-count)
+
+(defn state-okp-0 (state type address-bits word-type)
+  (cond ((equal type nil) (equal state nil))
+        ((equal type 'boolp) (boolp state))
+        ((listp type)
+         (cond ((equal (car type) 'addressed-state)
+                (state-okp-0 state (car type) (cadr type) (caddr type)))
+               ((equal (car type) 'ram)
+                (and (ramp state)
+                     (state-okp-0 (ram-guts state) (cadr type) 0 F)))
+               ((equal (car type) 'rom)
+                (and (romp state)
+                     (state-okp-0 (rom-guts state) (cadr type) 0 F)))
+               ((equal (car type) 'stub)
+                (and (stubp state)
+                     (state-okp-0 (stub-guts state) (cadr type) 0 F)))
+               ((equal (car type) 'quote)
+                (state-okp-0 state (cadr type) 0 F))
+               ((listp state)
+                (and (state-okp-0 (car state) (car type) 0 F)
+                     (state-okp-0 (cdr state) (cdr type) 0 F)))
+               (T F)))
+        ((equal type 'addressed-state)
+         (cond ((zerop address-bits)
+                (state-okp-0 state word-type 0 F))
+               ((listp state)
+                (and (state-okp-0 (car state) type (sub1 address-bits)
+                                  word-type)
+                     (state-okp-0 (cdr state) type (sub1 address-bits)
+                                  word-type)))
+               (T F)))
+        ((equal type 'numberp) (numberp state))
+        ((equal type 'number-listp) (cond ((nlistp state) (equal state nil))
+                                          ((numberp (car state))
+                                           (state-okp-0 (cdr state) type 0 F))
+                                          (T F)))
+        ((ramp type) (if (ramp state)
+                         (state-okp-0 (ram-guts state) (ram-guts type) 0 F)
+                         F))
+        ((romp type) (if (romp state)
+                         (state-okp-0 (rom-guts state) (rom-guts type) 0 F)
+                         F))
+        ((stubp type) (if (stubp state)
+                          (state-okp-0 (stub-guts state) (stub-guts type) 0 F)
+                          F))
+        (T F))
+  ((ord-lessp (cons (add1 (count state)) (type-count type word-type)))))
+
+(disable state-okp-0)
+(disable type-count-lessp1)
+(disable type-count-lessp2)
+(disable type-count-lessp3)
+
+
+(defn state-okp (fn state netlist)
+  (let ((type (state-type-requirement 0 fn netlist)))
+    (state-okp-0 state type 0 F)))
+
+(disable state-okp)
+
+
+;;; ~~~~~~~~~~~~~~~~~~~~~
+;;;  Loadings and Drives
+;;; ~~~~~~~~~~~~~~~~~~~~~
+
+(defn fix-dependent-drs (drs alist)
+  (if (listp drs)
+      (let ((dr1  (car drs)))
+        (cons (cond ((signal-namep dr1)
+                     (value dr1 alist))
+                    ((and (listp dr1) (equal (car dr1) 'min))
+                     (cons 'min (fix-dependent-drs (cdr dr1) alist)))
+                    (T dr1))
+              (fix-dependent-drs (cdr drs) alist)))
+      nil))
+
+(disable fix-dependent-drs)
+
+(defn loadings-and-drives (flg x0 x1 x2 netlist)
+  (case
+    flg
+    (0 (let ((fn      x0)
+             (inputs  x1)
+             (outputs x2))
+
+         (cond
+          ((primp fn)
+           (let ((arg-map (append (pairlist (primp2 fn 'inputs) inputs)
+                                  (pairlist (primp2 fn 'outputs) outputs))))
+             (list (primp-lookup fn 'loadings)
+                   (cons 'drives
+                         (fix-dependent-drs (primp2 fn 'drives) arg-map)))))
+
+          ((lookup-module fn netlist)
+           (let ((database (netlist-properties (subnet 0 fn netlist)
+                                               '(loadings drives
+                                                 inputs outputs)
+                                               T)))
+             (if (net-errorp database)
+                 database
+
+                 (let ((props   (value fn database)))
+                 (let ((arg-map (append (pairlist (value 'inputs props)
+                                                  inputs)
+                                        (pairlist (value 'outputs props)
+                                                  outputs))))
+                   (list (alist-entry 'loadings props)
+                         (cons 'drives
+                               (fix-dependent-drs (value 'drives props)
+                                                  arg-map))))))))
+
+          (T (pred-error 'unknown-module fn)))))
+
+    (1 (let ((body   x0)
+             (m-ins  x1)
+             (m-outs x2)
+             (props  (required-props '(loadings drives))))
+
+         (let ((database   (module-database (subnet 1 body netlist) props T))
+               (IO-signals (intersection m-ins m-outs)))
+
+           (let ((m-outs (mark-IO-outs m-outs IO-signals)))
+
+             (let ((data (occurrence-data props body m-ins m-outs IO-signals
+                                          database)))
+
+               (list (alist-entry 'loadings data)
+                     (alist-entry 'drives   data)))))))
+
+    (otherwise (pred-error 'unknown-flag (list (list 'flg flg)
+                                               (list 'x0 x0)
+                                               (list 'x1 x1)
+                                               (list 'x2 x2))))))
+
+(disable loadings-and-drives)
+
+
+(defn netlist-loadings-and-drives (netlist)
+  (netlist-properties netlist '(loadings drives) T))
+
+(disable netlist-loadings-and-drives)

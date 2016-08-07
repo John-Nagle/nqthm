@@ -1,0 +1,22 @@
+This directory contains Lisp code that is used only to help build Nqthm-1992
+under Unix via the `make' command.  It is not only possible but even easy to
+install Nqthm-1992 without using the `make' command or anything on this
+directory.
+
+Unlike the sources for Nqthm-1992, the code here is Common Lisp implementation
+dependent.  Why do we write any Common Lisp implementation dependent code at
+all?  Example answers are that the Common Lisp specification does not say how
+to (a) save an executable image, (b) `work around' bugs or deliberate errors in
+Common Lisp implementations, (d) get the fastest compilation settings for a
+particular Lisp, (e) suppress irrelevant compiler warnings, (f) request more
+heap than comes by default, (g) arrange for the evaluation of a form at the
+start of a user interrupt, (h) arrange to suppress optional compiler commentary
+of emense proportions, or (i) suppress unwanted garbage collection or function
+redefinition messages.
+
+It should be recognized that although there is perhaps some justification for
+writing implementation dependent code, it is not unlikely that this code will
+break in future releases of the Lisps for which it was intended.  If this code
+does not work for you, you are advised not to use the `make' command to build
+Nqthm-1992 command, but instead to use the simpler instructions for Nqthm-1992
+installation found in the main README file.

@@ -1,0 +1,518 @@
+(DEFVAR SETUP-VCS)
+(DEFVAR SETUP-CONTEXT)
+(DEFPARAMETER SETUP-XXX '((DEFN DELTA1 (A C MAXI)
+			(IF (ZEROP MAXI)
+			    0
+			    (IF (EQUAL C (ELT1 A MAXI))
+				0
+				(ADD1 (DELTA1 A C (SUB1 MAXI))))))
+	(DEFN STRINGP (A I SIZE)
+	      (IF (ZEROP I)
+		  T
+		  (AND (NUMBERP (ELT1 A I))
+		       (NOT (EQUAL (ELT1 A I)
+				   0))
+		       (NOT (LESSP SIZE (ELT1 A I)))
+		       (STRINGP A (SUB1 I)
+				SIZE))))
+	(HINT USEFUL-LEMMAS
+	      (PROVE-LEMMA STRINGP-IS-A-UNIV-QUANTIFIER (REWRITE)
+			   (IMPLIES (AND (STRINGP A I (ASIZE&))
+					 (NOT (EQUAL J 0))
+					 (NUMBERP J)
+					 (NOT (LESSP I J)))
+				    (AND (NUMBERP (ELT1 A J))
+					 (NOT (LESSP (ASIZE&)
+						     (ELT1 A J)))
+					 (NOT (EQUAL (ELT1 A J)
+						     0))))))))
+
+(DEFPARAMETER SETUP-TOKENS '(ASIZE&))
+
+(DEFPARAMETER SETUP-BLOCKS '((COMMON-BLOCK BLK ((VAR-DCL DELTA1 INTEGER (ASIZE&)
+						 )))))
+
+(DEFPARAMETER SETUP-SUBPROGRAM (FAKE
+    '(SUBROUTINE
+       NAME SETUP
+      ARGS (A MAXI)
+      BLOCK-NAMES (BLK)
+      HIT-VARS (BLK-DELTA1)
+      KNOWN-BLOCK-NAMES (BLK)
+      VAR-DCLS ((VAR-DCL A INTEGER (MAXI))
+		(VAR-DCL MAXI INTEGER NIL)
+		(VAR-DCL I INTEGER NIL)
+		(VAR-DCL C INTEGER NIL))
+      CALLED-FNS NIL
+      STATEMENT-FUNCTION-PATTERNS NIL
+      INPUT-COND (AND (STRINGP (A STATE)
+			       (MAXI STATE)
+			       (ASIZE&))
+		      (NOT (EQUAL (MAXI STATE)
+				  0))
+		      (NUMBERP (MAXI STATE))
+		      (LESSP (ADD1 (ASIZE&))
+			     (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+		      (LESSP (ADD1 (MAXI STATE))
+			     (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER)))
+      EFFECTS (IMPLIES (AND (NUMBERP C)
+		       (NOT (EQUAL C 0))
+		       (NOT (LESSP (ASIZE&)
+				   C)))
+		  (EQUAL (ELT1 (BLK-DELTA1 NEWSTATE)
+			       C)
+			 (DELTA1 (A STATE)
+				 C
+				 (MAXI STATE))))
+      CLOCKS ((PLUS 2 (ASIZE&)
+		    (MAXI (START))))
+
+      CODE ((DO 50 I 1 ASIZE& 1)
+	    (COMMENT
+	     DOJUNK PASS1
+	     (TEST (CONTINUE)
+		   (COMMENT
+		    ASSERTION PASS1-INVRT
+		    (AND (NUMBERP (I STATE))
+			 (NOT (EQUAL (I STATE)
+				     0))
+			 (NOT (LESSP (ADD1 (ASIZE&))
+				     (I STATE)))
+			 (IMPLIES (AND (NUMBERP J)
+				       (NOT (EQUAL J 0))
+				       (LESSP J (I STATE)))
+				  (EQUAL (ELT1 (BLK-DELTA1 STATE)
+					       J)
+					 (MAXI (START)))))
+		    ((DIFFERENCE (PLUS 2 (ASIZE&)
+				       (MAXI (START)))
+				 (I STATE))))))
+	    (ASSIGNMENT (DELTA1 I)
+			MAXI)
+	    50
+	    (CONTINUE)
+	    (DO 100 I 1 MAXI 1)
+	    (COMMENT
+	     DOJUNK PASS2
+	     (TEST
+	      (CONTINUE)
+	      (COMMENT
+	       ASSERTION PASS2-INVRT
+	       (AND (NUMBERP (I STATE))
+		    (NOT (EQUAL (I STATE)
+				0))
+		    (NOT (LESSP (ADD1 (MAXI (START)))
+				(I STATE)))
+		    (IMPLIES (AND (NOT (ZEROP J))
+				  (NOT (LESSP (ASIZE&)
+					      J)))
+			     (EQUAL (ELT1 (BLK-DELTA1 STATE)
+					  J)
+				    (PLUS (DELTA1 (A (START))
+						  J
+						  (SUB1 (I STATE)))
+					  (DIFFERENCE (MAXI (START))
+						      (SUB1 (I STATE)))
+					  ))))
+	       ((DIFFERENCE (ADD1 (MAXI (START)))
+			    (I STATE)))))
+	     (JUMP
+	      (CONTINUE)
+	      (COMMENT XXX PASS2-TO-PASS2-HINT NIL
+		       (PROVE-LEMMA
+			DELTA1-SKIP
+			(REWRITE)
+			(IMPLIES (AND (NOT (EQUAL J (ELT1 PAT I)))
+				      (NOT (ZEROP I)))
+				 (EQUAL (DELTA1 PAT J I)
+					(ADD1 (DELTA1 PAT J
+						      (SUB1 I)))))))))
+	    (ASSIGNMENT C (A I))
+	    (ASSIGNMENT (DELTA1 C)
+			(ZDIFFERENCE MAXI I))
+	    100
+	    (CONTINUE)
+	    (RETURN)))))
+
+(DEFUN ADD-SETUP NIL
+  (PROG (TEMP)
+    (SETQ TEMP (ADD-TO-CONTEXT SETUP-TOKENS SETUP-XXX SETUP-BLOCKS
+			       SETUP-SUBPROGRAM
+			       NIL))
+    (SETQ SETUP-VCS (CAR TEMP))
+    (SETQ SETUP-CONTEXT (CDR TEMP))
+    (RETURN (LIST 'SETUP-VCS))))
+
+
+(DEFVAR FSRCH-VCS)
+(DEFVAR FSRCH-CONTEXT)
+(DEFPARAMETER FSRCH-XXX '(
+	(DEFN MATCH (PAT J PATLEN STR I STRLEN)
+	      (IF (LESSP PATLEN J)
+		  T
+		  (IF (LESSP STRLEN I)
+		      F
+		      (AND (EQUAL (ELT1 PAT J)
+				  (ELT1 STR I))
+			   (MATCH PAT (ADD1 J)
+				  PATLEN STR (ADD1 I)
+				  STRLEN))))
+	      ((LESSP (DIFFERENCE (ADD1 PATLEN) J))
+	       (LESSP (DIFFERENCE (ADD1 STRLEN) I))))
+	(DEFN SEARCH (PAT STR PATLEN STRLEN I)
+	      (IF (LESSP STRLEN I)
+		  (ADD1 STRLEN)
+		  (IF (MATCH PAT 1 PATLEN STR I STRLEN)
+		      I
+		      (SEARCH PAT STR PATLEN STRLEN (ADD1 I))))
+	      ((LESSP (DIFFERENCE (ADD1 STRLEN) I))))
+	(HINT USEFUL-LEMMAS-ABOUT-SEARCHING
+	      (PROVE-LEMMA SEARCH-NON-ZERO (REWRITE)
+			   (IMPLIES (NOT (ZEROP I))
+				    (LESSP 0
+					   (SEARCH PAT STR PATLEN 
+						   STRLEN I))))
+	      (PROVE-LEMMA MATCH-AT-PATLEN (REWRITE)
+			   (IMPLIES (LESSP PATLEN J)
+				    (MATCH PAT J PATLEN STR I STRLEN)))
+	      (PROVE-LEMMA MATCH-AT-STRLEN (REWRITE)
+			   (IMPLIES (LESSP STRLEN I)
+				    (EQUAL (MATCH PAT J PATLEN STR I 
+						  STRLEN)
+					   (LESSP PATLEN J))))
+	      (PROVE-LEMMA MATCH-NEEDS-PATLEN-CHARS (REWRITE)
+			   (IMPLIES (AND (NUMBERP PATLEN)
+					 (NUMBERP STRLEN)
+					 (NOT (LESSP PATLEN J))
+					 (NOT (LESSP STRLEN I))
+					 (LESSP (PLUS J STRLEN)
+						(PLUS I PATLEN)))
+				    (NOT (MATCH PAT J PATLEN STR I 
+						STRLEN))))
+	      (PROVE-LEMMA SEARCH-BOUNDARY (REWRITE)
+			   (IMPLIES (AND (NOT (ZEROP PATLEN))
+					 (NUMBERP STRLEN)
+					 (NOT (LESSP STRLEN I))
+					 (LESSP (ADD1 STRLEN)
+						(PLUS PATLEN
+						      (SEARCH PAT STR 
+							     PATLEN 
+							     STRLEN I)))
+					 )
+				    (EQUAL (SEARCH PAT STR PATLEN 
+						   STRLEN I)
+					   (ADD1 STRLEN))))
+	      (PROVE-LEMMA DELTA1-LESSEQP-PATLEN (REWRITE)
+			   (NOT (LESSP PATLEN (DELTA1 PAT CHAR PATLEN)))
+			   )
+)))
+
+
+(DEFPARAMETER FSRCH-TOKENS NIL)
+(DEFPARAMETER FSRCH-BLOCKS NIL)
+(DEFPARAMETER FSRCH-SUBPROGRAM (FAKE
+  '(SUBROUTINE
+	NAME FSRCH
+	ARGS (PAT STR PATLEN STRLEN X)
+	BLOCK-NAMES (BLK)
+	HIT-VARS (BLK-DELTA1 X)
+	KNOWN-BLOCK-NAMES (BLK)
+	VAR-DCLS ((VAR-DCL PATLEN INTEGER NIL)
+	  (VAR-DCL STRLEN INTEGER NIL)
+	  (VAR-DCL PAT INTEGER (PATLEN))
+	  (VAR-DCL STR INTEGER (STRLEN))
+	  (VAR-DCL I INTEGER NIL)
+	  (VAR-DCL J INTEGER NIL)
+	  (VAR-DCL C INTEGER NIL)
+	  (VAR-DCL NEXTI INTEGER NIL)
+	  (VAR-DCL X INTEGER NIL))
+	CALLED-FNS (MAX0)
+	STATEMENT-FUNCTION-PATTERNS NIL
+	INPUT-COND (AND (LESSP (ADD1 (ASIZE&))
+			       (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER))
+			(STRINGP (PAT STATE)
+				 (PATLEN STATE)
+				 (ASIZE&))
+			(NUMBERP (PATLEN STATE))
+			(LESSP 0 (PATLEN STATE))
+			(STRINGP (STR STATE)
+				 (STRLEN STATE)
+				 (ASIZE&))
+			(NUMBERP (STRLEN STATE))
+			(LESSP 0 (STRLEN STATE))
+			(LESSP (PLUS (PATLEN STATE)
+				     (STRLEN STATE))
+			       (LEAST-INEXPRESSIBLE-POSITIVE-INTEGER)))
+	EFFECTS (EQUAL (X NEWSTATE)
+		       (SEARCH (PAT STATE)
+			       (STR STATE)
+			       (PATLEN STATE)
+			       (STRLEN STATE)
+			       1))
+	CLOCKS ((PLUS 1 (STRLEN (START))
+		      (PATLEN (START)))
+		(ADD1 (PATLEN (START))))
+	CODE
+	 ((CALL SETUP (PAT PATLEN))
+	  (ASSIGNMENT I PATLEN)
+	  200
+	  (CONTINUE)
+	  (COMMENT
+	    XXX INNER-TO-OUTER-HINTS ((INNER-INVRT T))
+	    (PROVE-LEMMA
+	      DELTA1-PLUS-J-LESSEQP-PATLEN
+	      (REWRITE)
+	      (IMPLIES (AND (NUMBERP J)
+			    (NOT (EQUAL J 0))
+			    (NOT (LESSP PATLEN J)))
+		       (NOT (LESSP PATLEN (PLUS J (DELTA1 PAT
+							  (ELT1 PAT J)
+							  PATLEN))))))
+	    (PROVE-LEMMA DIFFERENCE-PLUS-ID (REWRITE)
+			 (EQUAL (DIFFERENCE (PLUS K J)
+					    J)
+				(FIX K)))
+	    (PROVE-LEMMA MATCH-IMPLIES-EQ-CHARS (REWRITE)
+			 (IMPLIES
+			   (AND (MATCH PAT J PATLEN STR K STRLEN)
+				(NUMBERP K)
+				(NUMBERP J)
+				(NUMBERP PATLEN)
+				(NUMBERP STRLEN)
+				(NOT (LESSP STRLEN K))
+				(NOT (LESSP PATLEN J))
+				(NOT (EQUAL K 0))
+				(NOT (EQUAL J 0))
+				(NUMBERP L)
+				(NOT (LESSP L K))
+				(NOT (LESSP (PLUS K PATLEN)
+					    (PLUS J L))))
+			   (EQUAL (ELT1 STR L)
+				  (ELT1 PAT (DIFFERENCE (PLUS J L)
+							K)))))
+	    (PROVE-LEMMA
+	      NEQ-CHARS-IN-REGION-MEANS-SEARCH-SKIPS
+	      (REWRITE)
+	      (IMPLIES (AND (NOT (EQUAL (ELT1 STR I)
+					(ELT1 PAT J)))
+			    (NUMBERP I)
+			    (NOT (EQUAL I 0))
+			    (NUMBERP STRLEN)
+			    (NOT (LESSP STRLEN I))
+			    (NUMBERP J)
+			    (NOT (EQUAL J 0))
+			    (NUMBERP PATLEN)
+			    (NOT (LESSP PATLEN J))
+			    (NOT (LESSP I J))
+			    (NUMBERP K)
+			    (NOT (EQUAL K 0))
+			    (NOT (LESSP STRLEN K))
+			    (NOT (LESSP (SUB1 (SEARCH PAT STR PATLEN 
+						      STRLEN K))
+					(DIFFERENCE I J))))
+		       (LESSP (DIFFERENCE I J)
+			      (SUB1 (SEARCH PAT STR PATLEN STRLEN K)))))
+	    (PROVE-LEMMA
+	      DELTA1-DOESNT-GO-BEYOND-END-OF-MATCH
+	      (REWRITE)
+	      (IMPLIES (AND (MATCH PAT 1 PATLEN STR K STRLEN)
+			    (NUMBERP I)
+			    (NOT (LESSP STRLEN I))
+			    (NUMBERP PATLEN)
+			    (NUMBERP STRLEN)
+			    (NUMBERP K)
+			    (NOT (EQUAL K 0))
+			    (LESSP I (PLUS K PATLEN)))
+		       (EQUAL (LESSP (PLUS I (DELTA1 PAT (ELT1 STR I)
+						     PATLEN))
+				     (PLUS K PATLEN))
+			      (OR (LESSP I K)
+				  (EQUAL I K)
+				  (LESSP K I)))))
+
+;   The unusual rhs of the conclusion, the trichotomy of LESSP, is present to
+;   force the theorem-prover to prove the theorem by splitting on the question
+;   (LESSP I K).  Let Q be the lhs of the conclusion and P the conjunction of
+;   the hypotheses- The theorem-prover can prove that P and (LESSP I K) imply
+;   Q, and it can prove that P and (NOT (LESSP I K)) imply Q- However, it fails
+;   to prove that P implies Q- Proving the two theorems is an obvious, but
+;   futile, solution because in the case when we want to use the theorem, we
+;   cannot establish either (LESSP I K) or it negation.
+
+	    (DISABLE MATCH-IMPLIES-EQ-CHARS)
+	    (PROVE-LEMMA DELTA1-DOESNT-GO-BEYOND-SEARCH (REWRITE)
+			 (IMPLIES (AND (NOT (EQUAL (ELT1 STR I)
+						   (ELT1 PAT J)))
+				       (NUMBERP I)
+				       (NOT (LESSP STRLEN I))
+				       (NUMBERP J)
+				       (NOT (LESSP PATLEN J))
+				       (NUMBERP PATLEN)
+				       (NUMBERP STRLEN)
+				       (LESSP (DIFFERENCE I J)
+					      (SEARCH PAT STR PATLEN 
+						      STRLEN K))
+				       (NOT (LESSP STRLEN K))
+				       (NOT (LESSP I J))
+				       (NUMBERP K)
+				       (NOT (EQUAL K 0)))
+				  (LESSP (PLUS I (DELTA1 PAT
+							 (ELT1 STR I)
+							 PATLEN))
+					 (PLUS PATLEN
+					       (SEARCH PAT STR PATLEN 
+						       STRLEN K))))))
+	  (CONTINUE)
+	  (COMMENT ASSERTION OUTER-INVRT
+		   (AND (NUMBERP (I STATE))
+			(NOT (LESSP (I STATE)
+				    (PATLEN (START))))
+			(LESSP (I STATE)
+			       (PLUS (PATLEN (START))
+				     (SEARCH (PAT (START))
+					     (STR (START))
+					     (PATLEN (START))
+					     (STRLEN (START))
+					     1)))
+			(IMPLIES (AND (NUMBERP C)
+				      (NOT (EQUAL C 0))
+				      (NOT (LESSP (ASIZE&)
+						  C)))
+				 (EQUAL (ELT1 (BLK-DELTA1 STATE)
+					      C)
+					(DELTA1 (PAT (START))
+						C
+						(PATLEN (START))))))
+		   ((DIFFERENCE (PLUS 1 (STRLEN (START))
+				      (PATLEN (START)))
+				(I STATE))
+		    (ADD1 (PATLEN (START)))))
+	  (IF-LOGICAL (ZGREATERP I STRLEN)
+		      (GOTO 500))
+	  (ASSIGNMENT J PATLEN)
+	  (ASSIGNMENT NEXTI (ZPLUS 1 I))
+	  300
+	  (CONTINUE)
+	  (COMMENT ASSERTION INNER-INVRT
+		   (AND (NOT (LESSP (NEXTI STATE)
+				    (ADD1 (PATLEN (START)))))
+			(LESSP (NEXTI STATE)
+			       (ADD1 (PLUS (PATLEN (START))
+					   (SEARCH (PAT (START))
+						   (STR (START))
+						   (PATLEN (START))
+						   (STRLEN (START))
+						   1))))
+			(IMPLIES (AND (NUMBERP C)
+				      (NOT (EQUAL C 0))
+				      (NOT (LESSP (ASIZE&)
+						  C)))
+				 (EQUAL (ELT1 (BLK-DELTA1 STATE)
+					      C)
+					(DELTA1 (PAT (START))
+						C
+						(PATLEN (START)))))
+			(NUMBERP (I STATE))
+			(NOT (EQUAL (I STATE)
+				    0))
+			(NUMBERP (J STATE))
+			(NOT (EQUAL (J STATE)
+				    0))
+			(NUMBERP (NEXTI STATE))
+			(NOT (LESSP (PATLEN (START))
+				    (J STATE)))
+			(NOT (LESSP (STRLEN (START))
+				    (I STATE)))
+			(EQUAL (NEXTI STATE)
+			       (PLUS (ADD1 (PATLEN (START)))
+				     (DIFFERENCE (I STATE)
+						 (J STATE))))
+			(NOT (LESSP (ADD1 (STRLEN (START)))
+				    (NEXTI STATE)))
+			(NOT (LESSP (I STATE)
+				    (J STATE)))
+			(MATCH (PAT (START))
+			       (ADD1 (J STATE))
+			       (PATLEN (START))
+			       (STR (START))
+			       (ADD1 (I STATE))
+			       (STRLEN (START)))
+			(NUMBERP (ELT1 (BLK-DELTA1 STATE)
+				       (ELT1 (STR (START))
+					     (I STATE))))
+			(NUMBERP (ELT1 (STR (START))
+				       (I STATE)))
+			(NUMBERP (ELT1 (PAT (START))
+				       (J STATE))))
+		   ((DIFFERENCE (PLUS 1 (STRLEN (START))
+				      (PATLEN (START)))
+				(SUB1 (NEXTI STATE)))
+		    (J STATE)))
+	  (ASSIGNMENT C (STR I))
+	  (IF-LOGICAL (ZNEQP C (PAT J))
+		      (GOTO 400))
+	  (IF-LOGICAL (ZEQP J 1)
+		      (GOTO 600))
+	  (ASSIGNMENT J (ZDIFFERENCE J 1))
+	  (ASSIGNMENT I (ZDIFFERENCE I 1))
+	  (COMMENT XXX INNER-TO-INNER-HINTS NIL
+		   (PROVE-LEMMA OPEN-UP-DIFFERENCE (REWRITE)
+				(EQUAL (DIFFERENCE X 1)
+				       (SUB1 X))))
+	  (GOTO 300)
+	  400
+	  (ASSIGNMENT I (MAX0 (ZPLUS I (DELTA1 C))
+			      NEXTI))
+	  (GOTO 200)
+	  500
+	  (ASSIGNMENT X (ZPLUS STRLEN 1))
+	  (RETURN)
+	  600
+	  (CONTINUE)
+	  (COMMENT XXX INNER-TO-EXIT-HINTS NIL
+		   (PROVE-LEMMA
+		     FIRST-MATCH-IS-SEARCH
+		     (REWRITE)
+		     (IMPLIES (AND (MATCH PAT 1 PATLEN STR I STRLEN)
+				   (NUMBERP STRLEN)
+				   (NUMBERP I)
+				   (NOT (LESSP STRLEN I))
+				   (NUMBERP K)
+				   (NOT (LESSP I K))
+				   (NOT (EQUAL K 0))
+				   (NOT (LESSP (SEARCH PAT STR PATLEN 
+						       STRLEN K)
+					       I)))
+			      (EQUAL (EQUAL I
+					    (SEARCH PAT STR PATLEN 
+						    STRLEN K))
+				     T))))
+	  (ASSIGNMENT X I)
+	  (RETURN)))))
+
+(DEFUN ADD-FSRCH NIL
+  (PROG (TEMP)
+    (COND ((NULL (ADD-SETUP)) (RETURN FAILURE-MSG)))
+    (SETQ TEMP (ADD-TO-CONTEXT FSRCH-TOKENS FSRCH-XXX FSRCH-BLOCKS
+			       FSRCH-SUBPROGRAM
+			       SETUP-CONTEXT))
+    (SETQ FSRCH-VCS (CAR TEMP))
+    (SETQ FSRCH-CONTEXT (CDR TEMP))
+    (COND ((CONSP FSRCH-VCS)
+	   (SETQ VCS (APPEND SETUP-VCS FSRCH-VCS))
+	   (LET ((FILE (OPEN "fsrch.vcs" :direction :output)))
+		 (PRINC	"(SETQ VCS '(" FILE)
+		 (TERPRI FILE)
+		 (ITERATE FOR X IN VCS DO
+		       (TERPRI FILE)
+		       (PPR X FILE))
+		 (PRINC "))" FILE)
+		 (CLOSE FILE))
+	   (PRINT-CONTEXT FSRCH-CONTEXT "fsrch.context" NIL)
+	   (RETURN (LIST (QUOTE FSRCH-VCS)
+			 (QUOTE FSRCH-CONTEXT))))
+	  (T (RETURN FAILURE-MSG)))))
+
+
+
+

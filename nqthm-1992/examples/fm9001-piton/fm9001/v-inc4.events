@@ -1,0 +1,72 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;   V-INC4.EVENTS -- A 4-bit incrementer.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn v-inc4 (a0 a1 a2 a3)
+  (let ((a0n (b-not a0))
+        (a1n (b-not a1))
+        (a2n (b-not a2))
+        (a3n (b-not a3)))
+    (let ((c0 a0n)
+          (c1 (b-nor a0n a1n))
+          (c2 (b-nor3 a0n a1n a2n)))
+      (list a0n
+            (b-xor a1n c0)
+            (b-equv a2n c1)
+            (b-equv a3n c2)))))
+
+(defn-to-module v-inc4)
+
+(defn f$v-inc4$v (a)
+  (let ((a0 (car a))
+        (a1 (cadr a))
+        (a2 (caddr a))
+        (a3 (cadddr a)))
+    (let ((a0n (f-not a0))
+          (a1n (f-not a1))
+          (a2n (f-not a2))
+          (a3n (f-not a3)))
+      (let ((c0 a0n)
+            (c1 (f-nor a0n a1n))
+            (c2 (f-nor3 a0n a1n a2n)))
+        (list a0n
+              (f-xor a1n c0)
+              (f-equv a2n c1)
+              (f-equv a3n c2))))))
+
+(disable f$v-inc4$v)
+
+(prove-lemma properp-length-f$v-inc4$v (rewrite)
+  (and (properp (f$v-inc4$v a))
+       (equal (length (f$v-inc4$v a)) 4))
+  ;;Hint
+  ((enable f$v-inc4$v)
+   (disable-theory f-gates)))
+
+(prove-lemma v-inc4$value-as-v-inc (rewrite)
+  (implies
+   (and (v-inc4& netlist)
+        (properp a)
+        (equal (length a) 4))
+   (equal (dual-eval 0 'v-inc4 a state netlist)
+          (f$v-inc4$v a)))
+  ;;Hint
+  ((enable v-inc4$value f$v-inc4 f$v-inc4$v equal-length-add1)
+   (disable-theory f-gates)))
+
+(prove-lemma f$v-inc4$v=v-inc (rewrite)
+  (implies
+   (and (bvp a)
+        (equal (length a) 4))
+   (equal (f$v-inc4$v a)
+          (v-inc a)))
+  ;;Hint
+  ((enable f$v-inc4$v v-inc v-sum equal-length-add1 boolp-b-gates)
+   (disable-theory f-gates)))
+        

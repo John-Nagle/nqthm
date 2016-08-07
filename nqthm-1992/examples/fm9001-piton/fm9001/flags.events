@@ -1,0 +1,210 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    FLAGS.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  The FLAGS register is simply four, individually write-enabled, 1-bit
+;;;  latches.  For simplicity the FLAGS register takes the entire 35-bit ALU
+;;;  bus as an input, even though it only needs 4 of the bits, i.e., the C, V,
+;;;  N, and Z.  Test input = TI.  Test output = C.
+
+(module-generator
+ (flags*)
+ 'flags
+ (list* 'clk 'te 'ti (append #i(set-flags 0 4) #i(cvzbv 0 35)))
+ '(z n v c)
+ (list
+  ;; Z. Scan TI to Z
+  (list 'z-latch
+        '(z zb)
+        'fd1slp
+        (list (zb #i(cvzbv 0 35)) 'clk (z-set #i(set-flags 0 4)) 'ti 'te))
+  ;; N. Scan Z to N
+  (list 'n-latch
+        '(n nb)
+        'fd1slp
+        (list #i(cvzbv 34)        'clk (n-set #i(set-flags 0 4)) 'z  'te))
+  ;; V. Scan N to V
+  (list 'v-latch
+        '(v vb)
+        'fd1slp
+        (list (v #i(cvzbv 0 35))  'clk (v-set #i(set-flags 0 4)) 'n  'te))  
+  ;; C. Scan V to C
+  (list 'c-latch
+        '(c cb)
+        'fd1slp
+        (list (c #i(cvzbv 0 35))  'clk (c-set #i(set-flags 0 4)) 'v  'te)))
+ '(z-latch n-latch v-latch c-latch))
+
+(disable *1*flags*)     
+
+(defn flags& (netlist)
+  (and (equal (lookup-module 'flags netlist)
+              (flags*))
+       (let ((netlist (delete-module 'flags netlist)))
+         (fd1slp& netlist))))
+
+(disable flags&) 
+
+(defn flags$netlist ()
+  (cons (flags*) (fd1slp$netlist)))
+
+(prove-lemma check-flags$netlist ()
+  (flags& (flags$netlist))
+  ;;Hint
+  ((expand (flags*))))
+
+(prove-lemma flags$value (rewrite)
+  (implies
+   (and (flags& netlist)
+        (properp flags) (equal (length flags) 4))
+   (equal (dual-eval 0 'flags (list* clk te ti (append set-flags cvzbv))
+                     flags netlist)
+          (v-threefix flags)))
+  ;;Hint
+  ((enable flags& flags*$destructure fd1slp$value
+           c-set v-set n-set z-set
+           c v zb
+           open-nth equal-length-add1)
+   (disable indices *1*indices open-indices)))
+
+(disable flags$value)
+
+(defn f$update-flags (flags set-flags cvzbv) 
+  (list (f-if (z-set set-flags) 
+              (zb cvzbv) 
+              (z-flag flags)) 
+        (f-if (n-set set-flags) 
+              (n cvzbv) 
+              (n-flag flags)) 
+        (f-if (v-set set-flags) 
+              (v cvzbv) 
+              (v-flag flags)) 
+        (f-if (c-set set-flags) 
+              (c cvzbv) 
+              (c-flag flags))))
+
+(disable f$update-flags)
+
+(prove-lemma properp-length-f$update-flags (rewrite)
+  (and (properp (f$update-flags flags set-flags cvzbv))
+       (equal (length (f$update-flags flags set-flags cvzbv)) 4))
+  ;;Hint
+  ((enable f$update-flags)))
+
+(prove-lemma f$update-flags=update-flags (rewrite)
+  (implies
+   (and
+    (bvp flags) (equal (length flags) 4)
+    (bvp set-flags) (equal (length set-flags) 4)
+    (bvp cvzbv) (equal (length cvzbv) 35))
+   (equal (f$update-flags flags set-flags cvzbv)
+          (update-flags flags set-flags cvzbv)))
+  ;;Hint
+  ((enable f$update-flags update-flags 
+           z-set zb z-flag n-set n n-flag v-set v v-flag c-set c c-flag)
+   (disable-theory f-gates)))
+           
+(prove-lemma flags$state-help (rewrite)
+  (implies
+   (and (flags& netlist)
+        (properp flags) (equal (length flags) 4)
+        (equal set-flags (list set-z set-n set-v set-c))
+        (equal cvzbv (cons c (cons v (cons z bv))))
+        (properp cvzbv) (equal (length cvzbv) 35)
+        (not te))
+   (equal (dual-eval 2 'flags (list* clk te ti (append set-flags cvzbv))
+                     flags netlist)
+          (f$update-flags flags set-flags cvzbv)))
+  ;;Hint
+  ((enable flags& f$update-flags flags*$destructure fd1slp$state
+           c-set v-set n-set z-set
+           c-flag v-flag n-flag z-flag
+           c v zb n bv
+           update-flags nth v-negp-as-nth)
+   (disable indices *1*indices open-indices)
+   (expand #i(set-flags 0 4)
+           #i(set-flags 1 3)
+           #i(set-flags 2 2)
+           #i(set-flags 3 1)
+           #i(cvzbv 0 35)
+           #i(cvzbv 1 34)
+           #i(cvzbv 2 33))))
+
+(disable flags$state-help)         
+
+(prove-lemma flags$state (rewrite)
+  (implies
+   (and (flags& netlist)
+        (properp flags) (equal (length flags) 4)
+        (properp set-flags) (equal (length set-flags) 4)
+        (properp cvzbv) (equal (length cvzbv) 35)
+        (not te))
+   (equal (dual-eval 2 'flags (list* clk te ti (append set-flags cvzbv))
+                     flags netlist)
+          (f$update-flags flags set-flags cvzbv)))
+  ;;Hint
+  ((use (flags$state-help
+         (set-z (car set-flags))
+         (set-n (cadr set-flags))
+         (set-v (caddr set-flags))
+         (set-c (cadddr set-flags))
+         (c (car cvzbv))
+         (v (cadr cvzbv))
+         (z (caddr cvzbv))
+         (bv (cdddr cvzbv))))))
+
+(disable flags$state)
+          
+(prove-lemma flags$partial-state-help (rewrite)
+  (implies
+   (and (flags& netlist)
+        (properp flags) (equal (length flags) 4)
+        (equal set-flags (make-list 4 t))
+        (equal cvzbv (cons c (cons v (cons z bv))))
+        (bvp cvzbv) (equal (length cvzbv) 35)
+        (not te))
+   (equal (dual-eval 2 'flags (list* clk te ti (append set-flags cvzbv))
+                     flags netlist)
+          (update-flags flags set-flags cvzbv)))
+  ;;Hint
+  ((enable flags& flags*$destructure fd1slp$state
+           c-set v-set n-set z-set
+           c-flag v-flag n-flag z-flag
+           c v zb n bv
+           update-flags nth v-negp-as-nth)
+   (disable indices *1*indices open-indices)
+   (expand #i(set-flags 0 4)
+           #i(set-flags 1 3)
+           #i(set-flags 2 2)
+           #i(set-flags 3 1)
+           #i(cvzbv 0 35)
+           #i(cvzbv 1 34)
+           #i(cvzbv 2 33))))
+
+(disable flags$partial-state-help)         
+
+(prove-lemma flags$partial-state (rewrite)
+  (implies
+   (and (flags& netlist)
+        (properp flags) (equal (length flags) 4)
+        (equal set-flags (make-list 4 t))
+        (bvp cvzbv) (equal (length cvzbv) 35)
+        (not te))
+   (equal (dual-eval 2 'flags (list* clk te ti (append set-flags cvzbv))
+                     flags netlist)
+          (update-flags flags set-flags cvzbv)))
+  ;;Hint
+  ((use (flags$partial-state-help
+         (c (car cvzbv))
+         (v (cadr cvzbv))
+         (z (caddr cvzbv))
+         (bv (cdddr cvzbv))))
+   (disable *1*make-list)))
+
+(disable flags$partial-state)

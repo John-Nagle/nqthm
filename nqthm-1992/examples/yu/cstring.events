@@ -1,0 +1,1027 @@
+#|
+
+ Copyright (C) 1994 by Yuan Yu.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Yuan Yu PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS"
+ WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT
+ LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Yuan Yu BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS,
+ LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT
+ OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS
+ OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD
+ PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR
+ FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(note-lib "mc20-2" t)
+; some general theorems.  They are used to establish properties of string
+; functions.
+(prove-lemma ilessp-lessp (rewrite)
+     (implies (and (numberp x)
+                   (numberp y))
+              (equal (ilessp x y) (lessp x y)))
+     ((enable ilessp)))
+
+(prove-lemma idifference-numberp (rewrite)
+     (equal (numberp (idifference x y))
+            (not (ilessp x y)))
+     ((enable idifference iplus ilessp integerp)))
+
+(prove-lemma idifference-equal-0 (rewrite)
+     (equal (equal (idifference x y) 0)
+            (equal (fix-int x) (fix-int y)))
+     ((enable idifference iplus integerp)))
+
+(enable get-nth-0)
+(enable put-nth-0)
+
+; the upper bound of strlen.
+(prove-lemma strlen-ub ()
+     (implies (stringp i n lst)
+              (lessp (strlen i n lst) n)))
+
+; the lower bound of strlen.
+(prove-lemma strlen-lb (rewrite)
+     (not (lessp (strlen i n lst) i)))
+
+(prove-lemma strlen-01 (rewrite)
+     (and (equal (strlen i 0 lst) i)
+          (equal (strlen i 1 lst)
+                 (if (and (lessp i 1)
+                          (not (equal (get-nth 0 lst) 0)))
+                     1 i))
+          (not (equal (strlen 1 n lst) 0))))
+
+(prove-lemma strlen-ii (rewrite)
+     (equal (strlen i i lst) i) 
+     ((expand (strlen i i lst))))
+
+(prove-lemma strlen-ii1 (rewrite)
+     (equal (strlen i (add1 i) lst)
+            (if (equal (get-nth i lst) 0) i (add1 i))))
+
+; some properties of strlen.
+; lst[j] =\= 0, if i <= j < strlen(lst).
+(prove-lemma strlen-non0p ()
+     (implies (and (leq i j)
+                   (lessp j (strlen i n lst)))
+              (not (equal (get-nth j lst) 0))))
+
+; lst[strlen] == 0!
+(prove-lemma strlen-0p (rewrite)
+     (implies (stringp i n lst)
+              (equal (get-nth (strlen i n lst) lst) 0)))
+
+; some properties of strcpy.
+(prove-lemma strcpy-get-1 (rewrite)
+     (implies (lessp j i)
+              (equal (get-nth j (strcpy i lst1 n2 lst2))
+                     (get-nth j lst1))))
+
+; strlen(strcpy(lst1, lst2)) == strlen(lst2).
+(prove-lemma strcpy-strlen (rewrite)
+     (equal (strlen i n2 (strcpy i lst1 n2 lst2))
+            (strlen i n2 lst2)))
+
+;  if i <= j <= strlen(lst2), lst1[j] == lst2[j].
+(prove-lemma strcpy-cpy (rewrite)
+     (implies (and (stringp i n2 lst2)
+                   (leq i j)
+                   (leq j (strlen i n2 lst2)))
+              (equal (get-nth j (strcpy i lst1 n2 lst2))
+                     (get-nth j lst2)))
+     ((expand (strcpy 0 lst1 n2 lst2))))
+
+;  if lst2 is a string, then lst1' is also a string.
+(prove-lemma strcpy-stringp (rewrite)
+     (implies (stringp i n2 lst2)
+              (stringp i n2 (strcpy i lst1 n2 lst2))))
+
+; some properties of strcmp.
+; (strcmp lst lst) == 0.
+(prove-lemma strcmp-id (rewrite)
+     (equal (strcmp i n lst lst) 0))
+
+; (strcmp lst1 lst2) < 0 ==> (strcmp lst2 lst1) >= 0.
+(prove-lemma strcmp-antisym (rewrite)
+     (equal (negativep (strcmp i n lst1 lst2))
+            (lessp 0 (strcmp i n lst2 lst1)))
+     ((enable idifference iplus)))
+
+; the transitivity of strcmp.
+(prove-lemma strcmp-trans-1 (rewrite)
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (lst-of-chrp lst3)
+                   (numberp (strcmp i n lst1 lst2))
+                   (numberp (strcmp i n lst2 lst3)))
+              (numberp (strcmp i n lst1 lst3))))
+
+; (strcpy lst1 lst2) == lst2.
+(prove-lemma strcmp-strcpy (rewrite)
+     (equal (strcmp i n lst2 (strcpy i lst1 n lst2)) 0))
+
+; if (strcmp lst1 lst2) == 0, all i <= j < (strlen lst1) lst1[j] == lst2[j].
+(prove-lemma strcmp-thm1 ()
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (equal (strcmp i n lst1 lst2) 0)
+                   (leq i j)
+                   (lessp j (strlen i n lst1)))
+              (equal (get-nth j lst1) (get-nth j lst2)))
+     ((enable idifference iplus)))
+
+(defn-sk strcmp-sk (n1 lst1 lst2)
+  (exists j 
+          (and (forall i (implies (lessp i j) 
+                                  (equal (get-nth i lst1) (get-nth i lst2))))
+               (equal (strcmp 0 n1 lst1 lst2)
+                      (idifference (get-nth j lst1) (get-nth j lst2))))))
+
+(defn strcmp-j (i n1 lst1 lst2)
+  (if (lessp i n1)
+      (if (equal (get-nth i lst1) (get-nth i lst2))
+          (if (equal (get-nth i lst1) (null))
+              (fix i)
+            (strcmp-j (add1 i) n1 lst1 lst2))
+        (fix i))
+    (fix i))
+  ((lessp (difference n1 i))))
+
+(prove-lemma strcmp-j-1 (rewrite)
+     (implies (and (lessp i (strcmp-j i1 n1 lst1 lst2))
+                   (leq i1 i))
+              (equal (get-nth i lst1) (get-nth i lst2)))
+     ((enable get-nth-0)))
+
+(prove-lemma strcmp-j-2 (rewrite)
+     (implies (not (equal (strcmp i1 n1 lst1 lst2) 0))
+              (equal (strcmp i1 n1 lst1 lst2)
+                     (idifference (get-nth (strcmp-j i1 n1 lst1 lst2) lst1)
+                                  (get-nth (strcmp-j i1 n1 lst1 lst2) lst2))))
+     ((enable get-nth-0)))
+
+(prove-lemma strcmp-thm2 ()
+     (implies (not (equal (strcmp 0 n1 lst1 lst2) 0))
+              (strcmp-sk n1 lst1 lst2))
+     ((use (strcmp-sk (j (strcmp-j 0 n1 lst1 lst2))))))
+
+(disable strcmp-j-1)
+(disable strcmp-j-2)
+
+; some properties of strcat.
+(prove-lemma strcpy1-get-1 (rewrite)
+     (implies (lessp j i1)
+              (equal (get-nth j (strcpy1 i1 lst1 i2 n2 lst2))
+                     (get-nth j lst1))))
+
+(defn strlen1 (i n lst)
+  (if (lessp i n)
+      (if (equal (get-nth i lst) (null))
+          0
+        (add1 (strlen1 (add1 i) n lst)))
+    0)
+  ((lessp (difference n i))))
+
+(prove-lemma strlen1-strlen (rewrite)
+     (equal (strlen1 i n lst)
+            (difference (strlen i n lst) i)))
+
+(disable strlen1-strlen)
+
+(prove-lemma strcpy1-get-2 (rewrite)
+     (implies (lessp (plus i1 (strlen1 i2 n2 lst2)) j)
+              (equal (get-nth j (strcpy1 i1 lst1 i2 n2 lst2))
+                     (get-nth j lst1)))
+     ((induct (strcpy1 i1 lst1 i2 n2 lst2))))
+
+(prove-lemma get-nth-plus-0 (rewrite)
+     (implies (not (numberp j))
+              (equal (get-nth (plus i j) lst)
+                     (get-nth i lst)))
+     ((enable get-nth)))
+
+(prove-lemma plus-sub1-add1 (rewrite)
+     (equal (sub1 (plus x (add1 y)))
+            (plus x y)))
+
+(prove-lemma strcpy1-get-3 (rewrite)
+     (implies (and (leq i1 j)
+                   (lessp j (plus i1 (strlen1 i2 n2 lst2))))
+              (equal (get-nth j (strcpy1 i1 lst1 i2 n2 lst2))
+                     (get-nth (plus i2 (difference j i1)) lst2)))
+     ((expand (strcpy1 0 lst1 i2 n2 lst2))))
+
+; all 0 <= j < (strlen lst1) lst1'[j] == lst1[j].
+(prove-lemma strcat-get-1 (rewrite)
+     (implies (lessp j (strlen 0 n1 lst1))
+              (equal (get-nth j (strcat n1 lst1 n2 lst2))
+                     (get-nth j lst1))))
+
+; all (strlen lst1) <= j < (strlen lst1)+(strlen lst2) lst1'[j] == lst2[j].
+(prove-lemma strcat-get-2 (rewrite)
+     (implies (and (stringp 0 n1 lst1)
+                   (leq (strlen 0 n1 lst1) j) 
+                   (lessp j (plus (strlen 0 n1 lst1) (strlen 0 n2 lst2))))
+              (equal (get-nth j (strcat n1 lst1 n2 lst2))
+                     (get-nth (difference j (strlen 0 n1 lst1)) lst2)))
+     ((use (strcpy1-get-3 (i1 (strlen 0 n1 lst1)) (i2 0)))
+      (enable strlen1-strlen)))
+
+; some properties about strchr.
+; lst[strchr] == ch,  if strchr returns non-f.
+(prove-lemma strchr-thm1 (rewrite)
+     (implies (strchr i n lst ch)
+              (equal (get-nth (strchr i n lst ch) lst)
+                     ch)))
+
+; all i <= j < strchr, lst[j] =\= ch.  i.e. strchr is the first one.
+(prove-lemma strchr-thm2 ()
+     (implies (and (leq i j)
+                   (lessp j (strchr i n lst ch)))
+              (not (equal (get-nth j lst) ch))))
+                   
+; all i <= j < strlen, lst[j] =\= ch, if strchr returns f.
+(prove-lemma strchr-thm3 ()
+     (implies (and (not (strchr i n lst ch))
+                   (leq i j)
+                   (lessp j (strlen i n lst)))
+              (not (equal (get-nth j lst) ch))))
+
+; ch is not equal to the null character, if strchr returns f.
+(prove-lemma strchr-thm4 ()
+     (implies (and (stringp i n lst)
+                   (not (strchr i n lst ch)))
+              (not (equal ch 0))))
+
+; strcpy and strchr.
+(prove-lemma strcpy-strchr (rewrite)
+     (equal (strchr i n (strcpy i lst1 n lst2) ch)
+            (strchr i n lst2 ch)))
+
+; some properties about memset.
+; lemmas about memset1.
+(prove-lemma memset1-get-1 (rewrite)
+     (implies (lessp j i)
+              (equal (get-nth j (memset1 i n lst ch))
+                     (get-nth j lst))))
+
+; all i <= j < i+n, lst'[j] == ch.
+(prove-lemma memset1-thm1 (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (plus i n)))
+              (equal (get-nth j (memset1 i n lst ch))
+                     ch))
+     ((induct (memset1 i n lst ch))))
+
+(prove-lemma memset1-thm2 (rewrite)
+     (implies (and (leq (plus i n) j)
+                   (not (zerop n)))
+              (equal (get-nth j (memset1 i n lst ch))
+                     (get-nth j lst)))
+     ((induct (memset1 i n lst ch))))
+
+; all i <= j < n, lst'[j] == ch.
+(prove-lemma memset-thm1 (rewrite)
+     (implies (and (leq i j)
+                   (lessp j n))
+              (equal (get-nth j (memset n lst ch))
+                     ch)))
+
+; all j >= n, lst'[j] == lst[j].
+(prove-lemma memset-thm2 (rewrite)
+     (implies (and (leq n j)
+                   (numberp n))
+              (equal (get-nth j (memset n lst ch))
+                     (get-nth j lst))))
+
+; some properties about memchr.
+(prove-lemma memchr1-thm1 (rewrite)
+     (implies (memchr1 i n lst ch)
+              (equal (get-nth (memchr1 i n lst ch) lst)
+                     ch)))
+
+; lst[memchr] == ch,  if memchr returns non-f.
+(prove-lemma memchr-thm1 (rewrite)
+     (implies (memchr n lst ch)
+              (equal (get-nth (memchr n lst ch) lst)
+                     ch)))
+
+(prove-lemma memchr1-thm2 ()
+     (implies (and (leq i j)
+                   (lessp j (memchr1 i n lst ch)))
+              (not (equal (get-nth j lst) ch))))
+
+; all j < memchr, lst[j] =\= ch.  i.e. memchr is the first one.
+(prove-lemma memchr-thm2 ()
+     (implies (lessp j (memchr n lst ch))
+              (not (equal (get-nth j lst) ch)))
+     ((use (memchr1-thm2 (i 0)))))
+
+(prove-lemma memchr1-thm3 ()
+     (implies (and (not (memchr1 i n lst ch))
+                   (leq i j)
+                   (lessp j (plus i n)))
+              (not (equal (get-nth j lst) ch)))
+     ((induct (memchr1 i n lst ch))))
+
+; all j < n, lst[j] =\= ch, if memchr returns f.
+(prove-lemma memchr-thm3 ()
+     (implies (and (not (memchr n lst ch))
+                   (lessp j n))
+              (not (equal (get-nth j lst) ch)))
+     ((use (memchr1-thm3 (i 0)))))
+
+; some properties about strrchr.
+(prove-lemma strrchr-la1 (rewrite)
+     (implies (numberp j)
+              (strrchr i n lst ch j)))
+
+(prove-lemma strrchr-strchr-la (rewrite)
+     (implies (not (strchr i n lst ch))
+              (equal (strrchr i n lst ch j) j)))
+
+(prove-lemma strrchr-la2 ()
+     (implies (strchr i n lst ch)
+              (equal (get-nth (strrchr i n lst ch j) lst)
+                     ch))
+     ((induct (strrchr i n lst ch j))
+      (expand (strrchr i n lst (get-nth i lst) j))))
+
+; strrchr finds ch in the string.
+(prove-lemma strrchr-thm1 (rewrite)
+     (implies (strrchr i n lst ch f)
+              (equal (get-nth (strrchr i n lst ch f) lst)
+                     ch))
+     ((use (strrchr-la2 (j f)))))
+
+(prove-lemma strchr-get (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (strlen i n lst)))
+              (strchr i n lst (get-nth j lst))))
+
+(prove-lemma strrchr-la3 ()
+     (implies (and (strchr i n lst ch)
+                   (lessp (strrchr i n lst ch k) j)
+                   (lessp j (strlen i n lst)))
+              (not (equal (get-nth j lst) ch)))
+     ((expand (strrchr i n lst (get-nth i lst) k))))
+
+; strrchr returns the last one.
+(prove-lemma strrchr-thm2 ()
+     (implies (and (strrchr i n lst ch f)
+                   (lessp (strrchr i n lst ch f) j)
+                   (lessp j (strlen i n lst)))
+              (not (equal (get-nth j lst) ch)))
+     ((use (strrchr-la3 (k f)))))
+
+; no means none.
+(prove-lemma strrchr-thm3 ()
+     (implies (and (not (strrchr i n lst ch k))
+                   (leq i j)
+                   (lessp j (strlen i n lst)))
+              (not (equal (get-nth j lst) ch))))
+
+; ch is not equal to the null character, if strrchr returns f.
+(prove-lemma strrchr-thm4 ()
+     (implies (and (stringp i n lst)
+                   (not (strrchr i n lst ch k)))
+              (not (equal ch 0))))
+
+; some properties about memcmp.
+(prove-lemma memcmp1-id (rewrite)
+     (equal (memcmp1 i n lst lst) 0))
+
+(prove-lemma memcmp-id (rewrite)
+     (equal (memcmp n lst lst) 0))
+
+(prove-lemma memcmp1-thm1 ()
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (equal (memcmp1 i n lst1 lst2) 0)
+                   (leq i j)
+                   (lessp j (plus i n)))
+              (equal (get-nth j lst1) (get-nth j lst2)))
+     ((induct (memcmp1 i n lst1 lst2))
+      (enable idifference iplus)))
+
+(prove-lemma memcmp-thm1 ()
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (equal (memcmp n lst1 lst2) 0)
+                   (lessp j n))
+              (equal (get-nth j lst1) (get-nth j lst2)))
+     ((use (memcmp1-thm1 (i 0)))))
+             
+(defn-sk memcmp-sk (n lst1 lst2)
+  (exists j 
+          (and (forall i (implies (lessp i j) 
+                                  (equal (get-nth i lst1) (get-nth i lst2))))
+               (equal (memcmp n lst1 lst2)
+                      (idifference (get-nth j lst1) (get-nth j lst2))))))
+
+(defn memcmp-j (i n lst1 lst2)
+  (if (equal (get-nth i lst1) (get-nth i lst2))
+      (if (equal (sub1 n) 0)
+          (fix i)
+        (memcmp-j (add1 i) (sub1 n) lst1 lst2))
+    (fix i)))
+
+(prove-lemma memcmp-j-1 (rewrite)
+     (implies (and (lessp i (memcmp-j i1 n1 lst1 lst2))
+                   (leq i1 i))
+              (equal (get-nth i lst1) (get-nth i lst2)))
+     ((enable get-nth-0)))
+
+(prove-lemma memcmp-j-2 (rewrite)
+     (implies (not (equal (memcmp1 i1 n1 lst1 lst2) 0))
+              (equal (memcmp1 i1 n1 lst1 lst2)
+                     (idifference (get-nth (memcmp-j i1 n1 lst1 lst2) lst1)
+                                  (get-nth (memcmp-j i1 n1 lst1 lst2) lst2))))
+     ((enable get-nth-0)))
+
+(prove-lemma memcmp-thm2 ()
+     (implies (not (equal (memcmp n lst1 lst2) 0))
+              (memcmp-sk n lst1 lst2))
+     ((use (memcmp-sk (j (memcmp-j 0 n lst1 lst2))))))
+
+(disable memcmp-j-1)
+(disable memcmp-j-2)
+
+; some properties about strncat.
+(prove-lemma strcpy2-get-1 (rewrite)
+     (implies (lessp j i1)
+              (equal (get-nth j (strcpy2 i1 lst1 i2 n2 lst2))
+                     (get-nth j lst1))))
+
+(prove-lemma strlen1-ii (rewrite)
+     (equal (strlen1 i i lst) 0)
+     ((expand (strlen1 i i lst))))
+
+(prove-lemma strcpy2-get-2 (rewrite)
+     (implies (and (leq i1 j)
+                   (lessp j (plus i1 (strlen1 i2 (plus i2 n2) lst2))))
+              (equal (get-nth j (strcpy2 i1 lst1 i2 n2 lst2))
+                     (get-nth (difference (plus i2 j) i1) lst2)))
+     ((induct (strcpy2 i1 lst1 i2 n2 lst2))
+      (expand (strcpy2 i1 lst1 i2 n2 lst2)
+              (strcpy2 0 lst1 i2 n2 lst2))
+      (enable plus-add1-1)))
+
+; all j < (strlen lst1), lst'[j] == lst1[j].
+(prove-lemma strncat-get-1 (rewrite)
+     (implies (lessp j (strlen 0 n1 lst1))
+              (equal (get-nth j (strncat n1 lst1 n2 lst2))
+                     (get-nth j lst1))))
+
+; all (strlen lst1) <= j < (strlen lst1)+(strlen lst2), 
+; lst'[j] == lst2[j-(strlen lst1)].
+(prove-lemma strncat-get-2 (rewrite)
+     (implies (and (stringp 0 n1 lst1)
+                   (leq (strlen 0 n1 lst1) j)
+                   (lessp j (plus (strlen 0 n1 lst1) (strlen 0 n2 lst2))))
+              (equal (get-nth j (strncat n1 lst1 n2 lst2))
+                     (get-nth (difference j (strlen 0 n1 lst1)) lst2)))
+     ((use (strcpy2-get-2 (i1 (strlen 0 n1 lst1)) (i2 0)))
+      (enable strlen1-strlen)))
+
+; some properties about strncpy.
+(prove-lemma zero-list1-la (rewrite)
+     (implies (lessp j i)
+              (equal (get-nth j (zero-list1 i n lst))
+                     (get-nth j lst))))
+
+(prove-lemma zero-list1-get (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (sub1 (plus i n))))
+              (equal (get-nth j (zero-list1 i n lst)) 0))
+     ((induct (zero-list1 i n lst))))
+
+(prove-lemma zero-list-get (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (plus i n)))
+              (equal (get-nth j (zero-list i n lst)) 0))
+     ((use (zero-list1-get (i (add1 i)) (lst (put-nth 0 i lst))))))
+
+(prove-lemma strncpy1-get (rewrite)
+     (implies (lessp j i)
+              (equal (get-nth j (strncpy1 i n lst1 lst2))
+                     (get-nth j lst1))))
+
+(disable zero-list)
+
+(prove-lemma strncpy1-strlen ()
+     (equal (strlen i (plus i n) (strncpy1 i n lst1 lst2))
+            (strlen i (plus i n) lst2))
+     ((induct (strncpy1 i n lst1 lst2))
+      (enable plus-add1-1)))
+
+(prove-lemma strcpy-0 (rewrite)
+     (equal (strncpy 0 lst1 lst2) lst1))
+
+; the length of (strncpy lst1 lst2) equals the length of lst2.
+(prove-lemma strncpy-strlen (rewrite)
+     (equal (strlen 0 n (strncpy n lst1 lst2))
+            (if (zerop n)
+                (strlen 0 n lst1)
+              (strlen 0 n lst2)))
+     ((use (strncpy1-strlen (i 0)))))
+
+(prove-lemma strncpy1-cpy (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (strlen i (plus i n) lst2)))
+              (equal (get-nth j (strncpy1 i n lst1 lst2))
+                     (get-nth j lst2)))
+     ((induct (strncpy1 i n lst1 lst2))
+      (expand (strncpy1 i n lst1 lst2)
+              (strncpy1 0 n lst1 lst2))
+      (enable plus-add1-1)))
+
+; all j < (strlen lst2), lst'[j] == lst2[j].
+(prove-lemma strncpy-cpy (rewrite)
+     (implies (lessp j (strlen 0 n lst2))
+              (equal (get-nth j (strncpy n lst1 lst2))
+                     (get-nth j lst2)))
+     ((use (strncpy1-cpy (i 0)))))
+
+(prove-lemma strncpy1-0s (rewrite)
+     (implies (and (leq (strlen i (plus i n) lst2) j)
+                   (lessp j (plus i n)))
+              (equal (get-nth j (strncpy1 i n lst1 lst2)) 0))
+     ((induct (strncpy1 i n lst1 lst2))
+      (enable plus-add1-1)))
+
+; all (strlen lst2) <= j < n, lst'[j] == 0.
+(prove-lemma strncpy-0s (rewrite)
+     (implies (and (leq (strlen 0 n lst2) j)
+                   (lessp j n))
+              (equal (get-nth j (strncpy n lst1 lst2)) 0))
+     ((use (strncpy1-0s (i 0)))))
+
+; some properties about strncmp.
+(prove-lemma strncmp1-id (rewrite)
+     (equal (strncmp1 i n lst lst) 0))
+
+(prove-lemma strncmp-id (rewrite)
+     (equal (strncmp n lst lst) 0))
+
+(prove-lemma strncmp1-thm1 ()
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (equal (strncmp1 i n lst1 lst2) 0)
+                   (leq i j)
+                   (lessp j (strlen i (plus i n) lst1)))
+              (equal (get-nth j lst1) (get-nth j lst2)))
+     ((induct (strncmp1 i n lst1 lst2))
+      (enable idifference iplus plus-add1-1)))
+
+(prove-lemma strncmp-thm1 ()
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (equal (strncmp n lst1 lst2) 0)
+                   (lessp j (strlen 0 n lst1)))
+              (equal (get-nth j lst1) (get-nth j lst2)))
+     ((use (strncmp1-thm1 (i 0)))))
+
+(defn strncmp-j (i n lst1 lst2)
+  (if (equal (get-nth i lst1) (get-nth i lst2))
+      (if (equal (get-nth i lst1) 0)
+          (fix i)
+        (if (equal (sub1 n) 0)
+            (fix i)
+          (strncmp-j (add1 i) (sub1 n) lst1 lst2)))
+    (fix i)))
+
+(defn-sk strncmp-sk (n lst1 lst2)
+  (exists j 
+          (and (forall i (implies (lessp i j) 
+                                  (equal (get-nth i lst1) (get-nth i lst2))))
+               (equal (strncmp n lst1 lst2)
+                      (idifference (get-nth j lst1) (get-nth j lst2))))))
+
+(prove-lemma strncmp-j-1 (rewrite)
+     (implies (and (lessp i (strncmp-j i1 n1 lst1 lst2))
+                   (leq i1 i))
+              (equal (get-nth i lst1) (get-nth i lst2)))
+     ((enable get-nth-0)))
+
+(prove-lemma strncmp-j-2 (rewrite)
+     (implies (not (equal (strncmp1 i1 n1 lst1 lst2) 0))
+              (equal (strncmp1 i1 n1 lst1 lst2)
+                     (idifference (get-nth (strncmp-j i1 n1 lst1 lst2) lst1)
+                                  (get-nth (strncmp-j i1 n1 lst1 lst2) lst2))))
+     ((enable get-nth-0)))
+
+(prove-lemma strncmp-thm2 ()
+     (implies (not (equal (strncmp n lst1 lst2) 0))
+              (strncmp-sk n lst1 lst2))
+     ((use (strncmp-sk (j (strncmp-j 0 n lst1 lst2))))))
+
+(disable strncmp-j-1)
+(disable strncmp-j-2)
+
+; some properties about strpbrk.
+(prove-lemma strpbrk-thm1 (rewrite)
+     (let ((j (strpbrk i1 n1 lst1 n2 lst2)))
+       (implies j
+                (strchr1 0 n2 lst2 (get-nth j lst1)))))
+
+(prove-lemma strpbrk-thm2 ()
+     (implies (and (leq i1 j)
+                   (lessp j (strpbrk i1 n1 lst1 n2 lst2)))
+              (not (strchr1 0 n2 lst2 (get-nth j lst1)))))
+
+(prove-lemma strpbrk-thm3 ()
+     (implies (and (not (strpbrk i1 n1 lst1 n2 lst2))
+                   (leq i1 j)
+                   (lessp j (strlen i1 n1 lst1)))
+              (not (strchr1 0 n2 lst2 (get-nth j lst1)))))
+
+; strchr1, which is used to specify several string functions, is a variant 
+; of strchr.  strchr1 does not have the `thm4' of strchr.
+(prove-lemma strchr1-thm1 (rewrite)
+     (implies (strchr1 i n lst ch)
+              (equal (get-nth (strchr1 i n lst ch) lst)
+                     ch)))
+
+(prove-lemma strchr1-thm2 ()
+     (implies (and (leq i j)
+                   (lessp j (strchr1 i n lst ch)))
+              (not (equal (get-nth j lst) ch))))
+
+(prove-lemma strchr1-thm3 ()
+     (implies (and (not (strchr1 i n lst ch))
+                   (leq i j)
+                   (lessp j (strlen i n lst)))
+              (not (equal (get-nth j lst) ch))))
+
+; some properties of strcspn.
+(prove-lemma strcspn-thm1 (rewrite)
+     (let ((j (strcspn i1 n1 lst1 n2 lst2)))
+       (implies j
+                (strchr 0 n2 lst2 (get-nth j lst1)))))
+
+(prove-lemma strcspn-thm2 ()
+     (implies (and (leq i1 j)
+                   (lessp j (strcspn i1 n1 lst1 n2 lst2)))
+              (not (strchr 0 n2 lst2 (get-nth j lst1)))))
+
+(prove-lemma strcspn-thm3 ()
+     (implies (and (not (strcspn i1 n1 lst1 n2 lst2))
+                   (leq i1 j)
+                   (lessp j (strlen i1 n1 lst1)))
+              (not (strchr 0 n2 lst2 (get-nth j lst1)))))
+
+; some properties of strspn.
+(prove-lemma strspn-thm1 (rewrite)
+     (let ((j (strspn i1 n1 lst1 n2 lst2)))
+       (implies j
+                (not (strchr1 0 n2 lst2 (get-nth j lst1))))))
+
+(prove-lemma strspn-thm2 ()
+     (implies (and (leq i1 j)
+                   (lessp j (strspn i1 n1 lst1 n2 lst2)))
+              (strchr1 0 n2 lst2 (get-nth j lst1))))
+
+(prove-lemma strspn-thm3 ()
+     (implies (and (not (strspn i1 n1 lst1 n2 lst2))
+                   (leq i1 j)
+                   (lessp j (strlen i1 n1 lst1)))
+              (strchr1 0 n2 lst2 (get-nth j lst1))))
+
+; a generalized defn for strncmp.
+(defn strncmp2 (i n lst1 j lst2)
+  (if (zerop n)
+      0
+    (if (equal (get-nth i lst1) (get-nth j lst2))
+        (if (equal (get-nth i lst1) 0)
+            0
+          (strncmp2 (add1 i) (sub1 n) lst1 (add1 j) lst2))
+      (idifference (get-nth i lst1) (get-nth j lst2)))))
+
+(prove-lemma strncmp2-non-numberp (rewrite)
+     (implies (not (numberp i))
+              (equal (strncmp2 i n lst1 j lst2)
+                     (strncmp2 0 n lst1 j lst2))))
+
+(prove-lemma strncmp2-0 (rewrite)
+     (equal (strncmp2 i 0 lst1 j lst2) 0))
+                 
+(prove-lemma strncmp1-strncmp2 (rewrite)
+     (implies (not (zerop n))
+              (equal (strncmp1 i n lst1 lst2)
+                     (strncmp2 i n lst1 i lst2))))
+
+(prove-lemma strncmp-strncmp2 (rewrite)
+     (equal (strncmp n lst1 lst2)
+            (strncmp2 0 n lst1 0 lst2)))
+
+(prove-lemma strncmp2-mcdr-1 (rewrite)
+     (equal (strncmp2 i1 n (mcdr j lst1) i2 lst2)
+            (strncmp2 (plus i1 j) n lst1 i2 lst2))
+     ((enable plus-add1-1)))
+
+(prove-lemma strncmp2-mcdr-2 (rewrite)
+     (equal (strncmp2 i1 n lst1 i2 (mcdr j lst2))
+            (strncmp2 i1 n lst1 (plus i2 j) lst2))
+     ((enable plus-add1-1)))
+
+; a lemma of strlen and mcdr.
+(prove-lemma strlen-cdr (rewrite)
+     (implies (numberp i)
+              (equal (strlen i (sub1 n) (mcdr 1 lst))
+                     (sub1 (strlen (add1 i) n lst)))))
+
+(prove-lemma strlen-mcdr (rewrite)
+     (implies (numberp i)
+              (equal (strlen i n (mcdr k lst))
+                     (difference (strlen (plus i k) (plus k n) lst) k)))
+     ((enable plus-add1-1)))
+
+; some properties of strstr.
+; a lemma for strstr-thm1.
+(prove-lemma strstr1-thm1 (rewrite)
+     (let ((j (strstr1 i n1 lst1 n2 lst2 len)))
+       (implies (and (numberp j)
+                     (equal n (add1 len)))
+                (equal (strncmp2 j n lst1 0 lst2) 0)))
+     ((disable strchr1 strncmp mcdr)))
+
+; all 0 <= i < (strlen lst2), lst1[j+i] == lst2[i], if strstr == j =\= 0.
+(prove-lemma strstr-thm1 (rewrite)
+     (let ((j (strstr n1 lst1 n2 lst2)))
+       (implies (numberp j)
+                (equal (strncmp (strlen 0 n2 lst2) (mcdr j lst1) lst2) 0))))
+
+; a few lemmas about strchr1.
+(prove-lemma strchr1-nth (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (strlen i n lst)))
+              (numberp (strchr1 i n lst (get-nth j lst)))))
+
+(prove-lemma strlen-strchr1-nth (rewrite)
+     (implies (and (leq i j)
+                   (lessp j (strlen i n lst)))
+              (equal (strlen (add1 (strchr1 i n lst (get-nth j lst))) n lst)
+                     (strlen i n lst))))
+
+(prove-lemma strlen-strchr1 (rewrite)
+     (implies (numberp (strchr1 i n lst 0))
+              (not (lessp (strchr1 i n lst 0) (strlen i n lst)))))
+
+(prove-lemma strchr1-ch0 (rewrite)
+     (not (strchr1 i n lst 0)))
+
+(prove-lemma strchr1-nth-first (rewrite)
+     (implies (and (numberp (strchr1 i n lst (get-nth j lst)))
+                   (leq i j))
+              (not (lessp j (strchr1 i n lst (get-nth j lst))))))
+
+; a lemma for strstr-thm2.
+(prove-lemma strstr1-thm2 ()
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (leq i j)
+                   (lessp j (strstr1 i n1 lst1 n2 lst2 len))
+                   (equal n (add1 len)))
+              (not (equal (strncmp2 j n lst1 0 lst2) 0)))
+     ((induct (strstr1 i n1 lst1 n2 lst2 len))
+      (disable strncmp mcdr)))
+
+; all j < (strstr lst1 lst2), (strncmp (mcdr j lst1) lst2) =\= 0.
+(prove-lemma strstr-thm2 ()
+    (implies (and (lst-of-chrp lst1)
+                  (lst-of-chrp lst2)
+                  (lessp j (strstr n1 lst1 n2 lst2))
+                  (not (zerop n2)))
+             (not (equal (strncmp (strlen 0 n2 lst2) (mcdr j lst1) lst2)
+                         0)))
+    ((use (strstr1-thm2 (i 0) 
+                        (len (sub1 (strlen 0 n2 lst2))) 
+                        (n (strlen 0 n2 lst2))))))
+
+; a lemma for strstr-thm3.
+(prove-lemma strstr1-thm3 (rewrite)
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (not (strstr1 i n1 lst1 n2 lst2 len))
+                   (leq i j)
+                   (lessp j (strlen i n1 lst1))
+                   (equal n (add1 len)))
+              (not (equal (strncmp2 j n lst1 0 lst2) 0)))
+     ((induct (strstr1 i n1 lst1 n2 lst2 len))
+      (disable strncmp mcdr)))
+
+; all j < (strlen lst1), (strncmp (mcdr j lst1) lst2) =\= 0. 
+(prove-lemma strstr-thm3 (rewrite)
+     (implies (and (lst-of-chrp lst1)
+                   (lst-of-chrp lst2)
+                   (not (strstr n1 lst1 n2 lst2))
+                   (lessp j (strlen 0 n1 lst1))
+                   (not (zerop n2)))
+              (not (equal (strncmp (strlen 0 n2 lst2) (mcdr j lst1) lst2) 0)))
+     ((use (strstr1-thm3 (i 0) 
+                         (len (sub1 (strlen 0 n2 lst2)))
+                         (n (strlen 0 n2 lst2))))))
+
+; some properties of strtok.
+(prove-lemma strtok-thm1 (rewrite)
+     (let ((i (strspn 0 n1 lst1 n2 lst2)))
+       (implies (and (not (equal (nat-to-uint s1) 0))
+                     (equal (get-nth i lst1) 0))
+                (and (equal (strtok-tok s1 last n1 lst1 n2 lst2) 0)
+                     (equal (strtok-last s1 last n1 lst1 n2 lst2) 0)
+                     (equal (strtok-lst n1 lst1 n2 lst2) lst1)))))
+
+(prove-lemma strtok-thm2 (rewrite)
+     (let ((i (strspn 0 n1 lst1 n2 lst2)))
+       (implies (and (not (equal (nat-to-uint s1) 0))
+                     (not (equal (get-nth i lst1) 0))
+                     (equal (get-nth (strcspn i n1 lst1 n2 lst2) lst1) 0)
+                     (stringp 0 n1 lst1)
+                     (numberp n1))
+                (and (equal (strtok-tok s1 last n1 lst1 n2 lst2) 
+                            (add 32 s1 (strspn* 0 0 n1 lst1 n2 lst2)))
+                     (equal (strtok-last s1 last n1 lst1 n2 lst2) 0)
+                     (equal (strtok-lst n1 lst1 n2 lst2) lst1)))))
+
+(prove-lemma strspn-strchr1 (rewrite)
+     (implies (strspn i1 n1 lst1 n2 lst2)
+              (not (strchr1 0 n2 lst2 
+                            (get-nth (strspn i1 n1 lst1 n2 lst2) lst1)))))
+
+(prove-lemma strchr-strchr1 (rewrite)
+     (implies (not (equal ch 0))
+              (equal (strchr i n lst ch) (strchr1 i n lst ch))))
+
+(prove-lemma strspn-true (rewrite)
+     (implies (and (stringp i n1 lst1)
+                   (stringp 0 n2 lst2))
+              (strspn i n1 lst1 n2 lst2))
+     ((induct (strspn i n1 lst1 n2 lst2))
+      (enable slen) (disable slen-rec)))
+
+(prove-lemma strtok-thm3 (rewrite)
+     (let ((i* (strspn* 0 0 n1 lst1 n2 lst2))
+           (i (strspn 0 n1 lst1 n2 lst2)))
+       (implies (and (not (equal (nat-to-uint s1) 0))
+                     (not (equal (get-nth i lst1) 0))
+                     (not (equal (get-nth (strcspn i n1 lst1 n2 lst2) lst1) 0))
+                     (stringp 0 n1 lst1)
+                     (stringp 0 n2 lst2)
+                     (numberp n1))
+                (and (equal (strtok-tok s1 last n1 lst1 n2 lst2) 
+                            (add 32 s1 (strspn* 0 0 n1 lst1 n2 lst2)))
+                     (equal (strtok-last s1 last n1 lst1 n2 lst2)
+                            (add 32 s1 (add 32 (strcspn* i* i n1 lst1 n2 lst2)
+                                            1)))
+                     (equal (get-nth (strcspn i n1 lst1 n2 lst2)
+                                     (strtok-lst n1 lst1 n2 lst2))
+                       0))))
+     ((disable strspn* strspn strchr strchr1)))
+
+(prove-lemma strtok-thm4 (rewrite)
+     (and (equal (strtok-tok 0 0 n1 lst1 n2 lst2) 0)
+          (equal (strtok-last 0 0 n1 lst1 n2 lst2) 0)))
+
+(prove-lemma strtok-thm5 (rewrite)
+     (let ((i (strspn 0 n1 lst1 n2 lst2)))
+       (implies (and (not (equal (nat-to-uint last) 0))
+                     (not (equal (get-nth i lst1) 0))
+                     (equal (get-nth (strcspn i n1 lst1 n2 lst2) lst1) 0)
+                     (stringp 0 n1 lst1)
+                     (numberp n1))
+                (and (equal (strtok-tok 0 last n1 lst1 n2 lst2) 
+                            (add 32 last (strspn* 0 0 n1 lst1 n2 lst2)))
+                     (equal (strtok-last 0 last n1 lst1 n2 lst2) 0)
+                     (equal (strtok-lst n1 lst1 n2 lst2) lst1)))))
+
+(prove-lemma strtok-thm6 (rewrite)
+     (let ((i* (strspn* 0 0 n1 lst1 n2 lst2))
+           (i (strspn 0 n1 lst1 n2 lst2)))
+       (implies (and (not (equal (nat-to-uint last) 0))
+                     (not (equal (get-nth i lst1) 0))
+                     (not (equal (get-nth (strcspn i n1 lst1 n2 lst2) lst1) 0))
+                     (stringp 0 n1 lst1)
+                     (stringp 0 n2 lst2)
+                     (numberp n1))
+                (and (equal (strtok-tok 0 last n1 lst1 n2 lst2) 
+                            (add 32 last (strspn* 0 0 n1 lst1 n2 lst2)))
+                     (equal (strtok-last 0 last n1 lst1 n2 lst2)
+                            (add 32 last 
+                                 (add 32 (strcspn* i* i n1 lst1 n2 lst2) 1)))
+                     (equal (get-nth (strcspn i n1 lst1 n2 lst2)
+                                     (strtok-lst n1 lst1 n2 lst2))
+                       0))))
+     ((disable strspn* strspn strchr strchr1)))
+
+(disable strchr-strchr1)
+
+; some properties of memmove.
+; memmove is equivalent to lstmov.
+(prove-lemma mmov1-lst-cpy (rewrite)
+     (equal (mmov1-lst i lst1 lst2 n)
+            (lstcpy i lst1 i lst2 n)))
+
+(prove-lemma mmovn-mmov1-lst (rewrite)
+     (equal (mmovn-lst h lst1 lst2 i n)
+            (mmov1-lst i lst1 lst2 (times h n))))
+
+(prove-lemma lstcpy-nonnumberp (rewrite)
+     (implies (not (numberp i1))
+              (and (equal (lstcpy i1 lst1 i2 lst2 n)
+                          (lstcpy 0 lst1 i2 lst2 n))
+                   (equal (lstcpy i2 lst1 i1 lst2 n)
+                          (lstcpy i2 lst1 0 lst2 n))))
+     ((enable get-nth put-nth)))
+             
+(prove-lemma lstcpy-lstcpy-0 (rewrite)
+     (equal (lstcpy h1 (lstcpy 0 lst1 0 lst2 h1) h1 lst2 h2)
+            (lstcpy 0 lst1 0 lst2 (plus h1 h2)))
+     ((use (lstcpy-lstcpy (j1 h1) (j2 h1) (i1 0) (i2 0)))
+      (disable lstcpy-lstcpy)))
+
+(prove-lemma mmov1-lst1-cpy (rewrite)
+     (implies (leq n i)
+              (equal (mmov1-lst1 i lst1 lst2 n)
+                     (lstcpy (difference i n) lst1 (difference i n) lst2 n)))
+     ((enable lstcpy-cpy1)))
+
+(prove-lemma lstcpy-lstcpy-1 (rewrite)
+     (implies (and (equal j1 (plus h1 i1))
+                   (equal j2 (plus h1 i2)))
+              (equal (lstcpy i1 (lstcpy j1 lst1 j2 lst2 h2) i2 lst2 h1)
+                     (lstcpy i1 lst1 i2 lst2 (plus h1 h2))))
+     ((induct (lstcpy i1 lst1 i2 lst2 h1))
+      (enable put-nth-0 get-nth-0)))
+
+(prove-lemma times-lessp-dual (rewrite)
+     (implies (lessp x y)
+              (equal (lessp x (times y z)) (not (zerop z)))))
+
+(prove-lemma mmovn-lst1-mmov1-lst (rewrite)
+     (implies (leq (times h n) i)
+              (equal (mmovn-lst1 h lst1 lst2 i n)
+                     (mmov1-lst (difference i (times h n)) lst1 lst2 
+                                (times h n))))
+     ((induct (mmovn-lst1 h lst1 lst2 i n))))
+
+(prove-lemma quotient-shrink-fast-1 (rewrite)
+     (equal (lessp x (times y (quotient x y))) f))
+
+(prove-lemma memmove-mmov1-lst (rewrite)
+     (equal (memmove str1 str2 n lst1 lst2)
+            (if (zerop n)
+                lst1
+              (if (equal (nat-to-uint str1) (nat-to-uint str2))
+                  lst2
+                (mmov1-lst 0 lst1 lst2 n))))
+     ((use (remainder-quotient 
+            (x (difference (plus n (remainder (nat-to-uint str1) 4)) 4))
+            (y 4))
+           (remainder-quotient
+            (x (difference n (remainder (plus n (nat-to-uint str1)) 4)))
+            (y 4)))
+      (disable remainder-quotient remainder quotient plus difference)))
+
+; for k < i, lstcpy(lst1,lst2)[k] == lst1[k].
+(prove-lemma lstcpy-get-1 (rewrite)
+     (implies (lessp k i)
+              (equal (get-nth k (lstcpy i lst1 j lst2 n))
+                     (get-nth k lst1))))
+
+; for i <= i1 < i+n, lstcpy(lst1,lst2)[i1] == lst2[i1].
+(prove-lemma lstcpy-get-2 (rewrite)
+     (implies (and (leq i i1)
+                   (lessp i1 (plus i n)))
+              (equal (get-nth i1 (lstcpy i lst1 j lst2 n))
+                     (get-nth (difference (plus j i1) i) lst2)))
+     ((induct (lstcpy i lst1 j lst2 n))
+      (enable get-nth-0 put-nth-0 plus-add1-1)))
+
+; for 0 <= i < n, mmov1-lst(lst1,lst2)[i] == lst2[i].
+(prove-lemma mmov1-lst-thm1 (rewrite)
+     (implies (lessp i1 n)
+              (equal (get-nth i1 (mmov1-lst 0 lst1 lst2 n))
+                     (get-nth i1 lst2)))
+     ((use (lstcpy-get-2 (i 0) (j 0)))
+      (enable get-nth-0)))
+
+; for 0 <= i < n, memmove(lst1,lst2,n)[i] == lst2[i].
+(prove-lemma memmove-thm1 (rewrite)
+     (implies (lessp i n)
+              (equal (get-nth i (memmove str1 str2 n lst1 lst2))
+                     (get-nth i lst2)))
+     ((enable get-nth-0) 
+      (disable memmove)))
+

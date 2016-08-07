@@ -1,0 +1,48 @@
+In this directory `fm9001-piton' are the source files for the basic
+components of `Clinc stack', a hierarchy of computing systems implemented
+upon one another in a rigorously verified manner.  The basic components are
+the FM9001 microprocessor, the Piton compiler, and some example programs that
+exercise the microprocessor and compiler.  The source files include not only
+the implementation details of the systems but also the Nqthm-checked proof
+scripts.
+
+1.  The input file `fm9001-replay.events' (work of Bishop Brock and Warren
+Hunt, with contributions from Matt Kaufmann) was produced mechanically from the
+original FM9001 Nqthm work, which may be found in its entirety in the
+subdirectory `fm9001'.  Execution of the form (library-to-events "fm9001") in
+the file `fm9001/sysdef.lisp' produced the file `fm9001-replay.events'.
+
+Note of explanation:  the FM9001 work was not originally written as a
+collection of ordinary *.event files, but rather included a number of
+Common Lisp programs to help create the desired Nqthm events.  The
+virtue of the file `fm9001-replay.events' is that it can be processed
+by the Nqthm-1992 function `prove-file', like all the other Nqthm-1992
+example event files.
+
+2.  The file `piton.events' (work of J Moore) contains the definition
+and the proof of correctness of the Piton assembler/compiler.  Piton
+targets the FM9001 microprocessor, and so builds upon the file
+`fm9001.events'.
+
+3.  The file `big-add.events' (work of J Moore) is an example
+correctness proof of a program written in Piton.  This example builds
+on the file `piton.events'.
+
+4.  The file `nim-piton.events' (work of Matt Wilding) is the proof of the
+correctness of a Nim-playing program written in Piton.  It also builds
+on `piton.events'.
+
+Other components of the Clinc stack built on Piton may be found in:
+
+1. The Micro-Gypsy work of Young in the Pc-Nqthm-1992 distribution.
+See the directory `examples/mg' in the Pc-Nqthm-1992 distribution.
+
+2.  The work of Flatau in the Nqthm-1992 distribution.  See the
+directory `examples/flatau' in the Nqthm-1992 distribution.
+
+It is a pity that we have not yet connected these works to the FM9001
+and Piton work in this directory in a smooth, mechanical way.
+Currently, the works of Flatau and Young each start with a private
+definition of Piton which `we believe' is equivalent to the one given
+on this directory.
+

@@ -1,0 +1,257 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    MORE-ALU-INTERPRETATION.EVENTS
+;;;
+;;;    The lemmas in this file simply restate what was proved in
+;;;    "alu-interpretation.events" in an easily readable way.
+;;;    
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(defn v-neg (a)
+  (v-subtracter-output f a (nat-to-v 0 (length a))))
+
+;;;  Lemmas that explicate the BV, C, V, and Z of (V-ALU c a b).
+
+(prove-lemma bv-cvzbv (rewrite)
+  (equal (bv (cvzbv c v bv))
+         bv)
+  ;;Hint
+  ((enable bv cvzbv)))
+
+(prove-lemma c-cvzbv (rewrite)
+  (equal (c (cvzbv c v bv))
+         c)
+  ;;Hint
+  ((enable c cvzbv)))
+
+(prove-lemma v-cvzbv (rewrite)
+  (equal (v (cvzbv c v bv))
+         v)
+  ;;Hint
+  ((enable v cvzbv)))
+
+(prove-lemma zb-cvzbv (rewrite)
+  (equal (zb (cvzbv c v bv))
+         (v-zerop bv))
+  ;;Hint
+  ((enable zb cvzbv)))
+
+;;;  An easily understandable form of the V-ALU specification.
+
+(prove-lemma bv-v-alu ()
+  (equal
+   (bv (v-alu c a b op))
+   (cond
+    ((equal op #v0000) (v-buf a))                   ;MOVE
+    ((equal op #v0001) (v-inc a))                   ;INC
+    ((equal op #v0010) (v-adder-output c a b))      ;ADDC
+    ((equal op #v0011) (v-adder-output f a b))      ;ADD 
+    ((equal op #v0100) (v-neg a))                   ;NEG
+    ((equal op #v0101) (v-dec a))                   ;DEC
+    ((equal op #v0110) (v-subtracter-output c a b)) ;SUBB  
+    ((equal op #v0111) (v-subtracter-output f a b)) ;SUB 
+    ((equal op #v1000) (v-ror a c))                 ;ROR
+    ((equal op #v1001) (v-asr a))                   ;ASR
+    ((equal op #v1010) (v-lsr a))                   ;LSR
+    ((equal op #v1011) (v-xor a b))                 ;XOR
+    ((equal op #v1100) (v-or  a b))                 ;OR
+    ((equal op #v1101) (v-and a b))                 ;AND
+    ((equal op #v1110) (v-not a))                   ;NOT
+    (t                 (v-buf a))))                 ;M15
+  ;;Hint
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable v-alu bv-cvzbv
+           cvzbv-inc cvzbv-v-adder cvzbv-neg cvzbv-dec cvzbv-v-subtracter
+           cvzbv-v-ror cvzbv-v-asr cvzbv-v-lsr cvzbv-v-not
+           v-inc v-dec v-neg)))
+
+(prove-lemma c-v-alu ()
+  (and
+   (implies
+    (or (equal op (op-move)) (equal op (op-xor)) (equal op (op-or))
+        (equal op (op-and))  (equal op (op-not)) (equal op (op-m15)))
+    (equal (c (v-alu c a b op))
+           f))
+   (implies
+    (and
+     (listp a)
+     (or (equal op (op-ror)) (equal op (op-asr)) (equal op (op-lsr))))
+    (equal (c (v-alu c a b op))
+           (nth 0 a))))
+  ;;Hint
+  ((disable-theory t)
+   (enable-theory ground-zero opcode-theory)
+   (enable v-alu c-cvzbv
+           cvzbv-inc cvzbv-v-adder cvzbv-neg cvzbv-dec cvzbv-v-subtracter
+           cvzbv-v-ror cvzbv-v-asr cvzbv-v-lsr cvzbv-v-not
+           v-inc v-dec v-neg)))
+
+(prove-lemma v-v-alu ()
+  (implies
+   (or
+    (equal op (op-move)) (equal op (op-ror)) (equal op (op-asr))
+    (equal op (op-asr))  (equal op (op-lsr)) (equal op (op-xor))
+    (equal op (op-or))   (equal op (op-and)) (equal op (op-not))
+    (equal op (op-m15)))
+   (equal (v (v-alu c a b op))
+          f))
+  ;;Hint
+  ((disable-theory t)
+   (enable-theory ground-zero opcode-theory)
+   (enable v-alu v-cvzbv
+           cvzbv-inc cvzbv-v-adder cvzbv-neg cvzbv-dec cvzbv-v-subtracter
+           cvzbv-v-ror cvzbv-v-asr cvzbv-v-lsr cvzbv-v-not
+           v-inc v-dec v-neg)))
+
+;;;  Matt introduced these lemmas without the REWRITE option.
+
+(prove-lemma v-alu-correct-nat-rewrite (rewrite)
+  (implies (bv2p a b)
+           (equal (v-alu c a b op)
+                  (v-alu-nat c a b op)))
+  ;;Hint
+  ((disable v-alu v-alu-nat)
+   (use (v-alu-correct-nat))))
+
+(disable v-alu-correct-nat-rewrite)
+
+(prove-lemma v-alu-correct-int-rewrite (rewrite)
+  (implies
+   (and (bv2p a b)
+        (not (equal (length a) 0)))
+   (equal (v-alu c a b op)
+          (v-alu-int c a b op)))
+  ;;Hint
+  ((disable v-alu v-alu-int)
+   (use (v-alu-correct-int))))
+
+(disable v-alu-correct-int-rewrite)
+
+(prove-lemma lessp-quotient-test (rewrite)
+  (implies
+   (lessp n m)
+   (equal (lessp (quotient n k) m)
+          t))
+  ;;Hint
+  ((enable quotient lessp)))
+
+(disable lessp-quotient-test)
+
+(prove-lemma nat-to-v-as-remainder (rewrite)
+  (equal (nat-to-v (remainder n (exp 2 l)) l)
+         (nat-to-v n l))
+  ;;Hint
+  ((enable nat-to-v quotient-remainder remainder-exp quotient-exp
+           remainder-remainder)
+   (expand (nat-to-v (remainder n (exp 2 l)) l))
+   (induct (nat-to-v n l))))
+
+(prove-lemma nat-to-v-of-v-to-nat* (rewrite)
+  (implies
+   (and (bvp v)
+        (equal l (length v)))
+   (equal (nat-to-v (v-to-nat v) l)
+          v)))
+
+(disable nat-to-v-of-v-to-nat*)
+
+;;;  Here is an easily readable form of the natural ALU.
+
+(prove-lemma bv-v-alu-as-natural ()
+  (let
+    ((cn (b-to-nat c))
+     (an (v-to-nat a))
+     (bn (v-to-nat b)))
+    (implies
+     (and (bv2p a b)
+          (equal (length a) 32))
+     (equal
+      (bv (v-alu c a b op))
+      (cond 
+       ((equal op (op-inc))  (nat-to-v (plus 1 an) 32))
+       ((equal op (op-addc)) (nat-to-v (plus cn (plus an bn)) 32))
+       ((equal op (op-add))  (nat-to-v (plus an bn) 32))
+       ((equal op (op-dec))  (nat-to-v (difference (plus an (exp 2 32))
+                                                   1)
+                                       32))
+       ((equal op (op-subb)) (nat-to-v (difference (plus bn (exp 2 32))
+                                                   (plus an cn))
+                                       32))
+       ((equal op (op-sub))  (nat-to-v (difference (plus bn (exp 2 32))
+                                                   an)
+                                       32))
+       ((equal op (op-lsr))  (nat-to-v (quotient an 2) 32))
+       (t                    (bv (v-alu c a b op)))))))
+  ;;Hint
+  ((disable cvzbv bv)
+   (enable bv-cvzbv nat-to-v-of-v-to-nat*
+           remainder-remainder remainder-noop lessp-quotient-test
+           v-to-nat-of-nat-to-v *1*b-to-nat
+           v-alu-correct-nat-rewrite v-alu-nat
+           v-alu-nat-int-buf v-alu-nat-inc v-alu-nat-dec
+           v-alu-nat-adder v-alu-nat-adder-output
+           v-alu-nat-subtracter v-alu-nat-subtracter-output
+           v-alu-nat-lsr v-alu-nat-lsr-output)))
+
+(prove-lemma fix-int-int-to-v (rewrite)
+  (equal (fix-int (v-to-int v))
+         (v-to-int v))
+  ;;Hint
+  ((enable fix-int v-to-int integerp idifference iplus)))
+
+(prove-lemma int-to-v-of-v-to-int (rewrite)
+  (implies
+   (and (equal l (length v))
+        (bvp v))
+   (equal (int-to-v (v-to-int v) l)
+          v))
+  ;;Hint
+  ((enable int-to-v v-to-int)
+   (enable-theory all-integer-defns)))
+
+(prove-lemma ineg-as-idifference (rewrite)
+  (equal (idifference 0 i)
+         (ineg i))
+  ;;Hint
+  ((enable-theory all-integer-defns)))
+
+
+;;;   Here is an easily readable form of the integer ALU.
+
+(prove-lemma bv-v-alu-as-integer ()
+  (let
+    ((cn (b-to-nat c))
+     (an (v-to-int a))
+     (bn (v-to-int b)))
+    (implies
+     (and (bv2p a b)
+          (equal (length a) 32))
+     (equal
+      (bv (v-alu c a b op))
+      (cond 
+       ((equal op (op-inc))  (int-to-v (iplus 1 an) 32))
+       ((equal op (op-addc)) (int-to-v (iplus cn (iplus an bn)) 32))
+       ((equal op (op-add))  (int-to-v (iplus an bn) 32))
+       ((equal op (op-neg))  (int-to-v (ineg an) 32))
+       ((equal op (op-dec))  (int-to-v (idifference an 1) 32))
+       ((equal op (op-subb)) (int-to-v (idifference bn (iplus an cn)) 32))
+       ((equal op (op-sub))  (int-to-v (idifference bn an) 32))
+       ((equal op (op-asr))  (int-to-v (idiv an 2) 32))
+       (t                    (bv (v-alu c a b op)))))))
+  ;;Hint
+  ((disable cvzbv bv)
+   (enable bv-cvzbv 
+           remainder-remainder remainder-noop lessp-quotient-test
+           *1*b-to-nat *1*v-to-int *1*fix-int
+           fix-int-iplus fix-int-ineg fix-int-idifference
+           fix-int-int-to-v
+           v-alu-correct-int-rewrite v-alu-int v-alu-int-neg
+           v-alu-nat-int-buf v-alu-int-inc v-alu-int-dec
+           v-alu-int-adder v-alu-int-adder-output
+           v-alu-int-subtracter v-alu-int-subtracter-output
+           v-alu-int-asr v-alu-int-asr-output)))

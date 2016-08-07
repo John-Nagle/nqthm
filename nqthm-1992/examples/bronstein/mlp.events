@@ -1,0 +1,1439 @@
+#|
+
+ Copyright (C) 1994 by Alex Bronstein and Carolyn Talcott.  All Rights
+ Reserved.
+
+ You may copy and distribute verbatim copies of this Nqthm-1992 event script as
+ you receive it, in any medium, including embedding it verbatim in derivative
+ works, provided that you conspicuously and appropriately publish on each copy
+ a valid copyright notice "Copyright (C) 1994 by Alex Bronstein and Carolyn
+ Talcott.  All Rights Reserved."
+
+ NO WARRANTY
+
+ Alex Bronstein and Carolyn Talcott PROVIDE ABSOLUTELY NO WARRANTY.  THE EVENT
+ SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR
+ IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Alex Bronstein or Carolyn Talcott BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(boot-strap thm)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 				TH_ARITHMETIC.BM
+;;;
+;;; This file contains natural number arithmetic lemmas for BM.
+;;;
+
+;; FUNDAMENTAL: 
+
+; standard Nint-induction, which sometime we want to force
+
+(defn ARI-add1-induct (n)
+(if (zerop n)
+    t
+    (ARI-add1-induct (sub1 n))))
+
+;; PLUS and TIMES: a lot of the basic stuff is in "linear 
+;; arithmetic" already.
+
+(prove-lemma ARI-plus-0-ident-r (rewrite)
+	     (equal (plus x 0) (fix x)))
+ 
+(prove-lemma ARI-plus-0-ident-l (rewrite)
+	     (equal (plus 0 x) (fix x)))
+ 
+(prove-lemma ARI-times-0-cancel-r (rewrite)
+	     (equal (times y 0) 0))
+ 
+(prove-lemma ARI-times-0-cancel-l (rewrite)
+	     (equal (times 0 y) 0))
+
+; Note: each of the 4 previous lemmas has a corresponding strong 
+; version, which is more powerful, since it trivially implies the 
+; weak versions. But they are too AGRESSIVE because they trigger 
+; EVERY TIME we have a PLUS/TIMES expression, and generate a case 
+; disjunction as to whether one of the arguments is ZEROP, which 
+; may be totally irrelevant to the proof at hand. In fact, in 
+; testing just this arithmetic package with the strong or the weak
+; axioms, and observing the proofs, the conclusion was that the 
+; proofs based on the weak theorems never reestablished the strong
+; versions (as intermediate lemmas) and the theorems only triggered
+; when they were guaranteed to be relevant, yielding fewer or equal
+; number of case disjunctions, and significantly faster proofs.  
+; We therefore prove the strong theorems but keep them disabled, to
+; be enabled explicitly when needed.
+
+(prove-lemma ARI-plus-0-ident-r2 (rewrite)
+	     (implies (zerop z)
+		      (equal (plus x z) (fix x))))
+(disable ARI-plus-0-ident-r2)
+
+(prove-lemma ARI-plus-0-ident-l2 (rewrite)
+	     (implies (zerop z)
+		      (equal (plus z x) (fix x))))
+(disable ARI-plus-0-ident-l2)
+ 
+(prove-lemma ARI-times-0-cancel-r2 (rewrite)
+	     (implies (zerop z)
+		      (equal (times y z) 0)))
+(disable ARI-times-0-cancel-r2)
+
+(prove-lemma ARI-times-0-cancel-l2 (rewrite)
+	     (implies (zerop z)
+		      (equal (times z y) 0)))
+(disable ARI-times-0-cancel-l2)
+
+; now onto more properties..
+
+(prove-lemma ARI-times-0-equal (rewrite)
+	     (equal (equal (times x y) 0)
+		    (or (zerop x) (zerop y))))
+
+(prove-lemma ARI-times-1-ident (rewrite)
+	     (equal (times x 1) (fix x)))
+
+(prove-lemma ARI-times-add1 (rewrite)
+	     (implies (numberp z)
+		      (equal (plus y (times y z))
+			     (times y (add1 z)))))
+
+; WARNING: ARI-times-commute sometime loops, so we leave it 
+; disabled.
+
+(prove-lemma ARI-times-commute (rewrite)
+	     (equal (times x y) (times y x)))
+(disable ARI-times-commute)
+
+(prove-lemma ARI-times-plus-distribute (rewrite)
+	     (equal (plus (times x x1) (times x x2))
+		    (times x (plus x1 x2))))
+
+; WARNING: ARI-lessp-sub1 looped infinitely once (in remainder 
+; context). It does not seem to be used anywhere. So we leave it
+; DISABLEd for ever.
+
+(prove-lemma ARI-lessp-sub1 (rewrite)
+	     (implies (and (not (zerop p)) (not (zerop q)))
+		      (equal (lessp (sub1 p) (sub1 q))
+			     (lessp p q))))
+(disable ARI-lessp-sub1)
+
+(prove-lemma ARI-lessp-plus (rewrite)
+	     (equal (lessp (plus n p) (plus n q))
+		    (lessp p q)))
+
+(prove-lemma ARI-lessp-times (rewrite)
+	     (implies (not (zerop n))
+		      (equal (not (lessp (times n p) (times n q)))
+			     (not (lessp p q)))))
+
+(prove-lemma ARI-lessp-times2 (rewrite)
+	     (implies (not (zerop n))
+		      (equal (lessp (times n p) (times n q))
+			     (lessp p q)))
+((use (ARI-lessp-times)) (disable ARI-lessp-times))
+)
+
+;; DIFFERENCE:
+
+(prove-lemma ARI-diff-less-0 (rewrite)
+	     (implies (not (lessp a b))
+		      (equal (difference b a) 0)))
+
+(prove-lemma ARI-lessp-diff (rewrite)
+	     (equal (lessp 0 (difference p q))
+		    (lessp q p)))
+
+(prove-lemma ARI-diff-not-0 (rewrite)
+	     (equal (equal (difference x y) 0)
+		    (not (lessp y x))))
+
+(prove-lemma ARI-diff-0 (rewrite)
+	     (implies (zerop x)
+		      (equal (difference x y) 0)))
+
+(prove-lemma ARI-times-diff-distribute (rewrite)
+	     (equal (difference (times x x1) (times x x2))
+		    (times x (difference x1 x2)))
+((disable ARI-times-commute))
+)
+
+(prove-lemma ARI-diff-x-x-0 (rewrite)
+	     (equal (difference x x) 0))
+
+; Difference recurses on both arguments, but sometime we need to 
+; recurse just on the first one.
+; Note that this lemma also appears in Hunt's thesis (rn 451),
+; p.119, but with "NIL" as BM-use.  It may interfere with regular
+; diff-induction, in which case we'll disable it locally, or more
+; drastically, disable here, and enable locally.
+
+(prove-lemma ARI-diff-add1 (rewrite)
+(equal (difference (add1 n) p)
+       (if (lessp p (add1 n))
+	   (add1 (difference n p))
+	   0))
+)
+
+;; REMAINDER:
+
+; ARI-lessp-remainder is fundamental. 
+
+(prove-lemma ARI-lessp-remainder (rewrite)
+(implies (not (zerop p))
+	 (lessp (remainder n p) p)))
+
+; Note that the following phrasing found in Hunt's thesis, p.120, 
+; but even though it seems more powerful, it failed to allow BM to
+; deduce a contradiction from (not (equal (rem n 4) 0..3)) so we 
+; stick with ours.
+;(prove-lemma ARI-lessp-remainder (rewrite generalize)
+;(equal (lessp (remainder n p) p)
+;       (not (zerop p)))
+;)
+
+; Remainder recurses on both arguments, but sometime we need to 
+; recurse just on the first one.
+
+(prove-lemma ARI-remainder-add1 (rewrite)
+(implies (not (zerop p))
+	 (equal (remainder (add1 n) p)
+		(if (equal (remainder n p) (sub1 p))
+		    0
+		    (add1 (remainder n p)))))
+((expand (remainder (add1 n) p) ; for some reason BM doesn't do it straight??
+	 )
+ (disable difference) ; speeds things up
+ )
+)
+
+; This more specific version of the same in the case of remainder 
+; by 2 is true and provable, but does not help anything.  We leave
+; it commented out, for future generations...
+;
+;(prove-lemma ARI-remainder-2-not (rewrite)
+;(implies (and (numberp n) (numberp r))
+;	 (equal (not (equal (remainder n 2) r))
+;		(if (equal r 0) (equal (remainder n 2) 1)
+;		    (if (equal r 1) (equal (remainder n 2) 0)
+;		        T))))
+;)
+
+;;; eof: th_arithmetic.bm
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; STRINGADD.BM: string theory with <add,past,last> shell for BM.
+;;;
+;;; The normalization we are trying to achieve with all the basic
+;;; theorems is:  I (all the way to the outside)... , then A...,
+;;; then P & L (all the way in).
+;;;
+;;; Note that all the H/B stuff only comes into real play with
+;;; pipelines. The rules of interaction with base constructors are 
+;;; defined in the H/B theory and a bit fuzzy (they came in late 
+;;; in the work, and are a bit ad-hoc).
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; String type definition:  
+; constructor: A, destructors: P, L, empty string: (e).
+
+(add-shell A e stringp
+((P (one-of stringp) e)
+ (L (none-of) e)
+))
+
+;PN: iterations of the P constructor, useful in specification, and 
+;    maybe in proofs. Note however that in hand proofs we use it
+;    only as a macro, whereas the general definition is recursive
+;    and hence may not always be expanded appropriately by BM. 
+;    Beware... 
+(defn Pn (n x)
+  (if (zerop n) x (Pn (sub1 n) (P x))))
+
+; Empty: non-strings are treated as empty, which is a standard
+; BM trick.
+
+(defn empty (x)
+  (or (not (stringp x)) (equal x (e)))
+)
+
+; These 3 lemmas allow running w/ empty DISABLED 99% of the time, 
+; winning big.
+
+(prove-lemma STR-Empty-P (rewrite)
+(implies (empty x)
+	 (empty (P x)))
+)
+
+; STR-Empty-Stringp was intended to deal w/ the silly case brought 
+; on by the (inappropriate when Empty disabled) P/L elimination
+; theorem.  Instead it seems to be a LOSER: helping its purpose
+; rarely, and triggering all over the place:
+;(prove-lemma STR-Empty-Stringp (rewrite)
+;(implies (not (empty x))
+;	 (stringp x))
+;)
+
+(prove-lemma STR-Empty-Count (rewrite)
+(implies (not (empty x))
+	 (not (equal (count (P x)) (count X))))
+)
+
+
+; STR-P-L-Elim provides an elimination more suitable to running 
+; w/ empty disabled, than the shell P-L-Elim.  %%% BUT CURRENTLY BM
+; REJECTS IT ON GROUNDS OF NOT BEING ABLE TO HANDLE MANY ELIM 
+; LEMMAS FOR ONE DESTRUCTOR. %%%
+;
+;(prove-lemma STR-P-L-Elim (ELIM)
+;(implies (not (empty x))
+;	 (equal (A (P x) (L x))
+;		x))
+;)
+
+; Late decision, but helpful nonetheless:
+
+(DISABLE EMPTY)
+
+(defn len (x)
+  (if (empty x)
+      0
+      (add1 (len (P x))))
+)
+
+; EQLEN was suggested by Shankar as a way to push BM toward a 
+; better, richer induction scheme.  
+(defn eqlen (x y)
+   (if (and (empty x) (empty y))
+       t
+       (if (or (empty x) (empty y))
+	   f
+	   (eqlen (P x) (P y))))
+)
+
+; the idea is that EQLEN(x,y) <=> |x| = |y| which can be proved, 
+; but should not be used in general..
+(prove-lemma eqlen-is-equal-len (rewrite)
+(equal (eqlen x y)
+       (equal (len x) (len y)))
+)
+(disable eqlen-is-equal-len)
+
+; EQLEN-EMPTY is a KEY inference about EQLEN .
+(prove-lemma eqlen-empty (rewrite)
+(implies (eqlen x y)
+	 (equal (empty x) (empty y)))
+((disable empty))
+)
+
+
+;; Derived constructors:
+
+(defn I (u x)
+  (if (empty x)
+      (A (e) u)
+      (A (I u (P x)) (L x)))
+)
+
+(defn H (x)
+  (if (empty x)
+      (e)  ; just like default values in primitives
+      (if (empty (P x))
+	  (L x)
+	  (H (P x)))
+      ))
+
+(defn B (x)
+  (if (empty x)
+      (e)  ; just like default values in primitives
+      (if (empty (P x))
+	  (e)
+	  (A (B (P x)) (L x)))
+      ))
+
+; Bn is the iteration of B.  Same warnings as for Pn in 
+; th_stringadd.bm apply. Note however that for Pn we used a tail
+; recursive (more efficient) def. whereas here we use a fully
+; recursive def, less efficient, but usually easier to prove things
+; about, since x is fixed in the recursion.  (Clearly, we got a
+; little bit smarter in the many many months which separate the
+; definition of Pn and Bn...)   
+
+(defn Bn (n x)
+  (if (zerop n)
+      x
+      (B (Bn (sub1 n) x))))
+
+
+;;; Fundamental properties of the THEORY of STRINGS; all names 
+;;; prefixed w/ "STR".
+
+;; NOT-EMPTY theorems, which clearly need to know about empty...:
+
+(prove-lemma STR-not-empty-A (rewrite)
+(not (empty (A x u)))
+((enable empty))
+)
+
+; the next 2 lemmas say almost the same thing, but both facts are 
+; helpful to BM
+(prove-lemma STR-not-e-I (rewrite)
+(not (equal (I u x) (e)))
+)
+
+(prove-lemma STR-not-empty-I (rewrite)
+(not (empty (I u x)))
+((enable empty))
+)
+
+;; key commutativity/distributivity properties of A/P/L with I:
+
+; STR-A-I should never coexist with I as they will loop.
+(prove-lemma STR-A-I (rewrite)
+(equal (A (I u x) v)
+       (I u (A x v)))
+((enable empty))
+)
+(disable STR-A-I)
+
+; one additional lemma which is useful for running with I disabled 
+; is:
+
+(prove-lemma STR-I-E (rewrite)
+(equal (I u (e))
+       (A (e) u))
+)
+
+; The 2 theorems STR-P-I and STR-L-I can be written more
+; "powerfully": however they trigger too "agressively" for my 
+; taste, and cause case disjunctions too early at times. So in 
+; general I keep the strong versions disabled.
+; 2/4/89 note: that comment was written when the "2" versions 
+; where physically AFTER the weak versions. Now that they're 
+; before, we may be able to leave them enabled all the time, since
+; BM will try the non-disjunctive rules first...
+
+(prove-lemma STR-P-I2 (rewrite)
+(equal (P (I u x))
+       (if (empty x)
+	   (e)
+	   (I u (P x))))
+)
+(disable STR-P-I2)
+
+(prove-lemma STR-L-I2 (rewrite)
+(equal (L (I u x))
+       (if (empty x)
+	   u
+	   (L x)))
+)
+(disable STR-L-I2)
+
+; also, because of Fundamental Remark in THETA-PRF-35, need 
+; explicit bottom cases:
+
+(prove-lemma STR-P-I-E (rewrite)
+(implies (empty x)
+	 (equal (P (I u x))
+		(e)))
+((enable STR-P-I2))
+)
+
+(prove-lemma STR-P-I (rewrite)
+(implies (not (empty x))
+	 (equal (P (I u x))
+		(I u (P x))))
+((enable STR-P-I2))
+)
+
+(prove-lemma STR-L-I-E (rewrite)
+(implies (empty x)
+	 (equal (L (I u x))
+		u))
+((enable STR-L-I2))
+)
+
+(prove-lemma STR-L-I (rewrite)
+(implies (not (empty x))
+	 (equal (L (I u x))
+		(L x)))
+((enable STR-L-I2))
+)
+
+;; properties (and assorted kludges) of LEN:
+
+; STR-len0-empty helps, and the zero result is always re-obtainable
+; as long as EMPTY and LEN are enabled.
+; Note: we tried to also have the symmetric rule: 
+; (equal (equal 0 (len x)) (empty x))
+; but 1: BM warned us it was useless, and 2: we tried it and it 
+; was useless.
+
+(prove-lemma STR-len0-empty (rewrite) 
+(equal (equal (len x) 0)
+       (empty x))
+)
+
+; on rare occasions we may need the symmetric:
+;(prove-lemma STR-empty-len0 (rewrite) 
+;(equal (empty x)
+;       (equal (len x) 0))
+;)
+; but so far the only time we thought it might help (in PPLFadd,
+; bypassing the impotent use of eq-len hyps by BM) it did not, so..
+
+; STR-len-eq-empty is another symptom of us bad EQLEN handling...
+; Also, it's only useful w/ LEN disabled, of course.
+
+(prove-lemma STR-len-eq-empty (rewrite)
+(implies (equal (len x) (len y))
+	 (equal (equal (empty y) (empty x))
+		T))
+((enable len))
+)
+
+; this back-chaining helps on RARE occasions when you need think:
+; "x can't be empty, we know its length is something (>0)", enable
+; it then.
+; Note that if you can disable len when you use it, it can help 
+; a lot...
+
+(prove-lemma STR-not-empty-len (rewrite)
+(implies (lessp 0 (len x))
+	 (not (empty x)))
+)
+(disable STR-not-empty-len)
+
+; STR-len-P is a hack for LEN in "backwards" contexts, loops 
+; w/ len, of course.
+(prove-lemma STR-len-P (rewrite)
+(implies (lessp 0 (len x))
+	 (equal (len (p x))
+		(sub1 (len x))))
+)
+(disable STR-len-P)
+
+; This is also an "anti-definition" which is useful when we want to
+; prevent LEN being around because of mindless case disjunctions...
+(prove-lemma STR-add1-len-P (rewrite)
+(implies (not (empty x))
+	 (equal (add1 (len (P x)))
+		(len x)))
+)
+(disable STR-add1-len-P)
+
+; This should be used as last resort to force a case disjunction.  
+; Using it globally is like having L-I2 and P-I2 around: they 
+; trigger too agressively, preventing some bigger-formula thms to
+; trigger, and failing.
+; When used, LEN should be disabled, as they will loop together.
+(prove-lemma STR-add1-len-P2 (rewrite)
+(equal (add1 (len (P x)))
+       (if (empty x)
+	   1
+	   (len x)))
+)
+(disable STR-add1-len-P2)
+
+; Another hack which we may use instead of LEN is:
+; Note however, that when testing on IC_times, it resulted to 
+; a passage to len0 to reduce to T instead of arithmetic, taking a
+; lot more time, and different cases, but same total # cases.
+
+(prove-lemma STR-len-E (rewrite)
+(implies (empty x)
+	 (equal (len x) 0)))
+(disable STR-len-E)
+
+; This is yet another hack needed to run with LEN disabled. It's 
+; left on all the time because it won't trigger much.
+
+(prove-lemma STR-len-1 (rewrite)
+(implies (and (not (empty x)) (empty (P x)))
+	 (equal (equal 1 (len x))
+		T))
+)
+
+; STR-len-lessp-1-empty: general effect? doesn't hurt...
+
+(prove-lemma STR-len-lessp-1-empty (rewrite)
+(equal (lessp (len x) 1)
+       (empty x))
+((enable len))
+)
+
+(prove-lemma STR-len-I (rewrite)
+(equal (len (I u x))
+       (add1 (len x)))
+)
+
+(prove-lemma STR-len-P-I (rewrite)
+(equal (len (P (I u x)))
+       (len x))
+)
+
+(prove-lemma STR-len-I-P (rewrite)
+(implies (not (empty x))
+	 (equal (len (I u (P x)))
+		(len x)))
+)
+
+; STR-equal-len-P actually DOES help during IC-S-Plus.  It may hurt
+; under other circumstances, so beware... Note also that the rule
+; has to be written with the extra " equal ... t" so as not to be
+; confused with an attempt to rewrite "len P x" .
+
+(prove-lemma STR-equal-len-P (rewrite)
+(implies (equal (len x) (len y))
+	 (equal (equal (len (P x)) (len (P y)))
+		t))
+)
+
+;; Basic Properties of H/B , essentially what we would have gotten 
+;; in a shell.
+
+(prove-lemma STR-B-decreases (rewrite)
+(implies (not (empty x))
+	 (lessp (count (B x)) (count x)))
+((enable empty))
+)
+
+
+; The reverse of the following theorem would make a fine H/B ELIM 
+; thm if we ever need it.
+
+(prove-lemma STR-I-H-B (rewrite)
+(implies (not (empty x))
+	 (equal (I (H x) (B x))
+		x))
+((enable empty))
+)
+
+(prove-lemma STR-H-I (rewrite)
+(equal (H (I u x))
+       u)
+)
+
+; STR-B-I should be changed to return: if (empty x) (e) x .
+; Note: we could also use SFIX here, but we'd have to 
+; leave it enabled all the time, which so far we have avoided.
+(prove-lemma STR-B-I (rewrite)
+(equal (B (I u x))
+       (if (stringp x) x (e)))
+((enable empty))
+)
+
+; STR-Empty-B is useful because it eliminates a B, and links case 
+; disjunctions.
+(prove-lemma STR-Empty-B (rewrite)
+(equal (empty (B x))
+       (empty (P x)))
+((enable B))
+)
+
+; STR-P-B is our usual P pushthrough
+(prove-lemma STR-P-B (rewrite)
+(equal (P (B x)) 
+       (B (P x)))
+)
+
+
+; STR-L-B doesn't require induction, but it's sometimes useful..
+(prove-lemma STR-L-B (rewrite)
+(implies (not (empty (B x)))
+	 (equal (L (B x))
+		(L x)))
+((enable B))
+)
+
+; STR-Bn-1 for some weird reason, BM doesn't get that by itself...
+
+(prove-lemma STR-Bn-1 (rewrite)
+(equal (Bn 1 x)
+       (B x))
+((expand (Bn 1 x)
+	 ))
+)
+
+; STR-Bn-E: if we used fix, we would have the more general:
+;           if (empty x) ...
+(prove-lemma STR-Bn-E (rewrite)
+(equal (Bn n (e))
+       (e))
+)
+
+
+(prove-lemma STR-P-Bn (rewrite)
+(equal (P (Bn n x))
+       (Bn n (P x)))
+((disable B))
+)
+
+
+; STR-B-Bn-I may not be in its most general form, and we pay for 
+; the fact that for n=0 we use "x" instead of sfix x:
+
+(prove-lemma STR-B-Bn-I (rewrite)
+(implies (stringp x)
+	 (equal (B (BN n (I u x)))
+		(Bn n x)))
+((disable B))
+)
+
+;; properties of H/B w/ Len, probably should be copied largely
+;; from above properties of L/P w/ Len.
+
+; We have the weak version below, but it didn't trigger in 
+; len-Stut-R since we don't have a condition on empty(Stut-R x y).
+; Keeping this one higher should have the right effect of only
+; introducing the case disjunction when needed; it may also do it
+; too much...
+
+(prove-lemma STR-len-B2 (rewrite)
+(equal (len (B x))
+       (if (empty x)
+	   0
+	   (sub1 (len x))))
+)
+
+(prove-lemma STR-len-B (rewrite)
+(implies (not (empty x))
+	 (equal (len (B x))
+		(sub1 (len x))))
+)
+
+
+; STR-len-Bn needs ARIthmetic properties... and is the first such 
+; property which caused ARIthmetic to be loaded before string 
+; theory.
+
+(prove-lemma STR-len-Bn (rewrite)
+(equal (len (Bn n x))
+       (difference (len x) n))
+((enable len) (disable B))
+)
+
+
+; STR-Bn-empty not necessarily phrased in the most universally 
+; useful way..  Probably should be able to disable Bn here...  
+
+(prove-lemma STR-Bn-empty (rewrite)
+(equal (empty (Bn n x))
+       (lessp (len x) (add1 n)))
+((use (STR-len0-empty (x (Bn n x)))) ; to connect emptiness and len=0
+ (disable B len)
+ )
+)
+
+
+; STR-L-Bn needs STR-Bn-Empty, hence its position here.
+(prove-lemma STR-L-BN (rewrite)
+(implies (not (empty (Bn n x)))
+	 (equal (L (Bn n x))
+		(L x)))
+((enable LEN) (disable B))
+)
+
+;;; END OF FUNDAMENTAL PROPERTIES.
+
+;; at this point I is completely characterized, and since BM 
+;; rewrites formulas inside-out, its definition goes against our 
+;; normalization, hence:
+(DISABLE I)
+(ENABLE STR-A-I)
+
+;; and ditto, in general, for H and B:
+(DISABLE H)
+(DISABLE B)
+
+; at this point we should rarely have to use LEN's definition 
+; anymore:
+(DISABLE LEN)
+; ??? Maybe we should enable: (enable STR-add1-len-P) here
+
+; SFIX is the "type fixer" for BM.  We don't really use it much, 
+;      the only place is in SYSD definitions for the (uninteresting
+;      case) when the line variable is none defined, and we could
+;      use S-Id instead, but I think it would give it too much 
+;      meaning.
+; old: (defn sfix (x) (if (stringp x) x (e)))
+; new: proved equivalent to old, and computationally no worse, and
+;      better suited to running with empty disabled:
+
+(defn sfix (x)
+  (if (empty x) (e) x))
+
+; BM doesn't figure that out right away for new def, so...
+
+(prove-lemma sfix-stringp (rewrite)
+(stringp (sfix x))
+((enable empty))
+)
+
+; We prove the key A2 properties for sfix, just like a 
+; combinational, so they don't become an issue in A2-SYSD proofs..
+
+(PROVE-LEMMA A2-E-Sfix (REWRITE) (EQUAL (EQUAL (Sfix X) (E)) (EMPTY X))
+    )
+
+(PROVE-LEMMA A2-EMPTY-Sfix (REWRITE) (EQUAL (EMPTY (Sfix X)) (EMPTY X))
+    ((enable empty)))
+
+(PROVE-LEMMA A2-LP-Sfix (REWRITE) (EQUAL (LEN (Sfix X)) (LEN X))
+    ((enable len)))
+
+(PROVE-LEMMA A2-LPE-Sfix (REWRITE) (EQLEN (Sfix X) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (disable len sfix)))
+
+(PROVE-LEMMA A2-IC-Sfix (REWRITE)
+    (EQUAL (Sfix (I C_X X)) (I C_X (Sfix X)))
+    ((ENABLE I) (DISABLE STR-A-I)))
+
+(PROVE-LEMMA A2-LC-Sfix (REWRITE)
+    (IMPLIES (NOT (EMPTY X)) (EQUAL (L (Sfix X)) (L X)))
+    )
+
+; HISTORICAL NOTE: the fact that we need EMPTY for A2-PC-Sfix is 
+; what held us back so long in A2-PC-Sysds, forcing us to allow 
+; EMPTY there, increasing entropy beyond belief...
+
+(PROVE-LEMMA A2-PC-Sfix (REWRITE) (EQUAL (P (Sfix X)) (Sfix (P X)))
+    ((enable empty))) 
+
+(PROVE-LEMMA A2-HC-Sfix (REWRITE)
+    (IMPLIES (NOT (EMPTY X)) (EQUAL (H (Sfix X)) (H X)))
+    ((ENABLE H)))
+
+(PROVE-LEMMA A2-BC-Sfix (REWRITE) (EQUAL (B (Sfix X)) (Sfix (B X)))
+    ((ENABLE B)))
+
+(PROVE-LEMMA A2-BNC-Sfix (REWRITE)
+    (EQUAL (BN N (Sfix X)) (Sfix (BN N X)))
+    ((enable empty B) (disable STR-BN-EMPTY))
+)
+
+; for all thinkable purposes, sfix is sufficiently characterized:
+(DISABLE sfix)
+
+; eof: th_stringadd.bm
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; TH_STRSPEC.BM: additional string theory with string things 
+;;;     needed in SPECIFICATIONS, as opposed to just sysd 
+;;;     definitions.  This could just have been appended to
+;;;     th_stringadd.bm, but it doesn't feel right, and has some
+;;;     automatically generated pieces, so it didn't look as 
+;;;     "bottom" as Stringadd. 
+;;;
+;;; Functions: S-IF, S-AND, S-OR, S-NOT, S-EQUAL, S-CONST, S-CONSTL
+;;; Predicate: S-BOOLP
+;;; Miscellaneous boolean identities extended to the S versions.
+;;;
+;;; Induction scheme induct-P,P2,P3,P4.
+;;;
+;;; BEWARE (when updating with new versions of Sugar for
+;;; combinationals): Most A2's are automatically generated by 
+;;; Sugar, EXCEPT where expressely noted in the comments, in
+;;; particular for: AND, OR, CONSTL .
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; S-IF is just the STAR of the logical If-Then-Else.  Paillet uses
+;; it a lot.  
+;; The code below is Sugar generated by: (bmcomb 'if '() '(x y z))
+
+(DEFN S-IF (X Y Z)
+      (IF (EMPTY X) (E)
+          (A (S-IF (P X) (P Y) (P Z)) (IF (L X) (L Y) (L Z)))))
+
+;; A2-Begin-S-IF
+
+(PROVE-LEMMA A2-EMPTY-S-IF (REWRITE)
+    (EQUAL (EMPTY (S-IF X Y Z)) (EMPTY X)) ((DISABLE IF)))
+
+(PROVE-LEMMA A2-E-S-IF (REWRITE)
+    (EQUAL (EQUAL (S-IF X Y Z) (E)) (EMPTY X))
+    ((DISABLE S-IF A2-EMPTY-S-IF) (ENABLE EMPTY) (USE (A2-EMPTY-S-IF))))
+
+(PROVE-LEMMA A2-LP-S-IF (REWRITE) (EQUAL (LEN (S-IF X Y Z)) (LEN X))
+    ((DISABLE IF) (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-IF (REWRITE) (EQLEN (S-IF X Y Z) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-IF)))
+
+(PROVE-LEMMA A2-IC-S-IF (REWRITE)
+    (IMPLIES (AND (EQUAL (LEN X) (LEN Y)) (EQUAL (LEN Y) (LEN Z)))
+             (EQUAL (S-IF (I C_X X) (I C_Y Y) (I C_Z Z))
+                    (I (IF C_X C_Y C_Z) (S-IF X Y Z))))
+    ((ENABLE I LEN) (DISABLE STR-A-I IF) (INDUCT (S-IF X Y Z))))
+
+(PROVE-LEMMA A2-LC-S-IF (REWRITE)
+    (IMPLIES (NOT (EMPTY X))
+             (EQUAL (L (S-IF X Y Z)) (IF (L X) (L Y) (L Z))))
+    ((DISABLE IF) (EXPAND (S-IF X Y Z))))
+
+(PROVE-LEMMA A2-PC-S-IF (REWRITE)
+    (EQUAL (P (S-IF X Y Z)) (S-IF (P X) (P Y) (P Z))) ((DISABLE IF)))
+
+(PROVE-LEMMA A2-HC-S-IF (REWRITE)
+    (IMPLIES (AND (NOT (EMPTY X))
+                  (AND (EQUAL (LEN X) (LEN Y)) (EQUAL (LEN Y) (LEN Z))))
+             (EQUAL (H (S-IF X Y Z)) (IF (H X) (H Y) (H Z))))
+    ((DISABLE IF S-IF) (ENABLE H LEN) (INDUCT (S-IF X Y Z))))
+
+(PROVE-LEMMA A2-BC-S-IF (REWRITE)
+    (IMPLIES (AND (EQUAL (LEN X) (LEN Y)) (EQUAL (LEN Y) (LEN Z)))
+             (EQUAL (B (S-IF X Y Z)) (S-IF (B X) (B Y) (B Z))))
+    ((DISABLE IF) (ENABLE B LEN) (INDUCT (S-IF X Y Z))))
+
+(PROVE-LEMMA A2-BNC-S-IF (REWRITE)
+    (IMPLIES (AND (EQUAL (LEN X) (LEN Y)) (EQUAL (LEN Y) (LEN Z)))
+             (EQUAL (BN N (S-IF X Y Z))
+                    (S-IF (BN N X) (BN N Y) (BN N Z))))
+    ((DISABLE IF S-IF)))
+
+;; A2-End-S-IF
+
+
+;; S-AND is just the STAR of the logical AND, put in because of 
+;; Paillet.
+;; The code below is Sugar generated by: (bmcomb 'AND '() '(x y))
+;; Note: we reenable AND by hand everywhere sugar disables it, 
+;; because it's necessary at least for IC and LC.
+
+(DEFN S-AND (X Y)
+      (IF (EMPTY X) (E) (A (S-AND (P X) (P Y)) (AND (L X) (L Y)))))
+
+;; A2-Begin-S-AND
+
+(PROVE-LEMMA A2-EMPTY-S-AND (REWRITE)
+    (EQUAL (EMPTY (S-AND X Y)) (EMPTY X)) )
+
+(PROVE-LEMMA A2-E-S-AND (REWRITE)
+    (EQUAL (EQUAL (S-AND X Y) (E)) (EMPTY X))
+    ((DISABLE S-AND A2-EMPTY-S-AND) (ENABLE EMPTY)
+     (USE (A2-EMPTY-S-AND))))
+
+(PROVE-LEMMA A2-LP-S-AND (REWRITE) (EQUAL (LEN (S-AND X Y)) (LEN X))
+    ( (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-AND (REWRITE) (EQLEN (S-AND X Y) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-AND)))
+
+(PROVE-LEMMA A2-IC-S-AND (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (S-AND (I C_X X) (I C_Y Y))
+                    (I (AND C_X C_Y) (S-AND X Y))))
+    ((ENABLE I LEN) (DISABLE STR-A-I )))
+
+(PROVE-LEMMA A2-LC-S-AND (REWRITE)
+    (IMPLIES (NOT (EMPTY X)) (EQUAL (L (S-AND X Y)) (AND (L X) (L Y))))
+    ( (EXPAND (S-AND X Y))))
+
+(PROVE-LEMMA A2-PC-S-AND (REWRITE)
+    (EQUAL (P (S-AND X Y)) (S-AND (P X) (P Y))) )
+
+(PROVE-LEMMA A2-HC-S-AND (REWRITE)
+    (IMPLIES (AND (NOT (EMPTY X)) (EQUAL (LEN X) (LEN Y)))
+             (EQUAL (H (S-AND X Y)) (AND (H X) (H Y))))
+    ((DISABLE S-AND) (ENABLE H LEN) (INDUCT (S-AND X Y))))
+
+(PROVE-LEMMA A2-BC-S-AND (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (B (S-AND X Y)) (S-AND (B X) (B Y))))
+    ( (ENABLE B LEN) (INDUCT (S-AND X Y))))
+
+(PROVE-LEMMA A2-BNC-S-AND (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (BN N (S-AND X Y)) (S-AND (BN N X) (BN N Y))))
+    ((DISABLE S-AND)))
+
+;; A2-End-S-AND
+
+
+;; S-OR is just the STAR of the logical OR, put in because of 
+;; Paillet.
+;; The code below is Sugar generated by: (bmcomb 'OR '() '(x y))
+;; Note: just like for AND we reenable OR by hand everywhere 
+;; because it's necessary at least for IC and LC.
+
+(DEFN S-OR (X Y)
+      (IF (EMPTY X) (E) (A (S-OR (P X) (P Y)) (OR (L X) (L Y)))))
+
+;; A2-Begin-S-OR
+
+(PROVE-LEMMA A2-EMPTY-S-OR (REWRITE)
+    (EQUAL (EMPTY (S-OR X Y)) (EMPTY X)) )
+
+(PROVE-LEMMA A2-E-S-OR (REWRITE)
+    (EQUAL (EQUAL (S-OR X Y) (E)) (EMPTY X))
+    ((DISABLE S-OR A2-EMPTY-S-OR) (ENABLE EMPTY) (USE (A2-EMPTY-S-OR))))
+
+(PROVE-LEMMA A2-LP-S-OR (REWRITE) (EQUAL (LEN (S-OR X Y)) (LEN X))
+    ( (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-OR (REWRITE) (EQLEN (S-OR X Y) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-OR)))
+
+(PROVE-LEMMA A2-IC-S-OR (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (S-OR (I C_X X) (I C_Y Y))
+                    (I (OR C_X C_Y) (S-OR X Y))))
+    ((ENABLE I LEN) (DISABLE STR-A-I)))
+
+(PROVE-LEMMA A2-LC-S-OR (REWRITE)
+    (IMPLIES (NOT (EMPTY X)) (EQUAL (L (S-OR X Y)) (OR (L X) (L Y))))
+    ( (EXPAND (S-OR X Y))))
+
+(PROVE-LEMMA A2-PC-S-OR (REWRITE)
+    (EQUAL (P (S-OR X Y)) (S-OR (P X) (P Y))) )
+
+(PROVE-LEMMA A2-HC-S-OR (REWRITE)
+    (IMPLIES (AND (NOT (EMPTY X)) (EQUAL (LEN X) (LEN Y)))
+             (EQUAL (H (S-OR X Y)) (OR (H X) (H Y))))
+    ((DISABLE S-OR) (ENABLE H LEN) (INDUCT (S-OR X Y))))
+
+(PROVE-LEMMA A2-BC-S-OR (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (B (S-OR X Y)) (S-OR (B X) (B Y))))
+    ( (ENABLE B LEN) (INDUCT (S-OR X Y))))
+
+(PROVE-LEMMA A2-BNC-S-OR (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (BN N (S-OR X Y)) (S-OR (BN N X) (BN N Y))))
+    ((DISABLE S-OR)))
+
+;; A2-End-S-OR
+
+
+;; S-NOT is just the STAR of the logical NOT, put in because of 
+;; Paillet, but useful in tons of other places!
+;; The code below is Sugar generated by: (bmcomb 'NOT '() '(x))
+
+(DEFN S-NOT (X) (IF (EMPTY X) (E) (A (S-NOT (P X)) (NOT (L X)))))
+
+;; A2-Begin-S-NOT
+
+(PROVE-LEMMA A2-EMPTY-S-NOT (REWRITE)
+    (EQUAL (EMPTY (S-NOT X)) (EMPTY X)) ((DISABLE NOT)))
+
+(PROVE-LEMMA A2-E-S-NOT (REWRITE)
+    (EQUAL (EQUAL (S-NOT X) (E)) (EMPTY X))
+    ((DISABLE S-NOT A2-EMPTY-S-NOT) (ENABLE EMPTY)
+     (USE (A2-EMPTY-S-NOT))))
+
+(PROVE-LEMMA A2-LP-S-NOT (REWRITE) (EQUAL (LEN (S-NOT X)) (LEN X))
+    ((DISABLE NOT) (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-NOT (REWRITE) (EQLEN (S-NOT X) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-NOT)))
+
+(PROVE-LEMMA A2-IC-S-NOT (REWRITE)
+    (EQUAL (S-NOT (I C_X X)) (I (NOT C_X) (S-NOT X)))
+    ((ENABLE I) (DISABLE STR-A-I NOT)))
+
+(PROVE-LEMMA A2-LC-S-NOT (REWRITE)
+    (IMPLIES (NOT (EMPTY X)) (EQUAL (L (S-NOT X)) (NOT (L X))))
+    ((DISABLE NOT) (EXPAND (S-NOT X))))
+
+(PROVE-LEMMA A2-PC-S-NOT (REWRITE) (EQUAL (P (S-NOT X)) (S-NOT (P X)))
+    ((DISABLE NOT)))
+
+(PROVE-LEMMA A2-HC-S-NOT (REWRITE)
+    (IMPLIES (NOT (EMPTY X)) (EQUAL (H (S-NOT X)) (NOT (H X))))
+    ((DISABLE NOT S-NOT) (ENABLE H)))
+
+(PROVE-LEMMA A2-BC-S-NOT (REWRITE) (EQUAL (B (S-NOT X)) (S-NOT (B X)))
+    ((DISABLE NOT) (ENABLE B)))
+
+(PROVE-LEMMA A2-BNC-S-NOT (REWRITE)
+    (EQUAL (BN N (S-NOT X)) (S-NOT (BN N X))) ((DISABLE NOT S-NOT)))
+
+;; A2-End-S-NOT
+
+
+;; S-EQUAL is just the STAR of the logical Equal.  Paillet uses it
+;; a lot.
+;; The code below is Sugar generated by: (bmcomb 'equal '() '(x y))
+
+(DEFN S-EQUAL (X Y)
+      (IF (EMPTY X) (E) (A (S-EQUAL (P X) (P Y)) (EQUAL (L X) (L Y)))))
+
+;; A2-Begin-S-EQUAL
+
+(PROVE-LEMMA A2-EMPTY-S-EQUAL (REWRITE)
+    (EQUAL (EMPTY (S-EQUAL X Y)) (EMPTY X)) ((DISABLE EQUAL)))
+
+(PROVE-LEMMA A2-E-S-EQUAL (REWRITE)
+    (EQUAL (EQUAL (S-EQUAL X Y) (E)) (EMPTY X))
+    ((DISABLE S-EQUAL A2-EMPTY-S-EQUAL) (ENABLE EMPTY)
+     (USE (A2-EMPTY-S-EQUAL))))
+
+(PROVE-LEMMA A2-LP-S-EQUAL (REWRITE)
+    (EQUAL (LEN (S-EQUAL X Y)) (LEN X)) ((DISABLE EQUAL) (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-EQUAL (REWRITE) (EQLEN (S-EQUAL X Y) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-EQUAL)))
+
+(PROVE-LEMMA A2-IC-S-EQUAL (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (S-EQUAL (I C_X X) (I C_Y Y))
+                    (I (EQUAL C_X C_Y) (S-EQUAL X Y))))
+    ((ENABLE I LEN) (DISABLE STR-A-I EQUAL)))
+
+(PROVE-LEMMA A2-LC-S-EQUAL (REWRITE)
+    (IMPLIES (NOT (EMPTY X))
+             (EQUAL (L (S-EQUAL X Y)) (EQUAL (L X) (L Y))))
+    ((DISABLE EQUAL) (EXPAND (S-EQUAL X Y))))
+
+(PROVE-LEMMA A2-PC-S-EQUAL (REWRITE)
+    (EQUAL (P (S-EQUAL X Y)) (S-EQUAL (P X) (P Y))) ((DISABLE EQUAL)))
+
+(PROVE-LEMMA A2-HC-S-EQUAL (REWRITE)
+    (IMPLIES (AND (NOT (EMPTY X)) (EQUAL (LEN X) (LEN Y)))
+             (EQUAL (H (S-EQUAL X Y)) (EQUAL (H X) (H Y))))
+    ((DISABLE EQUAL S-EQUAL) (ENABLE H LEN) (INDUCT (S-EQUAL X Y))))
+
+(PROVE-LEMMA A2-BC-S-EQUAL (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (B (S-EQUAL X Y)) (S-EQUAL (B X) (B Y))))
+    ((DISABLE EQUAL) (ENABLE B LEN) (INDUCT (S-EQUAL X Y))))
+
+(PROVE-LEMMA A2-BNC-S-EQUAL (REWRITE)
+    (IMPLIES (EQUAL (LEN X) (LEN Y))
+             (EQUAL (BN N (S-EQUAL X Y)) (S-EQUAL (BN N X) (BN N Y))))
+    ((DISABLE EQUAL S-EQUAL)))
+
+;; A2-End-S-EQUAL
+
+
+;; S-CONST: CONSTANT combinational element, takes VALue as 
+;;   parameter.  Even though in most circuits this will be 0 or 1,
+;;   it makes no sense to hardwire it for BM.
+
+(defn const (val u) val)  ;we require at least one string argument (MLP sfuns)
+
+; Everything until A2-End-S-CONST Sugar generated by:
+;   (bmcomb 'const '(val) '(x))
+
+(DEFN S-CONST (VAL X)
+      (IF (EMPTY X) (E) (A (S-CONST VAL (P X)) (CONST VAL (L X)))))
+
+;; A2-Begin-S-CONST
+
+(PROVE-LEMMA A2-EMPTY-S-CONST (REWRITE)
+    (EQUAL (EMPTY (S-CONST VAL X)) (EMPTY X)) ((DISABLE CONST)))
+
+(PROVE-LEMMA A2-E-S-CONST (REWRITE)
+    (EQUAL (EQUAL (S-CONST VAL X) (E)) (EMPTY X))
+    ((DISABLE S-CONST A2-EMPTY-S-CONST) (ENABLE EMPTY)
+     (USE (A2-EMPTY-S-CONST))))
+
+(PROVE-LEMMA A2-LP-S-CONST (REWRITE)
+    (EQUAL (LEN (S-CONST VAL X)) (LEN X))
+    ((DISABLE CONST) (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-CONST (REWRITE) (EQLEN (S-CONST VAL X) X)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-CONST)))
+
+(PROVE-LEMMA A2-IC-S-CONST (REWRITE)
+    (EQUAL (S-CONST VAL (I C_X X)) (I (CONST VAL C_X) (S-CONST VAL X)))
+    ((ENABLE I) (DISABLE STR-A-I CONST)))
+
+(PROVE-LEMMA A2-LC-S-CONST (REWRITE)
+    (IMPLIES (NOT (EMPTY X))
+             (EQUAL (L (S-CONST VAL X)) (CONST VAL (L X))))
+    ((DISABLE CONST) (EXPAND (S-CONST VAL X))))
+
+(PROVE-LEMMA A2-PC-S-CONST (REWRITE)
+    (EQUAL (P (S-CONST VAL X)) (S-CONST VAL (P X))) ((DISABLE CONST)))
+
+(PROVE-LEMMA A2-HC-S-CONST (REWRITE)
+    (IMPLIES (NOT (EMPTY X))
+             (EQUAL (H (S-CONST VAL X)) (CONST VAL (H X))))
+    ((DISABLE CONST S-CONST) (ENABLE H)))
+
+(PROVE-LEMMA A2-BC-S-CONST (REWRITE)
+    (EQUAL (B (S-CONST VAL X)) (S-CONST VAL (B X)))
+    ((DISABLE CONST) (ENABLE B)))
+
+(PROVE-LEMMA A2-BNC-S-CONST (REWRITE)
+    (EQUAL (BN N (S-CONST VAL X)) (S-CONST VAL (BN N X)))
+    ((DISABLE CONST S-CONST)))
+
+;; A2-End-S-CONST
+
+; Additional lemmas which give the key properties of S-CONST:
+
+(prove-lemma L-SConst (rewrite)
+(implies (not (empty x))
+	 (equal (L (s-const val x)) val))
+)
+
+; Note that I-SConst remotely descends from the insadd experiment 
+; and the solution that David Goldschlag gave me to that problem 
+; then..
+
+(prove-lemma I-SConst (rewrite)
+(implies (not (empty x))
+	 (equal (I val (s-const val (P x)))
+		(s-const val x)))
+((enable I) (disable STR-A-I))
+)
+
+;; S-CONSTL is like S-Const, except that the length is given 
+;; numerically, and so the definition does NOT follow the standard
+;; S- def.  A2's are therefore generated by hand.
+
+(defn S-ConstL (val n)
+(if (zerop n)
+    (e)
+    (A (S-ConstL val (sub1 n)) val)))
+
+; we need to prove the fundamental sequentiality properties of 
+; S-Const, which are significantly DIFFERENT from the standard, 
+; although I've kept the names since they FUNCTION identically.
+
+(PROVE-LEMMA A2-E-S-ConstL (REWRITE)
+    (EQUAL (EQUAL (S-ConstL VAL n) (E)) (zerop n)) )
+
+(PROVE-LEMMA A2-EMPTY-S-ConstL (REWRITE)
+    (EQUAL (EMPTY (S-ConstL VAL n)) (zerop n)) ((enable empty) ))
+
+(PROVE-LEMMA A2-LP-S-ConstL (REWRITE)
+    (EQUAL (LEN (S-ConstL VAL n)) (fix n)) ((enable len) ))
+
+; no LPE of course
+
+(PROVE-LEMMA A2-LC-S-ConstL (REWRITE)
+    (IMPLIES (NOT (zerop n))
+             (EQUAL (L (S-ConstL VAL n)) VAL))
+    ((expand (s-Constl val n)) ))
+
+(PROVE-LEMMA A2-PC-S-ConstL (REWRITE)
+    (EQUAL (P (S-ConstL VAL n)) (S-ConstL VAL (sub1 n))) )
+
+(PROVE-LEMMA A2-HC-S-ConstL (REWRITE)
+    (IMPLIES (NOT (zerop n))
+             (EQUAL (H (S-ConstL VAL n)) VAL))
+    ((ENABLE H)))
+
+(PROVE-LEMMA A2-BC-S-ConstL (REWRITE)
+    (EQUAL (B (S-ConstL VAL n)) (S-ConstL VAL (sub1 n)))
+    ((ENABLE B)))
+
+; A2-BNC-S-ConstL is a bit deep...  We haven't needed it anywhere, 
+; but we prove it just to show off!  Yeeeahh!
+
+(PROVE-LEMMA A2-BNC-S-ConstL (REWRITE)
+    (EQUAL (BN N (S-ConstL VAL m)) (S-ConstL VAL (difference m n)))
+    ((induct (ARI-add1-induct n)) (enable B))
+    )
+
+; Back in multadd.bm (Paillet#7) we noticed that S-ConstL was quite
+; virulent and counter-productive, i.e. failed proofs expensively, 
+; so:
+
+(DISABLE S-ConstL)
+
+;; BOOLP:
+
+; Note: we experimented w/ Hunt's def: (or (truep u) (falsep u)) 
+; and it doesn't seem to make any difference whatsoever, so we 
+; stick with ours.
+
+(defn boolp (u)
+  (or (equal u T) (equal u F)))
+
+(defn S-boolp (x)
+(if (empty x)
+    (equal x (e))
+    (and (boolp (L x)) (S-boolp (P x))))
+)
+
+; Sometime we just want this weaker fact around, and disabling 
+; S-boolp saves big.
+; Note that S-boolp-P is true even without the hypothesis:
+; (not (empty x)). The question is whether we want it to be applied
+; in cases when that hyp. is not known...
+(prove-lemma S-BoolP-P (rewrite)
+(implies (and (not (empty x)) (S-BoolP x))
+	 (S-Boolp (P x)))
+)
+(disable S-BoolP-P)
+
+
+;;; MISCELLANEOUS BOOLEAN IDENTITIES extended to S versions:
+
+(prove-lemma S-AND-X-X (rewrite)
+(implies (S-boolp x)
+(equal (S-AND x x)
+       x))
+)
+ 
+(prove-lemma S-OR-NOT-X-X (rewrite)
+(implies (S-boolp x)
+(equal (S-OR (S-NOT x) x)
+       (S-CONST T x)))
+)
+
+(prove-lemma S-AND-X-T (rewrite)
+(implies (S-boolp x)
+(equal (S-AND x (S-CONST T x))
+       x))
+)
+
+;;; INDUCTION SCHEMES which correspond to our SYSD definitions and
+;;; theory:
+
+(defn induct-P (x1)
+  (if (empty x1) T
+      (induct-P (P x1))))
+
+(defn induct-P2 (x1 x2)
+  (if (empty x1) T
+      (induct-P2 (P x1) (P x2))))
+
+(defn induct-P3 (x1 x2 x3)
+  (if (empty x1) T
+      (induct-P3 (P x1) (P x2) (P x3))))
+
+(defn induct-P4 (x1 x2 x3 x4)
+  (if (empty x1) T
+      (induct-P4 (P x1) (P x2) (P x3) (P x4))))
+
+; eof: th_strspec.bm
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 				TH_TYPES.BM
+;;;
+;;; This file contains TYPE defns & lemmas for Boyer-Moore, to deal
+;;; with standard hardware coding of booleans, numbers, and others.
+;;; as well of course as their star extensions.
+;;;
+;;; Type: NUMERIC BITS
+;;;   bitp: predicate.
+;;;   bibo: translator: bit to bool (positive logic)
+;;;   bobi: translator: bool to bit (positive logic)
+;;; Note: experimentation (bcdS, bcdSbi) has revealed that this is
+;;;   a BAD way to represent bits.  Booleans are much better.  In
+;;;   an industrial setting, this type could disappear.
+;;;
+
+(defn bitp (u)
+  (or (equal u 0) (equal u 1)) )
+
+(defn S-bitp (x)
+(if (empty x)
+    (equal x (e))
+    (and (bitp (L x)) (S-bitp (P x))))
+)
+
+;; BIBO:
+
+(defn bibo (bi)
+  (if (equal bi 0) f t))
+
+; star extension generated by: (bmcomb 'bibo '() '(bi))
+
+(DEFN S-BIBO (BI)
+      (IF (EMPTY BI) (E) (A (S-BIBO (P BI)) (BIBO (L BI)))))
+
+;; A2-Begin-S-BIBO
+
+(PROVE-LEMMA A2-EMPTY-S-BIBO (REWRITE)
+    (EQUAL (EMPTY (S-BIBO BI)) (EMPTY BI)) ((DISABLE BIBO)))
+
+(PROVE-LEMMA A2-E-S-BIBO (REWRITE)
+    (EQUAL (EQUAL (S-BIBO BI) (E)) (EMPTY BI))
+    ((DISABLE S-BIBO A2-EMPTY-S-BIBO) (ENABLE EMPTY)
+     (USE (A2-EMPTY-S-BIBO))))
+
+(PROVE-LEMMA A2-LP-S-BIBO (REWRITE) (EQUAL (LEN (S-BIBO BI)) (LEN BI))
+    ((DISABLE BIBO) (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-BIBO (REWRITE) (EQLEN (S-BIBO BI) BI)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-BIBO)))
+
+(PROVE-LEMMA A2-IC-S-BIBO (REWRITE)
+    (EQUAL (S-BIBO (I C_BI BI)) (I (BIBO C_BI) (S-BIBO BI)))
+    ((ENABLE I) (DISABLE STR-A-I BIBO)))
+
+(PROVE-LEMMA A2-LC-S-BIBO (REWRITE)
+    (IMPLIES (NOT (EMPTY BI)) (EQUAL (L (S-BIBO BI)) (BIBO (L BI))))
+    ((DISABLE BIBO) (EXPAND (S-BIBO BI))))
+
+(PROVE-LEMMA A2-PC-S-BIBO (REWRITE)
+    (EQUAL (P (S-BIBO BI)) (S-BIBO (P BI))) ((DISABLE BIBO)))
+
+;; A2-End-S-BIBO
+
+;; BOBI:
+
+(defn bobi (bo)
+  (if bo 1 0))
+
+; star extension generated by: (bmcomb 'bobi '() '(bo))
+
+(DEFN S-BOBI (BO)
+      (IF (EMPTY BO) (E) (A (S-BOBI (P BO)) (BOBI (L BO)))))
+
+;; A2-Begin-S-BOBI
+
+(PROVE-LEMMA A2-EMPTY-S-BOBI (REWRITE)
+    (EQUAL (EMPTY (S-BOBI BO)) (EMPTY BO)) ((DISABLE BOBI)))
+
+(PROVE-LEMMA A2-E-S-BOBI (REWRITE)
+    (EQUAL (EQUAL (S-BOBI BO) (E)) (EMPTY BO))
+    ((DISABLE S-BOBI A2-EMPTY-S-BOBI) (ENABLE EMPTY)
+     (USE (A2-EMPTY-S-BOBI))))
+
+(PROVE-LEMMA A2-LP-S-BOBI (REWRITE) (EQUAL (LEN (S-BOBI BO)) (LEN BO))
+    ((DISABLE BOBI) (ENABLE LEN)))
+
+(PROVE-LEMMA A2-LPE-S-BOBI (REWRITE) (EQLEN (S-BOBI BO) BO)
+    ((ENABLE EQLEN-IS-EQUAL-LEN) (DISABLE LEN S-BOBI)))
+
+(PROVE-LEMMA A2-IC-S-BOBI (REWRITE)
+    (EQUAL (S-BOBI (I C_BO BO)) (I (BOBI C_BO) (S-BOBI BO)))
+    ((ENABLE I) (DISABLE STR-A-I BOBI)))
+
+(PROVE-LEMMA A2-LC-S-BOBI (REWRITE)
+    (IMPLIES (NOT (EMPTY BO)) (EQUAL (L (S-BOBI BO)) (BOBI (L BO))))
+    ((DISABLE BOBI) (EXPAND (S-BOBI BO))))
+
+(PROVE-LEMMA A2-PC-S-BOBI (REWRITE)
+    (EQUAL (P (S-BOBI BO)) (S-BOBI (P BO))) ((DISABLE BOBI)))
+
+;; A2-End-S-BOBI
+
+;;; eof: th_types.bm
+
+
+
+(make-lib "mlp" t)
+
+

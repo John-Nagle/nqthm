@@ -1,0 +1,2119 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+; The Formalized Extended Syntax
+
+
+; SECTION: Introduction
+
+; This file, examples/basic/parser.events, is a formalization of
+; the extended syntax as presented in Chapter 4.  We formalize the
+; syntax in the logic itself.  Roughly speaking, for every occur-
+; rence of ``Terminology'' in Chapter 4 there is an admissible
+; function definition here that formalizes the concept defined in
+; Chapter 4.  For example, we formally define what it is to be a
+; ``numeric sequence'' by introducing a function which returns T or
+; F according to whether its argument is such a sequence.
+
+; The outline of our presentation is as follows.  We first develop
+; the notion of a ``token tree.''  Token trees in the logic are re-
+; presented by integers, literal atoms, and list structures.  The
+; text in Chapter 4 then develops the idea of how to ``display'' a
+; token tree.  Here we do the inverse: we formalize the notion of
+; how to parse a token tree from a sequence of ASCII character
+; codes.  This culminates in the definition of READ-TOKEN-TREE
+; which takes a list of character codes and returns either F (in-
+; dicating that the input sequence is unparsable) or a token tree.
+; We then return to the text of Chapter 4 and formalize what it is
+; for a token tree to be ``readable,'' what ``readmacro-expansion''
+; is, and what an ``s-expression'' is.  This part of the formal-
+; ization may illuminate backquote notation for those unfamiliar
+; with it.  We finally define what it is for an s-expression to be
+; ``well-formed'' and what the ``translation'' of such an
+; s-expression is.
+
+; This presentation is meant to clarify the extended syntax.  Thus,
+; it would hardly do to express the formalization in terms of the
+; extended syntax.  We therefore largely confine ourselves here to
+; the formal syntax with the following exceptions:
+
+; 1. We permit ourselves to write natural numbers, e.g., 2, in 
+;    place of their formal equivalents, e.g., (ADD1 (ADD1 (ZERO))).
+
+; 2. We permit ourselves to use QUOTE notation to denote literal
+;    atom constants.  Thus, we write 'ABC where
+;      (PACK (CONS 65 (CONS 66 (CONS 67 0))))
+;    would otherwise be needed.
+
+; 3. We occasionally display list constants in QUOTE notation,
+;    e.g., '(UPPER-B UPPER-O UPPER-X) is written in place of
+;    (CONS 'UPPER-B (CONS 'UPPER-O (CONS 'UPPER-X 'NIL))).  Two
+;    large association lists are displayed with QUOTE notation.
+;    These displays are in conjunction with the definitions of
+;    utility functions whose semantics is intuitively clear, namely
+;    a function that maps from our name for an ASCII character to
+;    its ASCII code and a function that maps from the name of a
+;    function to its arity.
+
+; 4. We permit ourselves to write comments.
+
+; It should be stressed that these are ``exceptions'' only in the
+; sense that they are not part of the formal syntax.  These con-
+; ventions are entirely supported by the extended syntax and we
+; note their use only because they are exceptions to our self-
+; imposed restriction to the formal syntax in this file.
+
+; We have followed the text's style of the definition very closely.
+; This results in a somewhat ``inefficient'' formalization.  For
+; example, it is possible to implement the parsing/readmacro-expan-
+; sion process in a single pass, but we have not done so.  While we
+; feel our use of the logic here is illustrative of ``good usage''
+; the critical reader must keep in mind that we are trying to
+; formalize the ideas as presented in the text and not merely code
+; a parser in the logic.
+
+; This file may be processed with PROVE-FILE and the resulting
+; library may be noted and used in R-LOOP to experiment with the
+; syntax.  We recommend that the library be compiled.  If the Nqthm
+; installer has so processed the file, the library file may already
+; exist as examples/basic/parser.  This source file also contains
+; ``commented out'' Common Lisp code that permits more convenient
+; experimentation.  Search for occurrences of ``defun'' to find the
+; two regions in question.
+
+; Finally, this file serves as a good example of a fairly substan-
+; tial Nqthm formalization effort.  We recommend it even to readers
+; who know the syntax but who wish to see how Nqthm is used to
+; formalize ideas that are already precisely (but informally)
+; understood.  We urge such readers to compare the formal defini-
+; tions with the corresponding informal definitions of Chapter 4.
+
+; We start by initializing Nqthm's data base to the GROUND-ZERO
+; theory.
+
+(BOOT-STRAP NQTHM)
+
+
+; SECTION: Conventions Concerning Characters
+
+; In the text we imagine that we have integers, characters and
+; sequences of characters as our atoms.  We then build token trees
+; as sequences of these atoms and other token trees.  Thus, the
+; sequence consisting of 65, 66, and 67 is uniquely recognized as
+; being a sequence of integers, while the sequence consisting of
+; the characters A, B, and C, is recognized as being a word.
+
+; But in this formalization, we do not have characters and in fact
+; we use their ASCII codes instead.  But the ASCII codes are them-
+; selves integers.  Thus, the sequence containing 65, 66, and 67 is
+; ambiguous as a token tree: is it a tree containing three integers
+; or is it a tree containing the word ABC?  Fortunately, characters
+; never enter token trees except as the elements of words and the
+; various tokens.  Therefore, in this formalization we use LITATOMs
+; to represent the words and the tokens.  That is, where the text
+; represents the word ABC as a sequence consisting of the char-
+; acters A, B, and C, the formalization will represent it as a
+; LITATOM obtained by PACKing the ASCII codes for A, B, and C
+; (around a 0).  Similarly, the backquote token in the text is the
+; sequence consisting of the backquote character, but here it is
+; the LITATOM obtained by packing the ASCII code for that character
+; (around a 0).
+
+; We first make it convenient to refer to the ASCII character code
+; of all the printable characters.  We will invent a name for each
+; character, e.g., UPPER-A, LOWER-B, OPEN-PAREN, and define (ASCII
+; name) to be the ASCII integer code for the named character.  Thus
+; (ASCII 'UPPER-A) will be 65.  We will also define ASCII so that
+; when given a list of names it returns the list of ASCII codes for
+; the characters named in the list.  Thus, (ASCII '(UPPER-A
+; LOWER-A)) will be '(65 97).  This is just a clumsy way to circumvent
+; the omission of character strings from Nqthm's universe of objects.
+
+; The codes we assign to TAB, NEWLINE, PAGE, SPACE, and RUBOUT are
+; those used in AKCL; typically those codes vary from one Common
+; Lisp to another.  This variance is not important to our
+; formalization, as we are just assigning unique integers to
+; certain character names known to our function ASCII.  For
+; example, even in a Lisp assigning #\Newline a code other than 10,
+; our ASCII function will assign NEWLINE the code 10 and our parser
+; will execute as intended on ``strings'' obtained by writing
+; (ASCII '(... NEWLINE ...)).  However, the user wishing to
+; experiment with the parser may wish to write a Lisp utility that
+; converts user typein into lists of character codes, so as to
+; avoid the use of our clumsy ASCII function.  Care must be taken
+; in the definition of such a utility so that the first five
+; characters listed below are assigned the codes shown.
+
+; The names and their ASCII codes are given in the following
+; association list:
+
+(DEFN ASCII-TABLE NIL
+  '((TAB		. 9)
+    (NEWLINE		. 10)
+    (PAGE		. 12)
+    (SPACE		. 32)
+    (RUBOUT		. 127)
+    (EXCLAMATION-POINT	. 33)		; !
+    (DOUBLE-QUOTE	. 34)		; "
+    (NUMBER-SIGN	. 35)		; #
+    (DOLLAR-SIGN	. 36)		; $
+    (PERCENT-SIGN	. 37)		; %
+    (AMPERSAND		. 38)		; &
+    (SINGLE-QUOTE	. 39)		; '
+    (OPEN-PAREN		. 40)		; (
+    (CLOSE-PAREN	. 41)		; )
+    (ASTERISK		. 42)		; *
+    (PLUS-SIGN		. 43)		; +
+    (COMMA		. 44)		; ,
+    (MINUS-SIGN		. 45)		; -
+    (DOT		. 46)		; .
+    (SLASH		. 47)		; /
+    (DIGIT-ZERO		. 48)		; 0
+    (DIGIT-ONE		. 49)		; 1
+    (DIGIT-TWO		. 50)		; 2
+    (DIGIT-THREE	. 51)		; 3
+    (DIGIT-FOUR		. 52)		; 4
+    (DIGIT-FIVE		. 53)		; 5
+    (DIGIT-SIX		. 54)		; 6
+    (DIGIT-SEVEN	. 55)		; 7
+    (DIGIT-EIGHT	. 56)		; 8
+    (DIGIT-NINE		. 57)		; 9
+    (COLON		. 58)		; :
+    (SEMICOLON		. 59)		; ;
+    (LESS-THAN-SIGN	. 60)		; <
+    (EQUAL-SIGN		. 61)		; =
+    (GREATER-THAN-SIGN	. 62)		; >
+    (QUESTION-MARK	. 63)		; ?
+    (AT-SIGN		. 64)		; @
+    (UPPER-A		. 65)		; A
+    (UPPER-B		. 66)		; B
+    (UPPER-C		. 67)		; C
+    (UPPER-D		. 68)		; D
+    (UPPER-E		. 69)		; E
+    (UPPER-F		. 70)		; F
+    (UPPER-G		. 71)		; G
+    (UPPER-H		. 72)		; H
+    (UPPER-I		. 73)		; I
+    (UPPER-J		. 74)		; J
+    (UPPER-K		. 75)		; K
+    (UPPER-L		. 76)		; L
+    (UPPER-M		. 77)		; M
+    (UPPER-N		. 78)		; N
+    (UPPER-O		. 79)		; O
+    (UPPER-P		. 80)		; P
+    (UPPER-Q		. 81)		; Q
+    (UPPER-R		. 82)		; R
+    (UPPER-S		. 83)		; S
+    (UPPER-T		. 84)		; T
+    (UPPER-U		. 85)		; U
+    (UPPER-V		. 86)		; V
+    (UPPER-W		. 87)		; W
+    (UPPER-X		. 88)		; X
+    (UPPER-Y		. 89)		; Y
+    (UPPER-Z		. 90)		; Z
+    (OPEN-BRACKET	. 91)		; [
+    (BACKSLASH		. 92)		; \
+    (CLOSE-BRACKET	. 93)		; ]
+    (UPARROW		. 94)		; ^
+    (UNDERSCORE		. 95)		; _
+    (BACKQUOTE		. 96)		; `
+    (LOWER-A		. 97)		; a
+    (LOWER-B		. 98)		; b
+    (LOWER-C		. 99)		; c
+    (LOWER-D		. 100)		; d
+    (LOWER-E		. 101)		; e
+    (LOWER-F		. 102)		; f
+    (LOWER-G		. 103)		; g
+    (LOWER-H		. 104)		; h
+    (LOWER-I		. 105)		; i
+    (LOWER-J		. 106)		; j
+    (LOWER-K		. 107)		; k
+    (LOWER-L		. 108)		; l
+    (LOWER-M		. 109)		; m
+    (LOWER-N		. 110)		; n
+    (LOWER-O		. 111)		; o
+    (LOWER-P		. 112)		; p
+    (LOWER-Q		. 113)		; q
+    (LOWER-R		. 114)		; r
+    (LOWER-S		. 115)		; s
+    (LOWER-T		. 116)		; t
+    (LOWER-U		. 117)		; u
+    (LOWER-V		. 118)		; v
+    (LOWER-W		. 119)		; w
+    (LOWER-X		. 120)		; x
+    (LOWER-Y		. 121)		; y
+    (LOWER-Z		. 122)		; z
+    (OPEN-BRACE		. 123)		; {
+    (VERTICAL-BAR	. 124)		; |
+    (CLOSE-BRACE	. 125)		; }
+    (TILDE		. 126)))	; ~
+
+(DEFN ASCII-LIST (LST)
+  (IF (NLISTP LST)
+      NIL
+      (CONS (CDR (ASSOC (CAR LST) (ASCII-TABLE)))
+	    (ASCII-LIST (CDR LST)))))
+
+(DEFN ASCII (X)
+  (IF (LITATOM X)
+      (CDR (ASSOC X (ASCII-TABLE)))
+      (ASCII-LIST X)))
+
+; So now we can write (ASCII 'UPPER-A) for 65 and 
+; (ASCII '(UPPER-A LOWER-A)) for '(65 97).
+
+
+; SECTION: Token Trees
+
+(DEFN UPPER-DIGITS NIL
+  (ASCII '(DIGIT-ZERO
+	   DIGIT-ONE
+	   DIGIT-TWO
+	   DIGIT-THREE
+	   DIGIT-FOUR
+	   DIGIT-FIVE
+	   DIGIT-SIX
+	   DIGIT-SEVEN
+	   DIGIT-EIGHT
+	   DIGIT-NINE
+	   UPPER-A
+	   UPPER-B
+	   UPPER-C
+	   UPPER-D
+	   UPPER-E
+	   UPPER-F)))
+
+; We define (CADRN n LST) to be equivalent to (CADD...DR LST) where
+; the number of D's is n.  Thus, (CADRN 2 LST) is (CADDR LST).  An-
+; other way to think about CADRN is that it returns the Nth element
+; of LST using 0-based enumeration, e.g., (CADRN 3 '(A B C D E F))
+; is 'D.
+
+(DEFN CDRN (N LST)
+  (IF (ZEROP N)
+      LST
+      (CDRN (SUB1 N) (CDR LST))))
+
+(DEFN CADRN (N LST) (CAR (CDRN N LST)))
+
+; It is also convenient to have
+
+(DEFN LIST1 (X) (CONS X NIL))
+(DEFN LIST2 (X Y) (CONS X (LIST1 Y)))
+(DEFN LIST3 (X Y Z) (CONS X (LIST2 Y Z)))
+
+; because we are eschewing the use of the abbreviation LIST.
+
+(DEFN FIRST-N (N LST)
+  (IF (ZEROP N)
+      NIL
+      (CONS (CAR LST)
+	    (FIRST-N (SUB1 N) (CDR LST)))))
+
+(DEFN BASE-N-DIGIT-CHARACTER (N C)
+  (AND (LEQ N 16)
+       (MEMBER C (FIRST-N N (UPPER-DIGITS)))))
+
+(DEFN POSITION (X LST)
+  (IF (NLISTP LST)
+      0
+      (IF (EQUAL X (CAR LST))
+	  0
+	  (ADD1 (POSITION X (CDR LST))))))
+
+(DEFN BASE-N-DIGIT-VALUE (C)
+  (POSITION C (UPPER-DIGITS)))
+
+(DEFN ALL-BASE-N-DIGIT-CHARACTERS (N LST)
+  (IF (NLISTP LST)
+      T
+      (AND (BASE-N-DIGIT-CHARACTER N (CAR LST))
+	   (ALL-BASE-N-DIGIT-CHARACTERS N (CDR LST)))))
+
+(DEFN BASE-N-DIGIT-SEQUENCE (N LST)
+  (AND (LISTP LST)
+       (ALL-BASE-N-DIGIT-CHARACTERS N LST)))
+
+(DEFN OPTIONALLY-SIGNED-BASE-N-DIGIT-SEQUENCE (N LST)
+  (OR (BASE-N-DIGIT-SEQUENCE N LST)
+      (AND (LISTP LST)
+       (AND (OR (EQUAL (CAR LST) (ASCII 'PLUS-SIGN))
+                (EQUAL (CAR LST) (ASCII 'MINUS-SIGN)))
+            (BASE-N-DIGIT-SEQUENCE N (CDR LST))))))
+
+(DEFN LENGTH (LST)
+  (IF (NLISTP LST)
+      0
+      (ADD1 (LENGTH (CDR LST)))))
+
+(DEFN EXP (I J)
+  (IF (ZEROP J)
+      1
+      (TIMES I (EXP I (SUB1 J)))))
+
+(DEFN BASE-N-VALUE (N LST)
+  (IF (NLISTP LST)
+      0
+      (PLUS (TIMES (BASE-N-DIGIT-VALUE (CAR LST))
+		   (EXP N (LENGTH (CDR LST))))
+	    (BASE-N-VALUE N (CDR LST)))))
+
+(DEFN NUMERATOR-SEQUENCE (LST)
+  (IF (NLISTP LST)
+      NIL
+      (IF (EQUAL (CAR LST) (ASCII 'SLASH))
+	  NIL
+	  (CONS (CAR LST)
+		(NUMERATOR-SEQUENCE (CDR LST))))))
+
+(DEFN DENOMINATOR-SEQUENCE (LST)
+  (IF (NLISTP LST)
+      NIL
+      (IF (EQUAL (CAR LST) (ASCII 'SLASH))
+	  (CDR LST)
+	  (DENOMINATOR-SEQUENCE (CDR LST)))))
+
+(DEFN BASE-N-SIGNED-VALUE (N LST)
+  (IF (EQUAL (CAR LST) (ASCII 'MINUS-SIGN))
+      (MINUS (BASE-N-VALUE N (CDR LST)))
+      (IF (EQUAL (CAR LST) (ASCII 'PLUS-SIGN))
+	  (BASE-N-VALUE N (CDR LST))
+	  (BASE-N-VALUE N LST))))
+
+(DEFN NUMBER-SIGN-SEQUENCE (LST)
+  (AND (GEQ (LENGTH LST) 3)
+       (EQUAL (CAR LST) (ASCII 'NUMBER-SIGN))
+       (MEMBER (CADRN 1 LST)
+	       (ASCII '(UPPER-B UPPER-O UPPER-X)))
+       (OPTIONALLY-SIGNED-BASE-N-DIGIT-SEQUENCE
+	(IF (EQUAL (CADRN 1 LST) (ASCII 'UPPER-B))
+	    2
+	    (IF (EQUAL (CADRN 1 LST) (ASCII 'UPPER-O))
+		8
+		16))
+	(CDR (CDR LST)))))
+
+(DEFN LAST (LST)
+  (IF (NLISTP LST)
+      LST
+      (IF (NLISTP (CDR LST))
+	  LST
+	  (LAST (CDR LST)))))
+
+(DEFN ALL-BUT-LAST (LST)
+  (IF (NLISTP LST)
+      NIL
+      (IF (NLISTP (CDR LST))
+	  NIL
+	  (CONS (CAR LST)
+		(ALL-BUT-LAST (CDR LST))))))
+
+(DEFN NUMERIC-SEQUENCE (LST)
+  (OR (OPTIONALLY-SIGNED-BASE-N-DIGIT-SEQUENCE 10 LST)
+      (OR (AND (EQUAL (CAR (LAST LST)) (ASCII 'DOT))
+	       (OPTIONALLY-SIGNED-BASE-N-DIGIT-SEQUENCE
+                 10
+                 (ALL-BUT-LAST LST)))
+	  (NUMBER-SIGN-SEQUENCE LST))))
+	   
+(DEFN NUMERIC-VALUE (LST)
+  (IF (OPTIONALLY-SIGNED-BASE-N-DIGIT-SEQUENCE 10 LST)
+      (BASE-N-SIGNED-VALUE 10 LST)
+      (IF (EQUAL (CAR (LAST LST)) (ASCII 'DOT))
+	  (BASE-N-SIGNED-VALUE 10 (ALL-BUT-LAST LST))
+	  (BASE-N-SIGNED-VALUE
+	   (IF (EQUAL (CADRN 1 LST) (ASCII 'UPPER-B))
+	       2
+	       (IF (EQUAL (CADRN 1 LST) (ASCII 'UPPER-O))
+		   8
+		   16))
+	   (CDR (CDR LST))))))
+
+(DEFN SINGLE-QUOTE-TOKEN  () (PACK (CONS (ASCII 'SINGLE-QUOTE) 0)))
+(DEFN BACKQUOTE-TOKEN     () (PACK (CONS (ASCII 'BACKQUOTE) 0)))
+(DEFN DOT-TOKEN           () (PACK (CONS (ASCII 'DOT) 0)))
+(DEFN COMMA-TOKEN         () (PACK (CONS (ASCII 'COMMA) 0)))
+(DEFN COMMA-AT-SIGN-TOKEN () (PACK (CONS (ASCII 'COMMA)
+				    (CONS (ASCII 'AT-SIGN) 0))))
+(DEFN COMMA-DOT-TOKEN     () (PACK (CONS (ASCII 'COMMA)
+				    (CONS (ASCII 'DOT) 0))))
+
+(DEFN WORD-CHARACTERS ()
+  (ASCII
+   '(UPPER-A UPPER-B UPPER-C UPPER-D UPPER-E UPPER-F UPPER-G
+     UPPER-H UPPER-I UPPER-J UPPER-K UPPER-L UPPER-M UPPER-N
+     UPPER-O UPPER-P UPPER-Q UPPER-R UPPER-S UPPER-T UPPER-U
+     UPPER-V UPPER-W UPPER-X UPPER-Y UPPER-Z 
+     DIGIT-ZERO DIGIT-ONE DIGIT-TWO DIGIT-THREE DIGIT-FOUR
+     DIGIT-FIVE DIGIT-SIX DIGIT-SEVEN DIGIT-EIGHT DIGIT-NINE
+     DOLLAR-SIGN UPARROW AMPERSAND ASTERISK UNDERSCORE
+     MINUS-SIGN PLUS-SIGN EQUAL-SIGN TILDE OPEN-BRACE CLOSE-BRACE
+     QUESTION-MARK LESS-THAN-SIGN GREATER-THAN-SIGN)))
+
+(DEFN SUBSETP (X Y)
+  (IF (NLISTP X)
+      T
+      (IF (MEMBER (CAR X) Y)
+	  (SUBSETP (CDR X) Y)
+	  F)))
+
+(DEFN WORD (S)
+  (AND (LITATOM S)
+       (OR (NUMERIC-SEQUENCE (UNPACK S))
+	   (AND (LISTP (UNPACK S))
+		(SUBSETP (UNPACK S) (WORD-CHARACTERS))))))
+
+; It is convenient to be able to recognize those words that are
+; numeric sequences and to talk about their numeric values, without
+; having to think about unpacking them.  So we define NUMERIC-WORD
+; and NUMERIC-WORD-VALUE and use them below where the text would
+; have us use ``numeric sequence'' and ``numeric value.''
+
+(DEFN NUMERIC-WORD (S)
+  (AND (LITATOM S)
+       (NUMERIC-SEQUENCE (UNPACK S))))
+
+(DEFN NUMERIC-WORD-VALUE (S)
+  (NUMERIC-VALUE (UNPACK S)))
+
+(DEFN INTEGERP (X)
+  (OR (NUMBERP X)
+      (NEGATIVEP X)))
+
+(DEFN SPECIAL-TOKEN (X)
+  (OR (EQUAL X (SINGLE-QUOTE-TOKEN))
+   (OR (EQUAL X (BACKQUOTE-TOKEN))
+    (OR (EQUAL X (COMMA-TOKEN))
+     (OR (EQUAL X (COMMA-AT-SIGN-TOKEN))
+	 (EQUAL X (COMMA-DOT-TOKEN)))))))
+
+; The following function can be used as follows.  If we test
+; (EQLEN X 3) then we know that lst is of the form (x1 x2 x3).
+
+(DEFN EQLEN (LST N)
+  (IF (ZEROP N)
+      (EQUAL LST NIL)
+      (IF (NLISTP LST)
+	  F
+	  (EQLEN (CDR LST) (SUB1 N)))))
+
+(DEFN DOTTED-PAIR (X)
+  (AND (EQLEN X 3)
+       (EQUAL (CADRN 1 X) (DOT-TOKEN))))
+
+(DEFN DOTTED-S-EXPRESSION (X)
+  (IF (NLISTP X)
+      F
+      (IF (DOTTED-PAIR X)
+	  T
+	  (DOTTED-S-EXPRESSION (CDR X)))))
+
+(DEFN SINGLETON (X)
+  (EQLEN X 1))
+
+; We use the following lemma to make the CADRNs go away during the
+; termination proof for TOKEN-TREE.
+
+(PROVE-LEMMA CDRN-EXPANDER (REWRITE)
+  (EQUAL (CDRN (ADD1 N) X) (CDRN N (CDR X))))
+
+; Now we define token trees formally.  We use the logic's LISTPs,
+; together with the integers, words and tokens (the last two being
+; LITATOMs), to represent token trees.  We are faithful to the
+; text's style of representing dotted token trees by lists whose
+; second-to-last elements are the dot token.  That is, we don't
+; represent such trees by dotted pairs in the logic.  (This would
+; not work because the token tree (A B . (C D E)) is legitimate and
+; is different from (A B C D E).  The text permits such token trees
+; since they may be typed.  They readmacro-expand to the same
+; s-expression.)  However, we do not define ``token tree'' in quite
+; the same style as the text, though the result is the same.  The
+; text recognizes undotted and dotted token trees ``from the
+; outside'' -- e.g., an undotted token tree is a nonempty sequence
+; of token trees and a dotted one is similar but has a dot as its
+; second-to-last element.  To define token trees formally this way
+; we would need to use mutual recursion.  Rather than do that, we
+; just recurse down dotted and undotted lists and catch the dot
+; when we come to it.
+
+(DEFN TOKEN-TREE (X)
+  (IF (NLISTP X)
+      (OR (INTEGERP X)
+	  (WORD X))
+  (IF (AND (SPECIAL-TOKEN (CAR X))
+	   (EQUAL (LENGTH X) 2))
+      (TOKEN-TREE (CADRN 1 X))
+  (IF (DOTTED-PAIR X)
+      (AND (TOKEN-TREE (CAR X))
+	   (TOKEN-TREE (CADRN 2 X)))
+  (IF (SINGLETON X)
+      (TOKEN-TREE (CAR X))
+      (AND (TOKEN-TREE (CAR X))
+	   (TOKEN-TREE (CDR X))))))))
+
+; We define a few functions to make token tree manipulation and
+; recognition easier.
+
+(DEFN SPECIAL-TOKEN-TREE (X)
+  (SPECIAL-TOKEN (CAR X)))
+
+(DEFN SINGLE-QUOTE-TOKEN-TREE (X)
+  (EQUAL (CAR X) (SINGLE-QUOTE-TOKEN)))
+
+(DEFN BACKQUOTE-TOKEN-TREE (X)
+  (EQUAL (CAR X) (BACKQUOTE-TOKEN)))
+
+(DEFN COMMA-ESCAPE-TOKEN-TREE (X)
+  (EQUAL (CAR X) (COMMA-TOKEN)))
+
+(DEFN SPLICE-ESCAPE-TOKEN-TREE (X)
+  (OR (EQUAL (CAR X) (COMMA-AT-SIGN-TOKEN))
+      (EQUAL (CAR X) (COMMA-DOT-TOKEN))))
+
+(DEFN CONSTITUENT (X) (CADRN 1 X))
+
+
+; SECTION:  Reading Token Trees
+
+; At this point in the text, we define how to display a token tree.
+; We will skip that here and instead formalize the process of pars-
+; ing a token tree from a sequence of characters (i.e., from a dis-
+; play of one).
+
+; Our parser is reminiscent of Lisp's read routine with several im-
+; portant exceptions.  We do not deal with readmacros in our parser
+; -- that is the job of readmacro-expansion (defined later).  We
+; also do not produce dotted pairs but rather lists containing the
+; dot token.  Finally, we can produce ``unreadable'' token trees
+; such as parsed from (PLUS ,X B).
+
+; The parser is called READ-TOKEN-TREE and it is implemented in two
+; passes.  The first pass transforms a list of ASCII character
+; codes into a list of lexemes.  In our case, all the lexemes are
+; LITATOMs, including the numeric sequences that look like inte-
+; gers, i.e., we resolve the ambiguity in ``display'' by always
+; using numeric sequences.  The second pass parses the lexemes into
+; a tree.  In fact, the parser can produce trees that are not token
+; trees, such as the one produced by parsing (PLUS # B).  This
+; ``pseudo-token tree'' fails to be a token tree because one of the
+; atoms in it that ``should'' be a word is not a word.  READ-TOKEN-
+; TREE therefore calls the predicate TOKEN-TREE on the parsed tree
+; to determine whether the parse was successful.
+
+
+; SUBSECTION: Pass I of the Reader
+
+; We give convenient names to the lexemes for open and close
+; parentheses.  We could call these ``tokens'' but don't want to
+; confuse them with the tokens of the text.  The lexemes for the
+; tokens, e.g., the dot lexeme, will be the tokens themselves,
+; e.g., the value of (DOT-TOKEN).
+
+(DEFN OPEN-PAREN   () (PACK (CONS (ASCII 'OPEN-PAREN) 0)))
+(DEFN CLOSE-PAREN  () (PACK (CONS (ASCII 'CLOSE-PAREN) 0)))
+
+; The following function scans past characters until it has passed
+; the first newline character.  It is used to scan past semicolon
+; comment.  It returns the stream starting just after that newline.
+; If no newline is found, it returns the empty stream.  The ques-
+; tion then arises: was the comment that started this scan well-
+; formed or not?  It is missing its final newline.  It turns out
+; that Common Lisp's answer to this is that it is ok.  That is, a
+; file can end without there being a final newline on the end of a
+; comment on the last line of the file.  The text of Chapter 4 does
+; not deal with this issue.
+
+(DEFN SKIP-PAST-NEWLINE (STREAM)
+  (IF (NLISTP STREAM)
+      STREAM
+      (IF (EQUAL (CAR STREAM) (ASCII 'NEWLINE))
+	  (CDR STREAM)
+	  (SKIP-PAST-NEWLINE (CDR STREAM)))))
+
+; The lexical analyzer will sometimes recurse using this function
+; to ``decrement'' the input stream.  We must prove that the stream
+; returned is weakly smaller (the semicolon that starts the
+; comment will have already been stripped off by an explicit CDR).
+; We measure size here with LENGTH instead of COUNT because COUNT
+; doesn't decrease for all of the recursions (see the next function
+; definition).
+
+(PROVE-LEMMA LESSP-SKIP-PAST-NEWLINE (REWRITE)
+  (NOT (LESSP (LENGTH STREAM)
+	      (LENGTH (SKIP-PAST-NEWLINE STREAM)))))
+
+; The next function scans for the end of a just-opened #-comment.
+; The function returns the stream just past the closing sequence of
+; the comment.  The variable I below counts the number of ``open''
+; #| sequences we have seen.  We do not stop until we see a |#
+; sequence that closes that one, i.e., decrements I to 0.  I is
+; initially 1 because we call this function after reading the
+; opening sequence.  Note that this function will scan the entire
+; input stream if the balancing sequence is not present.  This is
+; treated as an error by Common Lisp.  We therefore have the
+; problem of signalling this error.  If we return the empty stream,
+; it is indistinguishable from a well-formed comment that ends at
+; the very end of the stream.  We therefore use a trick: we return
+; the stream containing a single open parenthesis character.  This
+; character will cause the lexical analyzer to put an unbalanced
+; open parenthesis lexeme as the last lexeme in the stream fed to
+; the parser.  That, in turn, will cause an error.  We also signal
+; such an error if we find too many |# sequences.  A minor tech-
+; nical problem arises: to insure that the lexical analyzer can
+; recurse with this skipping function, we have to make sure the
+; size of the stream we return is less than the one the lexical
+; analyzer started with.  Since the analyzer will have CDRd past
+; the opening #| our adding a single open parenthesis in the place
+; of those two characters will not matter -- if we measure the size
+; of the stream with LENGTH!  If we were to measure with COUNT, we
+; would have to worry about the size of the various ASCII codes and
+; about the object in the final CDR of the stream.
+
+(DEFN SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN (STREAM I)
+  (IF (NLISTP STREAM)
+      (CONS (ASCII 'OPEN-PAREN) STREAM)
+  (IF (AND (EQUAL (CAR STREAM) (ASCII 'NUMBER-SIGN))
+           (EQUAL (CADRN 1 STREAM) (ASCII 'VERTICAL-BAR)))
+      (SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+       (CDRN 2 STREAM)
+       (ADD1 I))
+  (IF (AND (EQUAL (CAR STREAM) (ASCII 'VERTICAL-BAR))
+           (EQUAL (CADRN 1 STREAM) (ASCII 'NUMBER-SIGN)))
+      (IF (EQUAL I 0)
+          (CONS (ASCII 'OPEN-PAREN) (CDRN 2 STREAM))
+          (IF (EQUAL I 1)
+              (CDRN 2 STREAM)
+              (SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+               (CDRN 2 STREAM)
+               (SUB1 I))))
+      (SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+       (CDR STREAM)
+       I)))))
+
+; This is the key inductive fact about the relative LENGTHs of the
+; input and output of the function above:
+
+(PROVE-LEMMA SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN-LEMMA
+  (REWRITE)
+  (NOT (LESSP
+        (ADD1 (LENGTH STREAM))
+        (LENGTH (SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+                 STREAM
+                 I)))))
+
+; However, this is the actual theorem we need to admit the lexical
+; analyzer (eventually) below:
+
+(PROVE-LEMMA LESSP-SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+  (REWRITE)
+  (IMPLIES (AND (LISTP STREAM)
+                (AND (EQUAL (CAR STREAM) (ASCII 'NUMBER-SIGN))
+                     (EQUAL (CADR STREAM) (ASCII 'VERTICAL-BAR))))
+           (LESSP
+            (LENGTH
+             (SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+              (CDDR STREAM)
+              1))
+            (LENGTH STREAM))))
+
+; To recognize white space we need:
+
+(DEFN WHITE-SPACEP (C)
+  (MEMBER C (ASCII '(SPACE TAB NEWLINE))))
+
+; We will accumulate the characters in a lexeme in a list (with a 0
+; at the bottom) and when we have a completed lexeme we will add it
+; to a growing list of lexemes.  The characters are accumulated in
+; reverse order.  The empty lexeme is never added to the list.
+
+(DEFN REV1 (LST ANS)
+  (IF (NLISTP LST)
+      ANS
+      (REV1 (CDR LST) (CONS (CAR LST) ANS))))
+
+(DEFN EMIT (PNAME LST)
+  (IF (EQUAL PNAME 0)
+      LST
+      (CONS (PACK (REV1 PNAME 0)) LST)))
+
+; The following function maps lower case alphabetic characters into
+; their upper case counterparts.  Thus, (UPCASE (ASCII 'LOWER-A))
+; is (ASCII 'UPPER-A), etc.  UPCASE is the identity function on
+; characters other than LOWER-A through LOWER-Z.
+
+(DEFN UPCASE (C)
+  (IF (AND (LEQ (ASCII 'LOWER-A) C)
+	   (LEQ C (ASCII 'LOWER-Z)))
+      (DIFFERENCE C (DIFFERENCE (ASCII 'LOWER-A) (ASCII 'UPPER-A)))
+      C))
+
+; Here then is the lexical analyzer, pass I of the parser.  The
+; function returns a list of lexemes parsed from stream, which is a
+; list of ASCII codes.  PNAME is the lexeme currently being
+; assembled.  It is 0 when ``empty.''
+
+(DEFN LEXEMES (STREAM PNAME)
+  (IF (NLISTP STREAM)
+      (EMIT PNAME NIL)
+  (IF (EQUAL (CAR STREAM) (ASCII 'SEMICOLON))
+
+; A semicolon terminates the accumulating lexeme and causes us to
+; skip to the next line.
+
+      (EMIT PNAME
+	    (LEXEMES (SKIP-PAST-NEWLINE (CDR STREAM))
+		     0))
+
+; Backquote, single quote, and the two parens terminate the lexeme
+; and also emit the corresponding token or lexeme.
+
+  (IF (MEMBER (CAR STREAM)
+	      (ASCII '(BACKQUOTE
+		       SINGLE-QUOTE
+		       OPEN-PAREN
+		       CLOSE-PAREN)))
+      (EMIT PNAME
+	    (EMIT (CONS (CAR STREAM) 0)
+		  (LEXEMES (CDR STREAM) 0)))
+
+  (IF (EQUAL (CAR STREAM) (ASCII 'COMMA))
+
+; Comma terminates the lexeme but emits the comma, comma at-sign,
+; or comma dot token, depending on the next character.
+
+      (IF (OR (EQUAL (CADRN 1 STREAM) (ASCII 'AT-SIGN))
+	      (EQUAL (CADRN 1 STREAM) (ASCII 'DOT)))
+	  (EMIT PNAME
+		(EMIT (CONS (CADRN 1 STREAM) (CONS (CAR STREAM) 0))
+		      (LEXEMES (CDR (CDR STREAM)) 0)))
+	  (EMIT PNAME
+		(EMIT (CONS (CAR STREAM) 0)
+		      (LEXEMES (CDR STREAM) 0))))
+      
+  (IF (WHITE-SPACEP (CAR STREAM))
+
+; White space terminates the lexeme and emits nothing.
+
+      (EMIT PNAME (LEXEMES (CDR STREAM) 0))
+
+  (IF (AND (EQUAL PNAME 0)
+       (AND (EQUAL (CAR STREAM) (ASCII 'NUMBER-SIGN))
+	    (EQUAL (CADRN 1 STREAM) (ASCII 'VERTICAL-BAR))))
+
+; Finally, number-sign does not terminate the lexeme, but if it
+; occurs while no lexeme is being accumulated and is immediately
+; followed by vertical bar, it signals the beginning of a comment.
+
+      (LEXEMES (SKIP-PAST-BALANCING-VERTICAL-BAR-NUMBER-SIGN
+                (CDRN 2 STREAM)
+                1)
+	       0)
+
+; Otherwise, we just accumulate the character onto the lexeme being
+; assembled.  This case includes DOT, which is not a break char-
+; acter and thus must appear in isolation to be parsed as a dot
+; token.
+
+      (LEXEMES (CDR STREAM)
+	       (CONS (UPCASE (CAR STREAM)) PNAME))))))))
+  ((LESSP (LENGTH STREAM))))
+
+; SUBSECTION:  Pass II of the Reader
+
+; We now develop the parser, which maps a list of lexemes into a
+; tree -- or returns F if the list does not parse.  One example of
+; a list of lexemes that doesn't parse is one containing unbalanced
+; parentheses.  Another example is one that contains more lexemes
+; than necessary to describe exactly one tree.  That is, our parser
+; balks if there are lexemes left over when one tree has been
+; parsed.
+
+; The formalization below is just a simple push-down stack auto-
+; maton.  It scans the lexemes one at a time from the right all the
+; way to the end of the list.  It has a stack of trees it is build-
+; ing up.  When it sees an open parenthesis, it pushes an empty
+; frame onto the stack.  When it sees a normal lexeme, like the
+; word PLUS or the integer 123, it accumulates this onto the right
+; end of the top-most frame.  When it sees a close parenthesis, it
+; pops the top frame and accumulates it onto the right end of the
+; frame below.  We code it so that if any of these stack operations
+; is ill-formed, e.g., we pop an empty stack, the result is F.
+; Furthermore, we arrange for an F stack to be propagated, i.e.,
+; pushing something onto F produces F.  Thus, if a parsing error
+; arises early in the scan of the lexemes, e.g., an unbalanced
+; close parenthesis is seen, the stack becomes F and even though
+; the scan continues until the last lexeme has been processed, the
+; F is preserved as the signal that an error occurred.
+
+; When all the lexemes have been processed we inspect the stack and
+; verify that it contains a single frame.  If not, then we return
+; F.  (If the stack contains less than one frame, then the stack is
+; in fact F and an error was detected earlier.  If the stack
+; contains more than one frame, we have unbalanced open paren-
+; theses.)
+
+; To make this work we have to start the stack as though we are
+; accumulating a list, i.e., with one empty frame on the stack.
+; Then when we are done we have to check that the list we accumu- 
+; lated has exactly one element.  If it has none, the input was
+; empty, which is an error.  If it has more than one, the input
+; contained more than one tree and that is an error.
+
+; To handle the special tokens single-quote, backquote, comma,
+; comma-at-sign, and comma-dot, we generalize the stack slightly so
+; that when these tokens are read they push a new frame that con-
+; tains the token rather than the empty list.  Then we continue
+; parsing.  When the next tree is assembled it is ``accumulated
+; onto the right end of the frame below,'' where we actually take
+; into account the special tokens that might mark the frame below.
+; For example, if x is to be accumulated onto the frame below, and
+; the frame below contains the single-quote token, then we create
+; the single-quote tree (' x) and recursively accumulate it onto
+; the frame below that.
+
+; Finally, the dot token is afforded no such special handling
+; except that when a list is accumulated onto another (or returned
+; as the answer) we verify that if it contains the dot token as an
+; element then the token occurs as the next-to-last element.
+
+; Of course, this whole process is much simpler than the Lisp
+; reader because we are not implementing readmacros here, nor do we
+; have to do the checks for ``readability.''  We just parse a tree
+; and return it for the rest of this system to inspect.
+
+; So here are the functions implementing our stacks
+
+(DEFN TOP-PSTK (STACK) (IF (LISTP STACK) (CAR STACK) F))
+(DEFN POP-PSTK (STACK) (IF (LISTP STACK) (CDR STACK) F))
+(DEFN PUSH-PSTK (X STACK) (IF (EQUAL STACK F) F (CONS X STACK)))
+(DEFN EMPTY-PSTK (X) (NLISTP X))
+
+; Here is the predicate that verifies that a dotted tree is prop-
+; erly formed.  We permit x to be the dot token, even though that
+; is not a token tree, so that it can be accumulated just like
+; other atoms.  We will filter out the isolated dot at the top.  So
+; what we want to check here is that if X is a list and the dot
+; token appears as an element then it appears in the next-to-last
+; position and there is at least one element before it.  The vari-
+; able I below just counts the number of elements we've scanned
+; past.
+
+(DEFN DOT-CRITERION (I X)
+  (IF (NLISTP X)
+      T
+      (IF (EQUAL (CAR X) (DOT-TOKEN))
+	  (AND (NOT (ZEROP I))
+	   (AND (LISTP (CDR X))
+		(NLISTP (CDR (CDR X)))))
+	  (DOT-CRITERION (ADD1 I) (CDR X)))))
+
+; Here is how we accumulate X ``onto the frame below,'' where the
+; ``frame below'' is the top of the stack passed into this func-
+; tion.  We check first that X satisfies the dot token criterion
+; and cause an error if it doesn't.  Then we handle the special
+; tokens.
+
+(DEFN ADD-ELEMENT-TO-TOP (X STACK)
+  (IF (EMPTY-PSTK STACK)
+      F
+  (IF (NOT (DOT-CRITERION 0 X))
+      F
+  (IF (SPECIAL-TOKEN (TOP-PSTK STACK))
+      (ADD-ELEMENT-TO-TOP (LIST2 (TOP-PSTK STACK) X)
+			  (POP-PSTK STACK))
+      (PUSH-PSTK (APPEND (TOP-PSTK STACK) (LIST1 X))
+		 (POP-PSTK STACK))))))
+
+; When we are all done, the following function is used to verify
+; that exactly one whole object was constructed and that it is not
+; an isolated dot-token.
+
+(DEFN STOP (STACK)
+  (IF (AND (EQLEN STACK 1)
+       (AND (EQLEN (TOP-PSTK STACK) 1)
+	    (NOT (EQUAL (CAR (TOP-PSTK STACK)) (DOT-TOKEN)))))
+      (CAR (TOP-PSTK STACK))
+      F))
+
+; Finally, here is the parser.  The proper top-level call of this
+; function is (PARSE lexemes (CONS NIL NIL)).  It returns either a
+; tree or F.  F indicates that the lexemes either did not parse in-
+; to a complete tree or parsed into more than one.  The tree may be
+; ``unreadable.''
+
+(DEFN PARSE (LEXEMES STACK)
+  (IF (NLISTP LEXEMES)
+      (STOP STACK)
+  (IF (EQUAL (CAR LEXEMES) (OPEN-PAREN))
+      (PARSE (CDR LEXEMES) (PUSH-PSTK NIL STACK))
+  (IF (SPECIAL-TOKEN (CAR LEXEMES))
+      (PARSE (CDR LEXEMES) (PUSH-PSTK (CAR LEXEMES) STACK))
+  (IF (EQUAL (CAR LEXEMES) (CLOSE-PAREN))
+      (PARSE (CDR LEXEMES)
+	     (ADD-ELEMENT-TO-TOP (TOP-PSTK STACK)
+				 (POP-PSTK STACK)))
+      (PARSE (CDR LEXEMES)
+	     (ADD-ELEMENT-TO-TOP (CAR LEXEMES) STACK)))))))
+
+
+; SUBSECTION:  Putting the Two Passes Together
+
+; As noted, the parser may not produce a token tree because the
+; lexical analyzer can produce non-word, non-token lexemes.  For
+; example, the stream (ASCII '(SPACE NUMBER-SIGN SPACE)) parses as
+; the ``word'' we might display as # and which is logically repre-
+; sented by the literal atom (PACK (CONS 35 0)).  But this is not a
+; word, technically, because the number sign character is not among
+; the word characters.  Therefore, after we have parsed the lexemes
+; we check that the result is a token tree and return F if it is
+; not.  Thus, this function may return F because
+; (a) the lexical analyzer found fault with the character stream
+;     (e.g., an unbalanced #-comment)
+; (b) the parser found fault with the lexeme stream (e.g., an un-
+;     balanced open parenthesis), or
+; (c) the final tree failed to be a token tree.
+
+(DEFN READ-TOKEN-TREE (STREAM)
+  (IF (TOKEN-TREE (PARSE (LEXEMES STREAM 0) (CONS NIL NIL)))
+      (PARSE (LEXEMES STREAM 0) (CONS NIL NIL))
+      F))
+
+; SECTION:  Readable Token Trees and S-Expressions
+
+; We now resume our formalization of the text.  The definition of
+; ``readable from depth'' N assumes X is a token tree or F.  We
+; allow F as a possible input only because that is the error signal
+; presented by READ-TOKEN-TREE.  F is not a token tree -- the only
+; atomic token trees are integers and words.  Our formalization of
+; ``readable'' announces that F is not readable, passing the
+; ``error'' up.
+
+(DEFN READABLE (X N)
+  (IF (NLISTP X)
+      (NOT (EQUAL X F))
+  (IF (SINGLE-QUOTE-TOKEN-TREE X)
+      (READABLE (CONSTITUENT X) N)
+  (IF (BACKQUOTE-TOKEN-TREE X)
+      (AND (READABLE (CONSTITUENT X) (ADD1 N))
+	   (NOT (SPLICE-ESCAPE-TOKEN-TREE (CONSTITUENT X))))
+  (IF (OR (COMMA-ESCAPE-TOKEN-TREE X)
+	  (SPLICE-ESCAPE-TOKEN-TREE X))
+      (AND (LESSP 0 N)
+	   (READABLE (CONSTITUENT X) (SUB1 N)))
+  (IF (DOTTED-PAIR X)
+      (AND (READABLE (CAR X) N)
+       (AND (READABLE (CADRN 2 X) N)
+	    (NOT (SPLICE-ESCAPE-TOKEN-TREE (CADRN 2 X)))))
+  (IF (SINGLETON X)
+      (READABLE (CAR X) N)
+      (AND (READABLE (CAR X) N)
+	   (READABLE (CDR X) N)))))))))
+
+; Like our formalization of ``readable,'' our formalization of ``s-
+; expression'' allows its argument to be either a token tree or F
+; and returns F on F.  Thus, if you apply S-EXPRESSION to the out-
+; put of READ-TOKEN-TREE you will get F if the read ``caused an
+; error.''  In actual use, we only apply S-EXPRESSION to the output
+; of READMACRO-EXPANSION and we only apply that to READABLE token
+; trees.  Thus, this aspect of our formalization of s-expressions
+; is irrelevant.  We preserve it because it is sometimes nice,
+; while testing these definitions, to run S-EXPRESSION on the
+; output of the reader.
+
+(DEFN S-EXPRESSION (X)
+  (IF (NLISTP X)
+      (IF (EQUAL X F)
+          F
+          (NOT (NUMERIC-WORD X)))
+  (IF (SPECIAL-TOKEN-TREE X)
+      F
+  (IF (DOTTED-PAIR X)
+      (AND (S-EXPRESSION (CAR X))
+	   (S-EXPRESSION (CADRN 2 X)))
+  (IF (SINGLETON X)
+      (S-EXPRESSION (CAR X))
+      (AND (S-EXPRESSION (CAR X))
+	   (S-EXPRESSION (CDR X))))))))
+
+
+; SECTION:  Backquote Expansion
+
+; At this point in the text we give the definition of readmacro-
+; expansion.  However, it is presented without first defining the
+; notion of backquote expansion.  We therefore skip ahead in the
+; text and formalize backquote expansion now so we can then present
+; readmacro-expansion.
+
+; Of course, backquote expansion and backquote-list expansion are
+; mutually recursive.  If FLG below is T we are defining backquote
+; expansion.  Otherwise, we are defining backquote-list expansion.
+
+(DEFN BACKQUOTE-EXPANSION (FLG X)
+  (IF FLG
+      (IF (NLISTP X)
+	  (LIST2 'QUOTE X)
+	  (IF (OR (COMMA-ESCAPE-TOKEN-TREE X)
+		  (SPLICE-ESCAPE-TOKEN-TREE X))
+	      (CONSTITUENT X)
+	      (BACKQUOTE-EXPANSION F X)))
+      (IF (NLISTP X)
+	  'IMPOSSIBLE-IF-X-IS-A-DOTTED-OR-UNDOTTED-TOKEN-TREE
+	  (LIST3 (IF (SPLICE-ESCAPE-TOKEN-TREE (CAR X))
+		     'APPEND
+		     'CONS)
+		 (BACKQUOTE-EXPANSION T (CAR X))
+		 (IF (SINGLETON X)
+		     (LIST2 'QUOTE 'NIL)
+		     (IF (DOTTED-PAIR X)
+			 (BACKQUOTE-EXPANSION T (CADRN 2 X))
+			 (BACKQUOTE-EXPANSION F (CDR X)))))))
+  ((ORD-LESSP (CONS (ADD1 (COUNT X)) (IF FLG 1 0)))))
+
+
+; SECTION:  Readmacro Expansion
+
+; Our definition of readmacro-expansion differs from the text in
+; that we do all four passes at once.  It is so easy in English to
+; say ``replace every ...'' and its formalization requires a recur-
+; sive sweep through the tree.  Even if we had higher order func-
+; tions (or used V&C$) we would spend about as much space defining
+; the generic sweep as we do below just doing it.
+
+(DEFN READMACRO-EXPANSION (X)
+  (IF (NLISTP X)
+      (IF (NUMERIC-WORD X)
+	  (NUMERIC-WORD-VALUE X)
+	  X)
+  (IF (SINGLE-QUOTE-TOKEN-TREE X)
+      (LIST2 'QUOTE (READMACRO-EXPANSION (CONSTITUENT X)))
+  (IF (BACKQUOTE-TOKEN-TREE X)
+      (BACKQUOTE-EXPANSION T
+       (READMACRO-EXPANSION (CONSTITUENT X)))
+  (IF (DOTTED-PAIR X)
+      (IF (OR (AND (NLISTP (READMACRO-EXPANSION (CADRN 2 X)))
+                   (NOT (EQUAL (READMACRO-EXPANSION (CADRN 2 X))
+                               'NIL)))
+	      (SPECIAL-TOKEN-TREE
+               (READMACRO-EXPANSION (CADRN 2 X))))
+	  (LIST3 (READMACRO-EXPANSION (CAR X))
+		 (DOT-TOKEN)
+		 (READMACRO-EXPANSION (CADRN 2 X)))
+	  (CONS (READMACRO-EXPANSION (CAR X))
+		(READMACRO-EXPANSION (CADRN 2 X))))
+  (IF (SINGLETON X)
+      (LIST1 (READMACRO-EXPANSION (CAR X)))
+      (CONS (READMACRO-EXPANSION (CAR X))
+	    (READMACRO-EXPANSION (CDR X)))))))))
+
+
+; SECTION:  Some Common Lisp
+
+#|
+
+; This entire section is commented out.  It is here only as a con-
+; venience for those wishing to test the token tree reader and
+; readmacro-expansion.  The following function reads a token tree
+; from a stream of ASCII character codes.  If it did not parse or
+; is ``unreadable,'' suitable messages are returned.  Otherwise,
+; the token tree is readmacro-expanded.  If an s-expression does
+; not result, a suitable message is returned.  THIS ERROR MESSAGE
+; SHOULD NEVER HAPPEN because the readmacro-expansion of a readable
+; token tree supposedly always produces an s-expression!  If no
+; errors are reported, the function returns the resulting s-
+; expression.  Thus, this function is essentially a formalization
+; of the the Lisp read routine.
+
+(DEFN TEST-READER (STREAM)
+  (LET ((X (READ-TOKEN-TREE STREAM)))
+    (COND ((NOT X) 'DID-NOT-PARSE)
+	  ((NOT (READABLE X 0)) 'NOT-READABLE-FROM-0)
+	  (T (LET ((Y (READMACRO-EXPANSION X)))
+	       (COND
+                ((S-EXPRESSION Y)
+                 Y)
+                (T (LIST
+                    'READMACRO-EXPANSION-PRODUCED-NON-S-EXPRESSION
+                    Y))))))))
+
+; The following defines a Lisp routine, not a function in the
+; logic.  The routine's name is test-reader and it is just a
+; convenient interface to the logical function defined above.  You
+; give it a Lisp string and it converts it into a list of ASCII
+; codes.  This just lets us type things like (test-reader "(PLUS X
+; Y)") to Common Lisp -- not to R-LOOP -- to execute the logic's
+; TEST-READER.  This Lisp definition assigns the correct character
+; codes in AKCL.  Recall the comment above about the codes for TAB,
+; NEWLINE, PAGE, SPACE, and RUBOUT when implementing a utility to
+; convert Common Lisp typein into lists of ASCII codes.
+
+ (defun ascii (string)
+   (mapcar (function char-code)
+           (coerce string 'list)))
+
+ (defun test-reader (string)
+   (*1*test-reader (ascii string)))
+
+; We now return to the main flow of this development of the
+; extended syntax.
+
+|#
+
+
+; SECTION: Some Terminology Preliminary to Translation
+
+; We now define the concepts used to describe the process of
+; translation from an s-expression to a formal term.
+
+(DEFN CORRESPONDING-NUMBERP (N)
+  (IF (ZEROP N)
+      (LIST1 'ZERO)
+      (LIST2 'ADD1 (CORRESPONDING-NUMBERP (SUB1 N)))))
+
+(DEFN CORRESPONDING-NEGATIVEP (N)
+  (LIST2 'MINUS (CORRESPONDING-NUMBERP (NEGATIVE-GUTS N))))
+
+(DEFN A-D-SEQUENCEP (LST)
+  (IF (NLISTP LST)
+      T
+      (IF (OR (EQUAL (CAR LST) (ASCII 'UPPER-A))
+	      (EQUAL (CAR LST) (ASCII 'UPPER-D)))
+	  (A-D-SEQUENCEP (CDR LST))
+	  F)))
+
+(DEFN CAR-CDR-SYMBOLP (X)
+  (AND (LITATOM X)
+   (AND (EQUAL (CAR (UNPACK X)) (ASCII 'UPPER-C))
+    (AND (EQUAL (CAR (LAST (UNPACK X))) (ASCII 'UPPER-R))
+	 (A-D-SEQUENCEP (ALL-BUT-LAST (CDR (UNPACK X))))))))
+
+; While the text defines the A/D sequence of a CAR/CDR symbol to be
+; a sequence of A's and D's, we define it to be a sequence of the
+; ASCII codes of A and of D.
+
+(DEFN A-D-SEQUENCE (X)
+  (ALL-BUT-LAST (CDR (UNPACK X))))
+
+(DEFN CAR-CDR-NEST (LST X)
+  (IF (NLISTP LST)
+      X
+      (IF (EQUAL (CAR LST) (ASCII 'UPPER-A))
+	  (LIST2 'CAR (CAR-CDR-NEST (CDR LST) X))
+	  (LIST2 'CDR (CAR-CDR-NEST (CDR LST) X)))))
+
+; Ultimately we will define the translation process.  This will
+; involve us in consing together the translations of various com-
+; ponents of an s-expression, after making sure those components
+; are well-formed.  We signal ill-formed input by returning F in-
+; stead of (the quotation of) the formal term.  To make the neces-
+; sary well-formedness checks less distracting we define the fol-
+; lowing function which we use to create the formal terms.  It is
+; like CONS, but observes the convention that if either argument is
+; F the result is F.
+
+(DEFN FCONS (X Y)
+  (IF (AND X Y)
+      (CONS X Y)
+      F))
+
+; We also provide ourselves with several LIST-like functions that
+; respect this convention.  'Tis a pity we do not have macros in
+; the Nqthm logic because we really just want to define a ``func-
+; tion'' symbol that takes an arbitrary number of arguments.
+
+(DEFN FLIST1 (X) (FCONS X NIL))
+(DEFN FLIST2 (X Y) (FCONS X (FLIST1 Y)))
+(DEFN FLIST3 (X Y Z) (FCONS X (FLIST2 Y Z)))
+(DEFN FLIST4 (X Y Z W) (FCONS X (FLIST3 Y Z W)))
+(DEFN FLIST5 (X Y Z W V) (FCONS X (FLIST4 Y Z W V)))
+(DEFN FLIST6 (X Y Z W V U) (FCONS X (FLIST5 Y Z W V U)))
+(DEFN FLIST7 (X Y Z W V U R) (FCONS X (FLIST6 Y Z W V U R)))
+
+; Here is the formalization of the ``fn nest around x for lst'',
+; which is presented in the text before we get to the extended
+; syntax.  Note that we use our FCONS convention so that if X or
+; any element of LST is F, the result is F.
+
+(DEFN FN-NEST (FN LST X)
+  (IF (NLISTP LST)
+      X
+      (FLIST3 FN (CAR LST) (FN-NEST FN (CDR LST) X))))
+
+(DEFN CORRESPONDING-NUMBERPS (LST)
+  (IF (NLISTP LST)
+      NIL
+      (CONS (CORRESPONDING-NUMBERP (CAR LST))
+	    (CORRESPONDING-NUMBERPS (CDR LST)))))
+
+(DEFN EXPLOSION (LST)
+  (FN-NEST 'CONS
+	   (CORRESPONDING-NUMBERPS LST)
+	   (LIST1 'ZERO)))
+
+(DEFN CORRESPONDING-LITATOM (X)
+  (LIST2 'PACK
+	 (EXPLOSION (UNPACK X))))
+
+; The following function tacks the *1* prefix onto the front of
+; LITATOMs.  Thus, (star-one-star 'true) is the LITATOM '*1*TRUE --
+; EXCEPT we can't write that literal atom that way because it is
+; not a symbolp.  It must be written as (PACK '(42 49 42 84 82 85
+; 69 . 0)) or, equivalently, '(*1*QUOTE PACK (42 49 42 84 82 85 69
+; . 0)).
+
+(DEFN STAR-ONE-STAR (X)
+  (PACK (APPEND (ASCII '(ASTERISK DIGIT-ONE ASTERISK))
+		(UNPACK X))))
+
+; We need to define what it is to be a symbol.  The text does this
+; quite early, while introducing formal terms.  Here is the
+; formalization.
+
+(DEFN ASCII-UPPER-ALPHABETICS NIL
+  (ASCII '(UPPER-A UPPER-B UPPER-C UPPER-D UPPER-E UPPER-F
+	   UPPER-G UPPER-H UPPER-I UPPER-J UPPER-K UPPER-L
+	   UPPER-M UPPER-N UPPER-O UPPER-P UPPER-Q UPPER-R
+	   UPPER-S UPPER-T UPPER-U UPPER-V UPPER-W UPPER-X
+	   UPPER-Y UPPER-Z)))
+
+(DEFN ASCII-DIGITS-AND-SIGNS NIL
+  (ASCII '(DIGIT-ONE DIGIT-TWO DIGIT-THREE DIGIT-FOUR DIGIT-FIVE
+	   DIGIT-SIX DIGIT-SEVEN DIGIT-EIGHT DIGIT-NINE
+	   DOLLAR-SIGN UPARROW AMPERSAND ASTERISK UNDERSCORE
+	   MINUS-SIGN PLUS-SIGN EQUAL-SIGN TILDE OPEN-BRACE
+	   CLOSE-BRACE QUESTION-MARK LESS-THAN-SIGN
+           GREATER-THAN-SIGN)))
+
+(DEFN ALL-UPPER-ALPHABETICS-DIGITS-OR-SIGNS (L)
+  (IF (NLISTP L)
+      T
+      (AND (OR (MEMBER (CAR L) (ASCII-UPPER-ALPHABETICS))
+	       (MEMBER (CAR L) (ASCII-DIGITS-AND-SIGNS)))
+	   (ALL-UPPER-ALPHABETICS-DIGITS-OR-SIGNS (CDR L)))))
+
+(DEFN LEGAL-CHAR-CODE-SEQ (L)
+  (AND (LISTP L)
+   (AND (EQUAL (CDR (LAST L)) 0)
+    (AND (MEMBER (CAR L) (ASCII-UPPER-ALPHABETICS))
+	 (ALL-UPPER-ALPHABETICS-DIGITS-OR-SIGNS (CDR L))))))
+
+(DEFN SYMBOLP (X)
+  (AND (LITATOM X)
+       (LEGAL-CHAR-CODE-SEQ (UNPACK X))))
+
+
+; SECTION:  Formalizing Aspects of the History
+
+; At this point in the text we define well-formedness and trans-
+; lation.  But the text delays until later the definitions of
+; several concepts used.  These delayed concepts are: QUOTE
+; notation, the *1*QUOTE escape mechanism, and abbreviated FORs.
+; We have to formalize these before we can define translation.
+; Unfortunately, before we can formalize *1*QUOTE notation we must
+; formalize certain concepts relating to the ``history'' in which
+; the translation is occurring.  For example, (FN X Y) is well-
+; formed and has a translation only if FN is a function symbol of
+; arity 2.  We must formalize arity.  We must also formalize the
+; notions of what it is to be a shell constructor, a base object,
+; and to satisfy the ``type- restrictions'' of a shell.
+
+; But functions that depend upon the ``current history'' cannot be
+; defined unless we wish to make the ``current history'' an ex-
+; plicit object in the formalization.  That is a reasonable thing
+; to do but is beyond the scope of this book because the only DEFN
+; events (for example) permitted in a history are those that are
+; admissible, which involves the notion of proof.  Thus, to formal-
+; ize histories accurately we would have to formalize the rules of
+; inference (not just the syntax) and what it is to be a theorem.
+; This has been done for other logics in the Nqthm logic.  See for
+; example Shankar's work in examples/shankar or the bibliographic
+; entries for Shankar.
+
+; Rather than formalize histories in order to formalize the syntax,
+; we will formalize the syntax for a particular history.  The his-
+; tory we choose is the GROUND-ZERO history extended with one il-
+; lustrative user-defined shell, the stacks as illustrated in the
+; text, plus one illustrative user-defined function, CONCAT, which
+; is just APPEND by another name.  We introduce these functions be-
+; low into the theory.  They are nowhere used in this development
+; and thus by searching for references to them you can see every-
+; thing that must be known about a function symbol for it to be
+; usable in the extended syntax.
+
+; An irrelevant shell added to illustrate user-defined shells:
+
+(ADD-SHELL PUSH EMPTY-STACK STACKP
+	   ((TOP (ONE-OF NUMBERP) ZERO)
+	    (POP (ONE-OF STACKP) EMPTY-STACK)))
+
+; An irrelevant function added to illustrate user-defined
+; functions:
+
+(DEFN CONCAT (X Y)
+  (IF (NLISTP X)
+      Y
+      (CONS (CAR X) (CONCAT (CDR X) Y))))
+
+; So consider the GROUND-ZERO logic extended with the two logical
+; acts above.  We will now define some functions that answer ques-
+; tions about that history, e.g., what are the base function
+; symbols?
+
+; The following function returns non-F if its argument is (the quo-
+; tation of) a shell base function symbol.  When it returns non-F
+; it actually returns (the quotation of) the recognizer for the
+; relevant shell.
+
+(DEFN SHELL-BASE-FUNCTION (X)
+  (IF (EQUAL X 'TRUE) 'TRUEP
+      (IF (EQUAL X 'FALSE) 'FALSEP
+	  (IF (EQUAL X 'ZERO) 'NUMBERP
+	      (IF (EQUAL X 'EMPTY-STACK) 'STACKP
+		  F)))))
+
+; The next function is the analogous one for shell constructor
+; function symbols.
+
+(DEFN SHELL-CONSTRUCTOR-FUNCTION (X)
+  (IF (EQUAL X 'ADD1) 'NUMBERP
+      (IF (EQUAL X 'CONS) 'LISTP
+	  (IF (EQUAL X 'PACK) 'LITATOM
+	      (IF (EQUAL X 'MINUS) 'NEGATIVEP
+		  (IF (EQUAL X 'PUSH) 'STACKP
+		      F))))))
+
+; The following function returns the list of type restrictions for
+; a shell constructor.  The list is in 1:1 correspondence with the
+; accessor names, i.e., the arguments of the constructor.  For ex-
+; ample, for PUSH the result is '((ONE-OF NUMBERP) (ONE-OF STACKP))
+; which tells us the first argument to PUSH must be a NUMBERP and
+; the second must be a STACKP.
+
+(DEFN SHELL-TYPE-RESTRICTIONS (X)
+  (IF (OR (EQUAL X 'ADD1)
+	  (EQUAL X 'MINUS))
+      (LIST1 (LIST2 'ONE-OF 'NUMBERP))
+      (IF (EQUAL X 'CONS)
+	  (LIST2 (LIST1 'NONE-OF) (LIST1 'NONE-OF))
+	  (IF (EQUAL X 'PACK)
+	      (LIST1 (LIST1 'NONE-OF))
+	      (IF (EQUAL X 'PUSH)
+		  (LIST2 (LIST2 'ONE-OF 'NUMBERP)
+			 (LIST2 'ONE-OF 'STACKP))
+		  F)))))
+
+; This function takes a shell constructor or base function symbol
+; and determines whether it satisfies a given type-restriction.
+; Thus, FN might be ADD1 and TYPE-RESTRICTION might be '(ONE-OF
+; NUMBERP) -- in which case SATISFIES returns T.  If the type
+; restriction were '(ONE-OF STACKP), SATISFIES would return F for
+; FN 'ADD1.
+
+(DEFN SATISFIES (FN TYPE-RESTRICTION)
+  (IF (EQUAL (CAR TYPE-RESTRICTION) 'ONE-OF)
+      (MEMBER (IF (SHELL-BASE-FUNCTION FN)
+		  (SHELL-BASE-FUNCTION FN)
+		  (SHELL-CONSTRUCTOR-FUNCTION FN))
+	      (CDR TYPE-RESTRICTION))
+      (NOT (MEMBER (IF (SHELL-BASE-FUNCTION FN)
+		       (SHELL-BASE-FUNCTION FN)
+		       (SHELL-CONSTRUCTOR-FUNCTION FN))
+		   (CDR TYPE-RESTRICTION)))))
+
+; This function takes a list of function symbols and a list of type
+; restrictions in 1:1 correspondence and determines whether all of
+; the type restrictions are satisfied by the corresponding function
+; symbols.
+
+(DEFN ALL-SATISFY (FN-LST TYPE-RESTRICTION-LST)
+  (IF (NLISTP FN-LST)
+      T
+      (AND (SATISFIES (CAR FN-LST) (CAR TYPE-RESTRICTION-LST))
+	   (ALL-SATISFY (CDR FN-LST) (CDR TYPE-RESTRICTION-LST)))))
+
+; The next two functions define the arity of each of the function
+; symbols in the particular history we are considering.  We use the
+; extended syntax here, namely QUOTE notation, to write down the
+; alist.  Readers using this formalization as a means of mastering
+; the notation should simply understand that as a result of the
+; definition below, (ARITY 'IF) = 3, (ARITY 'STACKP) = 1 and (ARITY
+; 'ANY-NEW-SYMBOL) = F.  That is, if (fn . n) appears in the defi-
+; nition of ARITY-ALIST then (ARITY 'fn) = n.  Otherwise, (ARITY
+; 'fn) = F.
+
+(DEFN ARITY-ALIST NIL
+  '((IF . 3) (EQUAL . 2) (COUNT . 1) (FALSE . 0)
+    (FALSEP . 1) (TRUE . 0) (TRUEP . 1) (NOT . 1)
+    (AND . 2) (OR . 2) (IMPLIES . 2) (ADD1 . 1)
+    (NUMBERP . 1) (SUB1 . 1) (ZERO . 0) (LESSP . 2)
+    (GREATERP . 2) (LEQ . 2) (GEQ . 2) (ZEROP . 1)
+    (FIX . 1) (PLUS . 2) (PACK . 1) (LITATOM . 1)
+    (UNPACK . 1) (CONS . 2) (LISTP . 1) (CAR . 1)
+    (CDR . 1) (NLISTP . 1) (MINUS . 1) (NEGATIVEP . 1)
+    (NEGATIVE-GUTS . 1) (DIFFERENCE . 2) (TIMES . 2)
+    (QUOTIENT . 2) (REMAINDER . 2) (MEMBER . 2)
+    (IFF . 2) (ORD-LESSP . 2) (ORDINALP . 1)
+    (ASSOC . 2) (PAIRLIST . 2) (SUBRP . 1)
+    (APPLY-SUBR . 2) (FORMALS . 1) (BODY . 1)
+    (FIX-COST . 2) (STRIP-CARS . 1) (SUM-CDRS . 1)
+    (V&C$ . 3) (V&C-APPLY$ . 2) (APPLY$ . 2)
+    (EVAL$ . 3) (QUANTIFIER-INITIAL-VALUE . 1)
+    (ADD-TO-SET . 2) (APPEND . 2) (MAX . 2)
+    (UNION . 2) (QUANTIFIER-OPERATION . 3) (FOR . 6)
+    (PUSH . 2) (EMPTY-STACK . 0) (STACKP . 1) (TOP . 1)
+    (POP . 2) (CONCAT . 2)))
+
+(DEFN ARITY (FN)
+  (IF (ASSOC FN (ARITY-ALIST))
+      (CDR (ASSOC FN (ARITY-ALIST)))
+      F))
+
+; That concludes the definitions of history dependent concepts.  We
+; now return to the text.
+
+; SECTION:  QUOTE Notation and the *1*QUOTE Escape
+
+; The essence of the QUOTE notation is the notion of ``explicit
+; value descriptor.''  In the text, that notion is defined in terms
+; of ``explicit value escape descriptor'' without the latter notion
+; being defined.  We then define the latter notion and its defi-
+; nition involves the former.  Thus, the two are mutually recur-
+; sive.  We formalize the mutual recursion with our traditional FLG
+; argument.  Normally, one would expect one value of the flag to
+; indicate we were defining ``explicit value descriptor'' and the
+; other value to indicate ``explicit value escape descriptor.''
+; But it turns out that the basic form of mutual recursion here is
+; ``explicit value descriptor'' versus ``list of explicit value
+; descriptors'' and the notion of ``explicit value escape de-
+; scriptor'' is written ``in-line.''
+
+; So when FLG is T below, we check that X is an explicit value
+; descriptor and if so we return the formal term it denotes.  We
+; return F if X is not such a descriptor.  When FLG is F we check
+; that X is a list of explicit value descriptors and we return
+; either the list of denoted formal terms or F if X fails to be a
+; list of descriptors.
+
+; The following three events have no logical significance.  They
+; do, however, permit Nqthm to process the next definition without
+; inordinate delay.  We disable all function definitions except
+; CADRN and CDRN.
+
+(SET-STATUS PRE-EXPLICIT-VALUE-DESCRIPTOR
+	    T
+	    ((DEFN DISABLE) (OTHERWISE AS-IS)))
+
+(ENABLE CADRN)
+(ENABLE CDRN)
+
+(DEFN EXPLICIT-VALUE-DESCRIPTOR (FLG X)
+  (IF FLG
+
+; Here we define what it is for X to be an explicit value de-
+; scriptor and what formal term it denotes.
+
+      (IF (NLISTP X)
+          (IF (INTEGERP X)
+              (IF (NUMBERP X)
+                  (CORRESPONDING-NUMBERP X)
+                  (CORRESPONDING-NEGATIVEP X))
+          (IF (EQUAL X (STAR-ONE-STAR 'TRUE))
+              (LIST1 'TRUE)
+          (IF (EQUAL X (STAR-ONE-STAR 'FALSE))
+              (LIST1 'FALSE)
+          (IF (SYMBOLP X)
+              (CORRESPONDING-LITATOM X)
+              F))))
+      (IF (EQUAL (CAR X) (STAR-ONE-STAR 'QUOTE))
+
+; The test of the following IF contains the formalization of
+; ``explicit value escape descriptor.''
+
+          (IF (AND (OR (SHELL-CONSTRUCTOR-FUNCTION (CADRN 1 X))
+                       (SHELL-BASE-FUNCTION (CADRN 1 X)))
+               (AND (EQLEN (CDRN 2 X) (ARITY (CADRN 1 x)))
+                (AND (EQUAL (CDR (LAST X)) NIL)
+                 (AND (NOT (EQUAL (CADRN 1 X) 'ADD1))
+                  (AND (NOT (EQUAL (CADRN 1 X) 'ZERO))
+                   (AND (NOT (EQUAL (CADRN 1 X) 'CONS))
+                    (AND (EXPLICIT-VALUE-DESCRIPTOR F (CDRN 2 X))
+                     (AND
+                      (IF (SHELL-CONSTRUCTOR-FUNCTION (CADRN 1 X))
+                          (ALL-SATISFY
+                           (STRIP-CARS
+                            (EXPLICIT-VALUE-DESCRIPTOR F
+                             (CDRN 2 X)))
+                           (SHELL-TYPE-RESTRICTIONS (CADRN 1 X)))
+                          T)
+                      (IF (EQUAL (CADRN 1 X) 'PACK)
+                          (NOT (LEGAL-CHAR-CODE-SEQ (CADRN 2 X)))
+                          (IF (EQUAL (CADRN 1 X) 'MINUS)
+                              (EQUAL (CADRN 2 X) (ZERO))
+                              T))))))))))
+	      (CONS (CADRN 1 X)
+		    (EXPLICIT-VALUE-DESCRIPTOR F (CDRN 2 X)))
+	      F)
+      (IF (DOTTED-PAIR X)
+          (FLIST3 'CONS
+                  (EXPLICIT-VALUE-DESCRIPTOR T (CAR X))
+                  (EXPLICIT-VALUE-DESCRIPTOR T (CADRN 2 X)))
+      (IF (SINGLETON X)
+          (FLIST3 'CONS
+                  (EXPLICIT-VALUE-DESCRIPTOR T (CAR X))
+                  (CORRESPONDING-LITATOM NIL))
+          (FLIST3 'CONS
+                  (EXPLICIT-VALUE-DESCRIPTOR T (CAR X))
+                  (EXPLICIT-VALUE-DESCRIPTOR T (CDR X)))))))
+
+; Here we define what it is for X to be a list of explicit value
+; descriptors and the list of terms denoted by them.
+
+      (IF (NLISTP X)
+          NIL
+          (FCONS (EXPLICIT-VALUE-DESCRIPTOR T (CAR X))
+                 (EXPLICIT-VALUE-DESCRIPTOR F (CDR X))))))
+      
+(SET-STATUS POST-EXPLICIT-VALUE-DESCRIPTOR
+	    T
+	    ((DEFN ENABLE) (OTHERWISE AS-IS)))
+
+; The function QT is just a convenient way to refer to the explicit
+; value term denoted by an explicit value descriptor (or F if its
+; argument is not such a descriptor).  Thus, (QT 'ABC) is '(PACK
+; (CONS 65 (CONS 66 (CONS 67 0)))), except that the integers are
+; actually ADD1 nests.  Read ``quotation'' for QT.
+
+(DEFN QT (X) (EXPLICIT-VALUE-DESCRIPTOR T X))
+
+; SECTION:  In Support of COND, CASE, and LET
+
+; The next batch of functions are all involved in the translation
+; of COND, CASE, and LET.  We are interested in recognizing lists
+; of doublets, e.g., ((w1 v1) (w2 v2) ...), the absence of
+; duplication among the wi, etc.
+
+(DEFN DOUBLETS (LST)
+  (IF (NLISTP LST)
+      (EQUAL LST NIL)
+      (AND (EQLEN (CAR LST) 2)
+	   (DOUBLETS (CDR LST)))))
+
+(DEFN DUPLICATESP (LST)
+  (IF (NLISTP LST)
+      F
+      (IF (MEMBER (CAR LST) (CDR LST))
+	  T
+	  (DUPLICATESP (CDR LST)))))
+
+(DEFN STRIP-CADRS (LST)
+  (IF (NLISTP LST)
+      NIL
+      (CONS (CADRN 1 (CAR LST))
+	    (STRIP-CADRS (CDR LST)))))
+
+(DEFN SYMBOLPS (LST)
+  (IF (NLISTP LST)
+      T
+      (AND (SYMBOLP (CAR LST))
+	   (SYMBOLPS (CDR LST)))))
+
+; This function applies the substitution ALIST to TERM (FLG=T) or
+; to a list of terms (FLG=F).
+
+(DEFN SUBLIS-VAR (FLG ALIST TERM)
+  (IF FLG
+      (IF (NLISTP TERM)
+	  (IF (ASSOC TERM ALIST)
+	      (CDR (ASSOC TERM ALIST))
+	      TERM)
+	  (IF (EQUAL (CAR TERM) 'QUOTE)
+	      TERM
+	      (CONS (CAR TERM)
+		    (SUBLIS-VAR F ALIST (CDR TERM)))))
+      (IF (NLISTP TERM)
+	  NIL
+	  (CONS (SUBLIS-VAR T ALIST (CAR TERM))
+		(SUBLIS-VAR F ALIST (CDR TERM)))))
+  ((LESSP (COUNT TERM))))
+
+
+; SECTION:  In Support of FOR
+
+; The text delays the discussion of FOR statements until after V&C$
+; has been presented.  We have to deal with them now.  The fol-
+; lowing functions access or check certain parts of an abbreviated
+; FOR.
+
+(DEFN ABBREVIATED-FOR-VAR (X) (CADRN 1 X))
+
+(DEFN ABBREVIATED-FOR-RANGE (X) (CADRN 3 X))
+
+(DEFN ABBREVIATED-FOR-WHEN (X)
+  (IF (EQLEN X 8)
+      (CADRN 5 X)
+      'T))
+
+(DEFN ABBREVIATED-FOR-OP (X)
+  (IF (EQLEN X 8)
+      (CADRN 6 X)
+      (CADRN 4 X)))
+
+(DEFN ABBREVIATED-FOR-BODY (X) (CAR (LAST X)))
+
+(DEFN FOR-OPERATIONP (X)
+  (OR (EQUAL X 'ADD-TO-SET)
+   (OR (EQUAL X 'ALWAYS)
+    (OR (EQUAL X 'APPEND)
+     (OR (EQUAL X 'COLLECT)
+      (OR (EQUAL X 'COUNT)
+       (OR (EQUAL X 'DO-RETURN)
+        (OR (EQUAL X 'EXISTS)
+         (OR (EQUAL X 'MAX)
+          (OR (EQUAL X 'SUM)
+           (OR (EQUAL X 'MULTIPLY)
+	       (EQUAL X 'UNION))))))))))))
+
+; We now define the function that recognizes an abbreviated FOR.
+
+(DEFN ABBREVIATED-FORP (X)
+  (AND (LISTP X)
+   (AND (EQUAL (CAR X) 'FOR)
+    (AND (OR (EQLEN X 8)
+	     (EQLEN X 6))
+     (AND (SYMBOLP (ABBREVIATED-FOR-VAR X))
+      (AND (NOT (EQUAL (ABBREVIATED-FOR-VAR X) NIL))
+       (AND (NOT (EQUAL (ABBREVIATED-FOR-VAR X) 'T))
+	(AND (NOT (EQUAL (ABBREVIATED-FOR-VAR X) 'F))
+	 (AND (EQUAL (CADRN 2 X) 'IN)
+	  (AND (OR (EQLEN X 6)
+		   (EQUAL (CADRN 4 x) 'WHEN))
+	       (FOR-OPERATIONP
+		(ABBREVIATED-FOR-OP X))))))))))))
+
+; To translate an abbreviated FOR we must sort the list of vari-
+; ables used in the WHEN clause and the BODY.
+
+(DEFN ALPHABETIC-LESSP1 (L1 L2)
+  (IF (NLISTP L1)
+      T
+      (IF (NLISTP L2)
+          F
+          (IF (LESSP (CAR L1) (CAR L2))
+              T
+              (IF (EQUAL (CAR L1) (CAR L2))
+                  (ALPHABETIC-LESSP1 (CDR L1) (CDR L2))
+                  F)))))
+
+(DEFN ALPHABETIC-LESSP (X Y)
+  (ALPHABETIC-LESSP1 (UNPACK X)
+                     (UNPACK Y)))
+
+(DEFN ALPHABETIC-INSERT (X L)
+  (IF (NLISTP L)
+      (LIST1 X)
+      (IF (ALPHABETIC-LESSP X (CAR L))
+          (CONS X L)
+          (CONS (CAR L)
+                (ALPHABETIC-INSERT X (CDR L))))))
+
+(DEFN ALPHABETIZE (L)
+  (IF (NLISTP L)
+      L
+      (ALPHABETIC-INSERT (CAR L)
+                         (ALPHABETIZE (CDR L)))))
+
+; To collect the variable symbols that occur in a term (or list of
+; terms) we use ALL-VARS.
+
+(DEFN ALL-VARS (FLG X)
+  (IF FLG
+      (IF (NLISTP X)
+          (CONS X NIL)
+          (ALL-VARS F (CDR X)))
+      (IF (NLISTP X)
+          NIL
+          (UNION (ALL-VARS T (CAR X))
+                 (ALL-VARS F (CDR X))))))
+
+(DEFN STANDARD-ALIST (VARS)
+  (IF (NLISTP VARS)
+      (QT NIL)
+      (LIST3 'CONS
+             (LIST3 'CONS
+		    (QT (CAR VARS))
+		    (CAR VARS))
+	     (STANDARD-ALIST (CDR VARS)))))
+
+(DEFN DELETE (X L)
+  (IF (NLISTP L)
+      L
+      (IF (EQUAL X (CAR L))
+          (CDR L)
+          (CONS (CAR L) (DELETE X (CDR L))))))
+
+(DEFN MAKE-ALIST (VAR WHEN BODY)
+  (STANDARD-ALIST
+   (ALPHABETIZE
+    (DELETE VAR
+	    (UNION (ALL-VARS T WHEN)
+		   (ALL-VARS T BODY))))))
+
+; The following lemmas are used in the justification of the defi-
+; nition of TRANSLATE.
+
+(PROVE-LEMMA LESSP-ABBREVIATED-FOR-RANGE (REWRITE)
+  (IMPLIES (EQUAL (CAR X) 'FOR)
+           (LESSP (COUNT (ABBREVIATED-FOR-RANGE X)) (COUNT X))))
+
+(PROVE-LEMMA LESSP-ABBREVIATED-FOR-WHEN (REWRITE)
+  (IMPLIES (EQUAL (CAR X) 'FOR)
+           (LESSP (COUNT (ABBREVIATED-FOR-WHEN X)) (COUNT X))))
+
+(PROVE-LEMMA LESSP-LAST (REWRITE)
+  (NOT (LESSP (COUNT X) (COUNT (LAST X)))))
+
+(PROVE-LEMMA LESSP-ABBREVIATED-FOR-BODY (REWRITE)
+  (IMPLIES (EQUAL (CAR X) 'FOR)
+           (LESSP (COUNT (ABBREVIATED-FOR-BODY X)) (COUNT X))))
+
+(PROVE-LEMMA LESSP-COUNT-STRIP-CARS (REWRITE)
+  (IMPLIES (DOUBLETS LST)
+           (NOT (LESSP (COUNT LST)
+                       (COUNT (STRIP-CARS LST))))))
+
+(PROVE-LEMMA LESSP-COUNT-STRIP-CADRS (REWRITE)
+  (IMPLIES (DOUBLETS LST)
+           (NOT (LESSP (COUNT LST)
+                       (COUNT (STRIP-CADRS LST))))))
+
+(PROVE-LEMMA LISTP-CDDR-X-COUNT-X (REWRITE)
+  (IMPLIES (LISTP (CDDR X))
+	   (EQUAL (COUNT X)
+		  (ADD1
+		   (ADD1
+		    (PLUS (COUNT (CAR X))
+			  (PLUS (COUNT (CADR X))
+				(COUNT (CDDR X)))))))))
+
+(PROVE-LEMMA LISTP-CDDDR-X-COUNT-X (REWRITE)
+  (IMPLIES (LISTP (CDDDR X))
+	   (EQUAL (COUNT X)
+		  (ADD1
+		   (ADD1
+		    (ADD1
+		     (PLUS (COUNT (CAR X))
+			   (PLUS (COUNT (CADR X))
+				 (PLUS (COUNT (CADDR X))
+				       (COUNT (CDDDR X)))))))))))
+
+
+; SECTION:  Translation
+
+; We disable all definitions except CADRN and CDRN.
+
+(SET-STATUS PRE-TRANSLATE T ((DEFN DISABLE)(OTHERWISE AS-IS)))
+(ENABLE CADRN)
+(ENABLE CDRN)
+
+; Here, finally, is the formalization of what it is to be well-
+; formed and what the translation of a well-formed term is.  If
+; TRANSLATE (FLG=T) returns F, then X is not well-formed; other-
+; wise, TRANSLATE (FLG=T) returns the (quotation of the) formal
+; term denoted by X.  Because a formal term is either a variable
+; symbol (i.e., LITATOM) or function application (i.e., LISTP), an
+; answer of F unambiguously identifies the input as ill-formed.
+; When FLG=F, TRANSLATE operates on a list of purported terms and
+; returns either F, meaning at least one of the elements is
+; ill-formed, or returns the list of their translations.
+
+(DEFN TRANSLATE (FLG X)
+  (IF FLG
+
+; When FLG = T, we are translating a single term, X.
+
+      (IF (NLISTP X)
+          (IF (INTEGERP X)
+	      (QT X)
+	  (IF (SYMBOLP X)
+	      (IF (EQUAL X 'T) (LIST1 'TRUE)
+	      (IF (EQUAL X 'F) (LIST1 'FALSE)
+	      (IF (EQUAL X NIL) (QT NIL)
+		  X)))
+	      F))
+      (IF (DOTTED-S-EXPRESSION X)
+          F
+      (IF (EQUAL (CAR X) 'QUOTE)
+          (IF (EQLEN X 2)
+              (QT (CADRN 1 X))
+              F)
+      (IF (EQUAL (CAR X) 'COND)
+          (IF (AND (EQLEN X 2)
+                   (AND (EQLEN (CADRN 1 X) 2)
+                        (EQUAL (CAR (CADRN 1 X)) 'T)))
+              (TRANSLATE T (CADRN 1 (CADRN 1 X)))
+              (IF (AND (EQLEN (CADRN 1 X) 2)
+                       (AND (NOT (EQUAL (CAR (CADRN 1 X)) 'T))
+                            (LISTP (CDRN 2 X))))
+                  (FLIST4 'IF
+                          (TRANSLATE T (CAR (CADRN 1 X)))
+                          (TRANSLATE T (CADRN 1 (CADRN 1 X)))
+                          (TRANSLATE T (CONS 'COND (CDRN 2 X))))
+                  F))
+      (IF (EQUAL (CAR X) 'CASE)
+          (IF (AND (EQLEN X 3)
+                   (AND (EQLEN (CADRN 2 X) 2)
+                        (AND (EQUAL (CAR (CADRN 2 X)) 'OTHERWISE)
+                             (TRANSLATE T (CADRN 1 X)))))
+              (TRANSLATE T (CADRN 1 (CADRN 2 X)))
+              (IF (AND (EQLEN (CADRN 2 X) 2)
+                   (AND (LISTP (CDRN 3 X))
+                        (NOT (MEMBER (CAR (CADRN 2 X))
+                                     (STRIP-CARS (CDRN 3 X))))))
+                  (FLIST4 'IF
+                          (FLIST3 'EQUAL
+                                  (TRANSLATE T (CADRN 1 X))
+                                  (QT (CAR (CADRN 2 X))))
+                          (TRANSLATE T (CADRN 1 (CADRN 2 X)))
+                          (TRANSLATE T (CONS 'CASE
+                                             (CONS (CADRN 1 X)
+                                                   (CDRN 3 X)))))
+                  F))
+      (IF (EQUAL (CAR X) 'LET)
+
+; The first test below, on DOUBLETS, belongs inside the AND nest.
+; But if it is there it is not among the governing terms of the
+; recursions in that nest and the termination argument breaks down.
+
+          (IF (DOUBLETS (CADRN 1 X))
+              (IF (AND (EQLEN X 3)
+                   (AND (TRANSLATE F (STRIP-CARS (CADRN 1 X)))
+                    (AND (TRANSLATE F (STRIP-CADRS (CADRN 1 X)))
+                     (AND (TRANSLATE T (CADRN 2 X))
+                      (AND
+                       (SYMBOLPS
+                        (TRANSLATE F (STRIP-CARS (CADRN 1 X))))
+                       (NOT
+                        (DUPLICATESP
+                         (TRANSLATE
+                          F (STRIP-CARS (CADRN 1 X))))))))))
+                  (SUBLIS-VAR
+                   T
+                   (PAIRLIST
+                    (TRANSLATE F (STRIP-CARS (CADRN 1 X)))
+                    (TRANSLATE F (STRIP-CADRS (CADRN 1 X))))
+                   (TRANSLATE T (CADRN 2 X)))
+                  F)
+              F)
+      (IF (NOT (TRANSLATE F (CDR X)))
+          F
+      (IF (OR (EQUAL (CAR X) NIL)
+              (OR (EQUAL (CAR X) 'T)
+                  (EQUAL (CAR X) 'F)))
+          F
+      (IF (EQUAL (CAR X) 'LIST)
+          (FN-NEST 'CONS
+                   (TRANSLATE F (CDR X))
+                   (QT NIL))
+      (IF (EQUAL (CAR X) 'LIST*)
+          (IF (EQLEN X 1)
+              F
+              (FN-NEST 'CONS
+                       (ALL-BUT-LAST (TRANSLATE F (CDR X)))
+                       (CAR (LAST (TRANSLATE F (CDR X))))))
+      (IF (CAR-CDR-SYMBOLP (CAR X))
+          (IF (EQLEN X 2)
+              (CAR-CDR-NEST (A-D-SEQUENCE (CAR X))
+                            (TRANSLATE T (CADRN 1 X)))
+              F)
+      (IF (EQLEN (CDR X) (ARITY (CAR X)))
+          (FCONS (CAR X) (TRANSLATE F (CDR X)))
+      (IF (EQUAL (CAR X) 'FOR)
+          (IF (ABBREVIATED-FORP X)
+              (FLIST7 'FOR
+                      (QT (ABBREVIATED-FOR-VAR X))
+                      (TRANSLATE T (ABBREVIATED-FOR-RANGE X))
+                      (QT (TRANSLATE T
+                                     (ABBREVIATED-FOR-WHEN X)))
+                      (QT (ABBREVIATED-FOR-OP X))
+                      (QT (TRANSLATE T
+                                     (ABBREVIATED-FOR-BODY X)))
+                      (MAKE-ALIST
+                       (ABBREVIATED-FOR-VAR X)
+                       (TRANSLATE T
+                                  (ABBREVIATED-FOR-WHEN X))
+                       (TRANSLATE T
+                                  (ABBREVIATED-FOR-BODY X))))
+              F)
+          (IF (AND (LESSP 2 (LENGTH (CDR X)))
+                   (OR (EQUAL (CAR X) 'AND)
+                       (OR (EQUAL (CAR X) 'OR)
+                           (OR (EQUAL (CAR X) 'PLUS)
+                               (EQUAL (CAR X) 'TIMES)))))
+              (FN-NEST (CAR X)
+                       (ALL-BUT-LAST (TRANSLATE F (CDR X)))
+                       (CAR (LAST (TRANSLATE F (CDR X)))))
+              F))))))))))))))
+
+; This is the case where FLG = F and we are translating a list of
+; terms, X.
+
+      (IF (NLISTP X)
+          NIL
+          (FCONS (TRANSLATE T (CAR X))
+                 (TRANSLATE F (CDR X)))))
+  ((LESSP (COUNT X))))
+
+(SET-STATUS POST-TRANSLATE T ((DEFN ENABLE)(OTHERWISE AS-IS)))
+
+
+; SECTION:  The Extended Syntax
+
+; Finally, here is EXSYN, which reads an s-expression from a stream
+; of ASCII character codes and translates it into a formal term or
+; returns F if the stream is not the display of a term in the ex-
+; tended syntax.
+
+(DEFN EXSYN (STREAM)
+  (IF (READABLE (READ-TOKEN-TREE STREAM) 0)
+      (TRANSLATE T (READMACRO-EXPANSION (READ-TOKEN-TREE STREAM)))
+      F))
+
+; EXSYN returns F if the stream cannot be parsed.  The explanation
+; of this remark is that an unparsable stream causes READ-TOKEN-
+; TREE to return F and READABLE returns F on that input.
+
+; SECTION:  Slightly Abbreviated Formal Terms
+
+; It is exceedingly difficult to read the output of TRANSLATE and
+; EXSYN because quoted literal atoms and numbers are exploded.
+; Thus 'ABC translates to (PACK (CONS (ADD1 ...)  ...))  where the
+; ellipses are very large nests of CONSes and ADD1s.  Below, we
+; develop a function that can be used to massage the output of
+; TRANSLATE to introduce QUOTE notation for LITATOMs and to intro-
+; duce the normal decimal representation for ADD1 nests.  While
+; this convention is employed in Chapter 4, e.g., when we exhibit
+; two token trees with the same translation, the concepts
+; formalized below are not defined in the text.
+
+; If X is an ADD1-nest n deep with a (ZERO) at the bottom, we
+; return n; otherwise F.  The variable I is used as an accumulator
+; and should be 0 at the top-level.
+
+(DEFN ADD1-NESTP (X I)
+  (IF (NLISTP X)
+      F
+      (IF (AND (EQUAL (CAR X) 'ZERO)
+	       (EQLEN X 1))
+	  I
+	  (IF (AND (EQUAL (CAR X) 'ADD1)
+		   (EQLEN X 2))
+	      (ADD1-NESTP (CADRN 1 X) (ADD1 I))
+	      F))))
+	       
+(DEFN CONS-ADD1-NESTP (X)
+  (IF (NLISTP X)
+      F
+      (IF (AND (EQUAL (CAR X) 'ZERO)
+	       (EQLEN X 1))
+	  0
+	  (IF (AND (EQUAL (CAR X) 'CONS)
+		   (EQLEN X 3))
+	      (FCONS (ADD1-NESTP (CADRN 1 X) 0)
+		     (CONS-ADD1-NESTP (CADRN 2 X)))
+	      F))))
+	      
+(DEFN EXPLODED-LITATOM (X)
+  (IF (AND (EQLEN X 2)
+	(AND (EQUAL (CAR X) 'PACK)
+	     (CONS-ADD1-NESTP (CADRN 1 X))))
+      (LIST2 'QUOTE (PACK (CONS-ADD1-NESTP (CADRN 1 X))))
+      F))
+
+(DEFN ABBREV (FLG X)
+  (IF FLG
+      (IF (NLISTP X)
+	  X
+	  (IF (ADD1-NESTP X 0)
+	      (ADD1-NESTP X 0)
+	      (IF (EXPLODED-LITATOM X)
+		  (EXPLODED-LITATOM X)
+		  (CONS (CAR X)
+			(ABBREV F (CDR X))))))
+      (IF (NLISTP X)
+	  NIL
+	  (CONS (ABBREV T (CAR X))
+		(ABBREV F (CDR X))))))
+
+; Here is a version of EXSYN that uses abbreviations.
+
+(DEFN AEXSYN (STREAM)
+  (IF (READABLE (READ-TOKEN-TREE STREAM) 0)
+      (ABBREV T
+       (TRANSLATE T
+        (READMACRO-EXPANSION (READ-TOKEN-TREE STREAM))))
+      F))      
+
+#|
+
+Here are Common Lisp interfaces to EXSYN and AEXSYN.
+
+ (defun exsyn (string)
+  (*1*exsyn (ascii string)))
+
+ (defun aexsyn (string)
+  (*1*aexsyn (ascii string)))
+
+|#
+
+; We conclude by making a compiled library containing the current
+; data base.  If one executes (NOTE-LIB ".../examples/basic/parser"
+; T) in Nqthm, where the ellipsis is meant to be the local
+; directory containing our examples subdirectory, then one can use
+; R-LOOP to execute these function.  For example, one can type to
+; R-LOOP:
+
+;(AEXSYN
+; (ASCII
+; '(OPEN-PAREN
+;   LOWER-A LOWER-D LOWER-D DIGIT-ONE
+;   SPACE
+;   NUMBER-SIGN VERTICAL-BAR
+;   UPPER-C LOWER-O LOWER-M LOWER-M LOWER-E LOWER-N LOWER-T
+;   VERTICAL-BAR NUMBER-SIGN
+;   LOWER-X
+;   CLOSE-PAREN)))
+
+; and get the result '(ADD X).
+
+; This is sufficiently cumbersome that we find the Lisp interface
+; functions much more convenient.  If the ``defuns'' in this file
+; are executed in an acceptable Common Lisp, then it is possible to
+; type to Common Lisp (rather than R-LOOP):
+
+; (aexsyn "(add1 #|Comment|#x)")
+
+; and get the result (ADD1 X).  The Lisp routine aexsyn actually
+; executes our logical function AEXSYN but it first converts the
+; string argument into a list of ASCII characters.
+
+(MAKE-LIB "parser" T)

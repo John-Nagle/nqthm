@@ -1,0 +1,140 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    EXAMPLES.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  FULL-ADDER example.
+
+(defn half-adder* ()
+  '(half-adder
+    (a b)
+    (sum carry)
+    ((g0 (sum)   b-xor (a b))
+     (g1 (carry) b-and (a b)))
+    nil))
+
+(module-netlist half-adder*)
+(module-predicate half-adder*)
+
+(prove-lemma half-adder$value (rewrite)
+  (implies
+   (half-adder& netlist)
+   (equal (dual-eval 0 'half-adder (list a b) state netlist)
+          (list (f-xor a b)
+                (f-and a b))))
+  ;;Hint
+  ((enable half-adder& b-xor$value b-and$value)))
+
+(disable half-adder$value)
+
+(defn full-adder* ()
+  '(full-adder
+    (a b c)
+    (sum carry)
+    ((t0 (sum1 carry1) half-adder (a b))
+     (t1 (sum carry2)  half-adder (sum1 c))
+     (t2 (carry)       b-or       (carry1 carry2)))
+    nil))
+
+(module-netlist full-adder*)
+(module-predicate full-adder*)
+
+(defn f$full-adder (a b c)
+  (list (f-xor (f-xor a b) c)
+        (f-or (f-and a b)
+              (f-and (f-xor a b) c))))
+
+(prove-lemma full-adder$value (rewrite)
+  (implies
+   (full-adder& netlist)
+   (equal (dual-eval 0 'FULL-ADDER (list a b c) state netlist)
+          (f$full-adder a b c)))
+  ;;Hint
+  ((enable full-adder& half-adder$value b-or$value)))
+
+(defn full-adder (a b c)
+  (list (b-xor3 a b c)
+        (b-or (b-and a (b-or b c))
+              (b-and b c))))
+
+(prove-lemma f$full-adder=full-adder (rewrite)
+  (implies
+   (and (boolp a) (boolp b) (boolp c))
+   (equal (f$full-adder a b c)
+          (full-adder a b c))))
+
+;;;  M1/M2 example.
+
+(defn m1* ()
+  '(m1
+    (clk en sel d q)
+    (q)
+    ((mux   (b)    b-if  (sel d q))
+     (latch (a an) fd1   (b clk))
+     (tbuf  (q)    t-buf (en a)))
+    latch))
+
+(module-netlist m1*)
+(module-predicate m1*)
+
+(prove-lemma m1$value (rewrite)
+  (implies
+   (m1& netlist)
+   (equal (dual-eval 0 'M1 (list clk en sel d q) state netlist)
+          (list (ft-buf en state))))
+  ;;Hint
+  ((enable m1& b-if$value fd1$value t-buf$value ft-buf f-buf)))
+
+(disable m1$value)
+
+(prove-lemma m1$state (rewrite)
+  (implies
+   (m1& netlist)
+   (equal (dual-eval 2 'M1 (list clk en sel d q) state netlist)
+          (f-if sel d q)))
+  ;;Hint
+  ((enable m1& b-if$value fd1$value fd1$state t-buf$value f-if ft-buf f-buf)))
+
+(disable m1$state)
+
+(defn m2* ()
+  '(m2
+    (clk en0 en1 sel0 sel1 d0 d1)
+    (q)
+    ((occ0 (q0) m1     (clk en0 sel0 d0 q))
+     (occ1 (q1) m1     (clk en1 sel1 d1 q))
+     (wire (q)  t-wire (q0 q1)))
+    (occ0 occ1)))
+
+(module-netlist m2*)
+(module-predicate m2*)
+
+(prove-lemma m2$value (rewrite)
+  (implies
+   (m2& netlist)
+   (equal (dual-eval 0 'M2 
+                     (list clk en0 en1 sel0 sel1 d0 d1) state netlist)
+          (list (ft-wire (ft-buf en0 (car state))
+                         (ft-buf en1 (cadr state))))))
+  ;;Hint
+  ((enable m2& m1$value m1$state t-wire$value)))
+
+(disable m2$value)
+
+(prove-lemma m2$state (rewrite)
+  (implies
+   (m2& netlist)
+   (equal (dual-eval 2 'M2
+                     (list clk en0 en1 sel0 sel1 d0 d1) state netlist)
+          (let ((q (ft-wire (ft-buf en0 (car state))
+                            (ft-buf en1 (cadr state)))))
+            (list (f-if sel0 d0 q) (f-if sel1 d1 q)))))
+  ;;Hint
+  ((enable m2& m1$value m1$state t-wire$value)))
+
+(disable m2$state)

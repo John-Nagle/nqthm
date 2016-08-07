@@ -1,0 +1,606 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+;; Ramsey Theorem (infinite version) events supporting ``An Extension
+;; of the Boyer-Moore Theorem Prover to Support First-Order
+;; Quantification,'' to appear in JAR (1992?).  The DEFN-SK events
+;; have been replaced by DCLs and ADD-AXIOMs, as shown.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Ramsey Theorem Events List
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(boot-strap nqthm)
+
+(constrain p-num-intro (rewrite)
+  (implies (and (numberp x) (numberp y))
+           (and (lessp 0 (p-num x y))
+                (not (lessp (bound) (p-num x y)))
+                (equal (p-num x y) (p-num y x))))
+  ((p-num (lambda (x y) 1))
+   (bound (lambda () 2))))
+
+(disable p-num-intro)
+
+(defn p (x y)
+  (p-num (fix x) (fix y)))
+
+(prove-lemma p-intro (rewrite)
+  (and (lessp 0 (p x y))
+       (not (lessp (bound) (p x y)))
+       (equal (p x y) (p y x)))
+  ((use (p-num-intro (x (fix x)) (y (fix y))))))
+
+(disable p)
+
+(defn prehom-seq-1 (a x)
+  ;; x is a list of pairs (i . c), and this says that for each
+  ;; such pair, p(i,a) <-> c.
+  (if (listp x)
+      (and (equal (p (caar x) a) (cdar x))
+           (prehom-seq-1 a (cdr x)))
+    t))
+
+(defn prehom-seq (x)
+  ;; a list of pairs in decreasing order, such that
+  ;; if (j . ?) is before (i . c) (and hence presumably i < j),
+  ;; then p(i,j) <-> c.
+  (if (listp x)
+      (if (listp (cdr x))
+          (and (lessp (car (cadr x)) (car (car x)))
+               (prehom-seq-1 (caar x) (cdr x))
+               (prehom-seq (cdr x)))
+        t)
+    t))
+
+#| The original DEFN-SK event here was processed as follows:
+
+>(defn-sk extensible (s)
+  ;; s is a list of pairs (i . c), and extensible means that there
+  ;; are infinitely many a for which prehom-seq-1(a,s) holds.
+  (forall above
+          (exists next
+                  (and (lessp above next)
+                       (prehom-seq-1 next s)))))
+
+
+Adding the Skolem axiom:
+      (AND (IMPLIES (AND (LESSP (ABOVE S) NEXT)
+                         (PREHOM-SEQ-1 NEXT S))
+                    (EXTENSIBLE S))
+           (IMPLIES (NOT (AND (LESSP ABOVE (NEXT ABOVE S))
+                              (PREHOM-SEQ-1 (NEXT ABOVE S) S)))
+                    (NOT (EXTENSIBLE S)))).
+
+
+     As this is a DEFN-SK we can conclude that:
+      (OR (TRUEP (EXTENSIBLE S))
+          (FALSEP (EXTENSIBLE S)))
+is a theorem.
+
+
+[ 0.3 0.0 0.0 ]
+EXTENSIBLE
+
+>
+
+|#
+
+(dcl above (s))
+(dcl next (above s))
+(dcl extensible (s))
+
+(add-axiom extensible-intro (rewrite)
+  (AND (IMPLIES (AND (LESSP (ABOVE S) NEXT)
+                     (PREHOM-SEQ-1 NEXT S))
+                (EXTENSIBLE S))
+       (IMPLIES (NOT (AND (LESSP ABOVE (NEXT ABOVE S))
+                          (PREHOM-SEQ-1 (NEXT ABOVE S) S)))
+                (NOT (EXTENSIBLE S)))))
+
+(add-axiom extensible-boolean (rewrite)
+  (OR (TRUEP (EXTENSIBLE S))
+      (FALSEP (EXTENSIBLE S))))
+
+;; The following two lemmas are for the benefit of the proof-checker
+;; macro-command SK*.
+
+(prove-lemma extensible-suff (rewrite)
+  (implies (and (lessp (above s) next)
+                (prehom-seq-1 next s))
+           (extensible s)))
+
+(prove-lemma extensible-necc (rewrite)
+  (implies (not (and (lessp above (next above s))
+                     (prehom-seq-1 (next above s) s)))
+           (not (extensible s)))
+  ((use (extensible-intro))
+   (disable extensible-intro)))
+
+(defn above-all-aux (a s n)
+  (if (zerop n)
+      0
+    (plus (above (cons (cons a n) s))
+          (above-all-aux a s (sub1 n)))))
+
+(defn above-all (a s)
+  (above-all-aux a s (bound)))
+
+(prove-lemma lessp-above-all-aux (rewrite)
+  (implies (lessp 0 n)
+           (not (lessp (above-all-aux a s n)
+                       (above (cons (cons a n) s))))))
+
+(prove-lemma above-all-aux-monotone (rewrite)
+  (implies (not (lessp bound n))
+           (not (lessp (above-all-aux a s bound)
+                       (above-all-aux a s n))))
+  ((induct (above-all-aux a s bound))))
+
+(prove-lemma lessp-above-all-bound (rewrite)
+  (implies (and (lessp 0 n)
+                (not (lessp (bound) n)))
+           (not (lessp (above-all a s)
+                       (above (cons (cons a n) s))))))
+
+(defn next-element (a s)
+  (next (above-all a s) s))
+
+(defn next-color (a s)
+  (p a (next-element a s)))
+
+(prove-lemma numberp-p (rewrite)
+  (numberp (p x y))
+  ((use (p-intro))))
+
+(prove-lemma next-color-bound (rewrite)
+             (and (lessp 0 (next-color a s))
+                  (not (lessp (bound) (next-color a s)))))
+
+(disable above-all)
+
+;; first of two goals for extensible-cons
+(prove-lemma lessp-next-element (rewrite)
+  (implies (extensible s)
+           (lessp (above (cons (cons a (next-color a s)) s))
+                  (next-element a s)))
+  ((use (extensible-necc (above (above-all a s))))))
+
+(prove-lemma prehom-seq-1-next-element
+       (rewrite)
+       (implies (extensible s)
+                (prehom-seq-1 (next-element a s) s))
+       ((use (extensible-necc (above (above-all a s))))))
+
+(disable next-element)
+
+;; second of two goals for extensible-cons
+(prove-lemma prehom-seq-1-next-element-cons
+             (rewrite)
+             (implies (extensible s)
+                      (prehom-seq-1 (next-element a s)
+                                    (cons (cons a (next-color a s)) s))))
+
+(disable next-color)
+
+(prove-lemma extensible-cons (rewrite)
+ (implies (extensible s)
+          (extensible (cons (cons a (next-color a s)) s)))
+ ((use (extensible-suff (next (next-element a s))
+                        (s (cons (cons a (next-color a s)) s))))))
+
+(defn next-pair (s)
+  (cons (next (caar s) s) (next-color (next (caar s) s) s)))
+
+(prove-lemma next-pair-extends (rewrite)
+  (implies (extensible s)
+           (extensible (cons (next-pair s) s))))
+
+(defn ramsey-seq-p (s)
+  ;; a list of pairs in decreasing order, such that
+  ;; if (j . ?) is before (i . c) (and hence presumably i < j),
+  ;; then p(i,j) <-> c.
+  (and (extensible s)
+       (prehom-seq s)))
+
+(prove-lemma extensible-next-property (rewrite)
+ (implies
+  (extensible s)
+  (and (lessp a (next a s))
+       (prehom-seq-1 (next a s) s))))
+
+(prove-lemma ramsey-seq-p-extends (rewrite)
+  (implies (ramsey-seq-p s)
+           (ramsey-seq-p (cons (next-pair s) s))))
+
+(prove-lemma extensible-nlistp (rewrite)
+  (IMPLIES (NOT (LISTP S))
+           (EXTENSIBLE S))
+  ((use (extensible-intro (NEXT (add1 (ABOVE S)))))))
+
+(prove-lemma ramsey-seq-p-nlistp (rewrite)
+  (implies (nlistp s)
+           (ramsey-seq-p s)))
+
+(disable ramsey-seq-p)
+
+(disable next-pair)
+
+(defn ramsey-seq (n)
+  ;; gives decreasing prehomogeneous seq. of length n -- largest
+  ;; one is on the front!
+  (if (zerop n)
+      nil
+    (cons (next-pair (ramsey-seq (sub1 n)))
+          (ramsey-seq (sub1 n)))))
+
+(prove-lemma ramsey-seq-has-ramsey-seq-p (rewrite)
+  (ramsey-seq-p (ramsey-seq n)))
+
+;; Now we want to cut down this prehomogenous sequence to one that's
+;; homogeneous.  First let's define the flag.
+
+#| The original DEFN-SK event here was processed as follows:
+
+>(defn-sk good-color-p (c)
+  ;; says that arbitrarily large elements of ramsey-seq agree with c
+  (forall big
+          (exists good-c-index
+                  (and (lessp big good-c-index)
+                       (equal c (cdr (car (ramsey-seq good-c-index))))))))
+
+
+Adding the Skolem axiom:
+      (AND
+          (IMPLIES (AND (LESSP (BIG C) GOOD-C-INDEX)
+                        (EQUAL C
+                               (CDAR (RAMSEY-SEQ GOOD-C-INDEX))))
+                   (GOOD-COLOR-P C))
+          (IMPLIES (NOT (AND (LESSP BIG (GOOD-C-INDEX BIG C))
+                             (EQUAL C
+                                    (CDAR (RAMSEY-SEQ (GOOD-C-INDEX BIG C))))))
+                   (NOT (GOOD-COLOR-P C)))).
+
+
+     As this is a DEFN-SK we can conclude that:
+      (OR (TRUEP (GOOD-COLOR-P C))
+          (FALSEP (GOOD-COLOR-P C)))
+is a theorem.
+
+
+[ 0.2 0.0 0.0 ]
+GOOD-COLOR-P
+
+>
+
+|#
+
+(dcl big (c))
+(dcl good-c-index (big c))
+(dcl good-color-p (c))
+
+(add-axiom good-color-p-intro (rewrite)
+  (AND
+   (IMPLIES (AND (LESSP (BIG C) GOOD-C-INDEX)
+                 (EQUAL C
+                        (CDAR (RAMSEY-SEQ GOOD-C-INDEX))))
+            (GOOD-COLOR-P C))
+   (IMPLIES (NOT (AND (LESSP BIG (GOOD-C-INDEX BIG C))
+                      (EQUAL C
+                             (CDAR (RAMSEY-SEQ (GOOD-C-INDEX BIG C))))))
+            (NOT (GOOD-COLOR-P C)))))
+
+(add-axiom good-color-p-boolean (rewrite)
+  (OR (TRUEP (GOOD-COLOR-P C))
+      (FALSEP (GOOD-COLOR-P C))))
+
+;; The following two lemmas are for the benefit of the proof-checker
+;; macro-command SK*.
+
+(prove-lemma good-color-p-suff (rewrite)
+  (implies (and (lessp (big c) good-c-index)
+                (equal c
+                       (cdar (ramsey-seq good-c-index))))
+           (good-color-p c)))
+
+(prove-lemma good-color-p-necc (rewrite)
+  (implies
+   (not (and (lessp big (good-c-index big c))
+             (equal c
+                    (cdar (ramsey-seq (good-c-index big c))))))
+   (not (good-color-p c)))
+  ((use (good-color-p-intro))
+   (disable good-color-p-intro)))
+
+(defn good-c-index-wit (bound)
+  (if (zerop bound)
+      1
+    (plus (big bound)
+          (good-c-index-wit (sub1 bound)))))
+
+(prove-lemma good-c-index-wit-positive (rewrite)
+  (lessp 0 (good-c-index-wit bound)))
+
+(prove-lemma lessp-big-good-c-index (rewrite)
+  (implies (and (lessp 0 c)
+                (not (lessp bound c)))
+           (equal (lessp (big c) (good-c-index-wit bound))
+                  t)))
+
+(disable good-c-index-wit)
+
+(defn color ()
+  (cdar (ramsey-seq (good-c-index-wit (bound)))))
+
+(prove-lemma ramsey-seq-has-colors-in-bounds (rewrite)
+  (implies (lessp 0 n)
+           (and (lessp 0 (cdar (ramsey-seq n)))
+                (not (lessp (bound) (cdar (ramsey-seq n))))))
+  ((enable next-pair next-color)))
+
+(prove-lemma color-in-bounds (rewrite)
+  (and (lessp 0 (color))
+       (not (lessp (bound) (color)))))
+
+(prove-lemma color-is-good (rewrite)
+  (good-color-p (color))
+  ((use (good-color-p-suff (good-c-index (good-c-index-wit (bound)))
+                           (c (color))))))
+
+(disable color)
+(disable *1*color)
+
+(defn ramsey-index (n)
+  ;; returns the index of the nth member of ramsey-seq which has color (color)
+  (if (zerop n)
+      (good-c-index 0 (color))
+    (good-c-index (ramsey-index (sub1 n)) (color))))
+
+(prove-lemma color-properties (rewrite)
+  (and (lessp big (good-c-index big (color)))
+       (equal (cdr (car (ramsey-seq (good-c-index big (color)))))
+              (color)))
+  ((use (good-color-p-necc (c (color))))
+   (disable good-color-p-necc)))
+
+(prove-lemma ramsey-index-increasing (rewrite)
+  (implies (lessp i j)
+           (lessp (ramsey-index i) (ramsey-index j)))
+  ((induct (plus j q))))
+
+(defn ramsey (n)
+  (car (car (ramsey-seq (ramsey-index n)))))
+
+; Next goal:
+;(prove-lemma ramsey-increasing (rewrite)
+;  (implies (lessp i j)
+;           (lessp (ramsey i) (ramsey j))))
+
+(prove-lemma good-c-index-numberp (rewrite)
+ (numberp (good-c-index big (color)))
+ ((use (color-properties))
+  (disable color-properties)))
+
+(prove-lemma ramsey-index-numberp (rewrite)
+  (numberp (ramsey-index n)))
+
+(prove-lemma car-next-pair (rewrite)
+  (equal (car (next-pair s))
+         (next (caar s) s))
+  ((enable next-pair)))
+
+(prove-lemma ramsey-seq-extensible (rewrite)
+  (extensible (ramsey-seq n)))
+
+(prove-lemma next-not-zerop (rewrite)
+  (implies (extensible s)
+           (and (numberp (next a s))
+                (not (equal (next a s) 0))))
+ ((use (extensible-next-property))
+  (disable extensible-next-property)))
+
+(prove-lemma ramsey-seq-increasing (rewrite)
+  (implies (lessp i j)
+           (equal (lessp (caar (ramsey-seq i))
+                         (caar (ramsey-seq j)))
+                  t))
+  ((induct (plus j q))))
+
+(prove-lemma ramsey-index-increasing-rewrite (rewrite)
+  (implies (lessp i j)
+           (equal (lessp (ramsey-index i) (ramsey-index j)) t)))
+
+(disable ramsey-index-increasing)
+
+(prove-lemma ramsey-increasing nil
+  (implies (lessp i j)
+           (lessp (ramsey i) (ramsey j))))
+
+;; Now we want to show that ramsey is homogeneous for (color):
+
+;(prove-lemma ramsey-homogeneous (rewrite)
+;  (implies (lessp i j)
+;           (iff (p (ramsey i) (ramsey j))
+;                (color))))
+
+(defn restn
+  ;; from Bill Bevier's library
+  (n l)
+  (if (listp l)
+      (if (zerop n)
+          l
+          (restn (sub1 n) (cdr l)))
+      l))
+
+;; We've already proved (ramsey-seq-p (ramseq-seq i)).  So, in order
+;; to prove the key lemma ramsey-seq-prehom below, we'll use this
+;; together with an appropriate fact about restn and prehom seqs.
+
+(prove-lemma ramsey-seq-restn-length (rewrite)
+  (equal (restn n (ramsey-seq n))
+         nil))
+
+(prove-lemma prehom-seq-ramsey (rewrite)
+  (prehom-seq (ramsey-seq n))
+  ((use (ramsey-seq-has-ramsey-seq-p))
+   (disable ramsey-seq-has-ramsey-seq-p)
+   (enable ramsey-seq-p)))
+
+(defn length
+  (l)
+  (if (listp l)
+      (add1 (length (cdr l)))
+      0))
+
+(prove-lemma prehom-seq-1-restn (rewrite)
+  (implies (and (prehom-seq-1 a s)
+                (lessp x (length s)))
+           (equal (p (caar (restn x s)) a)
+                  (cdar (restn x s)))))
+
+(prove-lemma prehom-seq-restn (rewrite)
+  (implies (and (prehom-seq s)
+                (lessp 0 x)
+                (lessp x (length s)))
+           (equal (p (caar (restn x s)) (caar s))
+                  (cdar (restn x s)))))
+
+(prove-lemma ramsey-seq-plus (rewrite)
+  (equal (restn x (ramsey-seq (plus x y)))
+         (ramsey-seq y)))
+
+(prove-lemma plus-comm (rewrite)
+             ;; added to raw version to help with lemma below
+             (equal (plus x y) (plus y x)))
+
+(prove-lemma ramsey-seq-plus-commuted (rewrite)
+  (equal (restn x (ramsey-seq (plus y x)))
+         (ramsey-seq y)))
+
+(prove-lemma length-ramsey-seq (rewrite)
+  (equal (length (ramsey-seq n)) (fix n)))
+
+;; The lemmas from here to RAMSEY-SEQ-PREHOM were to eliminate the
+;; proof-checker hints from that lemma.
+
+(prove-lemma plus-difference-elim (elim)
+  (implies (and (numberp j)
+                (not (lessp j i)))
+           (equal (plus i (difference j i))
+                  j)))
+
+(prove-lemma restn-difference-ramsey-seq (rewrite)
+  (implies (and (lessp 0 i)
+                (lessp i j))
+           (equal (restn (difference j i)
+                         (ramsey-seq j))
+                  (ramsey-seq i))))
+
+(prove-lemma prehom-seq-restn-commuted (rewrite)
+  (implies (and (prehom-seq s)
+                (lessp 0 x)
+                (lessp x (length s)))
+           (equal (p (caar s) (caar (restn x s)))
+                  (cdar (restn x s))))
+  ((use (prehom-seq-restn))
+   (disable prehom-seq-restn)))
+
+(prove-lemma ramsey-seq-prehom-lemma nil
+             (implies (and (lessp 0 i) (lessp i j))
+                      (equal (p (caar (restn (difference j i)
+                                             (ramsey-seq j)))
+                                (caar (ramsey-seq j)))
+                             (cdar (restn (difference j i)
+                                          (ramsey-seq j)))))
+             ((disable restn-difference-ramsey-seq
+                       ramsey-seq-plus-commuted)))
+
+(prove-lemma ramsey-seq-prehom
+             ;; originally done with proof-checker
+             (rewrite)
+             (implies (and (lessp 0 i) (lessp i j))
+                      (equal (p (caar (ramsey-seq i))
+                                (caar (ramsey-seq j)))
+                             (cdar (ramsey-seq i))))
+             ((use (ramsey-seq-prehom-lemma))))
+
+(prove-lemma cdar-ramseq-seq-ramsey-index
+             (rewrite)
+             (equal (cdar (ramsey-seq (ramsey-index n)))
+                    (color)))
+
+(prove-lemma lessp-good-c-index (rewrite) 
+  (equal (lessp big
+                (good-c-index big (color)))
+         t))
+
+(disable color-properties)
+
+(prove-lemma good-c-index-non-zero (rewrite) 
+  (equal (lessp 0
+                (good-c-index big (color)))
+         t)
+  ((use (lessp-good-c-index))
+   (disable lessp-good-c-index)))
+
+(prove-lemma ramsey-index-positive
+             (rewrite)
+             (lessp 0 (ramsey-index n))
+             ((expand (ramsey-index n))))
+
+(prove-lemma ramsey-seq-hom-lessp
+             nil
+             (implies (lessp i j)
+                      (equal (p (ramsey i) (ramsey j))
+                             (color))))
+
+(prove-lemma p-num-is-p (rewrite)
+  (implies (and (numberp x) (numberp y))
+           (equal (p-num x y) (p x y)))
+  ((enable p)))
+
+(prove-lemma numberp-ramsey (rewrite)
+  (numberp (caar (ramsey-seq (ramsey-index n))))
+  ((enable next-pair)
+   (expand (ramsey-seq (ramsey-index n)))))
+
+(prove-lemma ramsey-seq-hom
+             (rewrite)
+             (implies (and (numberp i) (numberp j) (not (equal i j)))
+                      (equal (p-num (ramsey i) (ramsey j))
+                             (color)))
+             ((use (ramsey-seq-hom-lessp)
+                   (ramsey-seq-hom-lessp (i j) (j i)))))
+
+;; The above, together with what was already proved, i.e.
+
+;; (prove-lemma ramsey-increasing (rewrite)
+;;  (implies (lessp i j)
+;;           (lessp (ramsey i) (ramsey j))))
+
+;; and the fact that p-num was arbitrary (and there are no add-axioms)
+;; finishes the job.
+

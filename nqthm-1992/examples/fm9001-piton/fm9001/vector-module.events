@@ -1,0 +1,54 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    VECTOR-MODULE.EVENTS
+;;;
+;;;  Automatic definition and proofs for simple linear vector modules of
+;;;  primitives or other modules.  VECTOR-MODULE is defined in
+;;;  "vector-macros.lisp". 
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    VECTOR-MODULE-INDUCTION
+;;;
+;;;
+;;;  The induction scheme for vector modules.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn vector-module-induction (body m n bindings state-bindings netlist)
+  (if (zerop n)
+      t
+    (vector-module-induction
+     (cdr body)
+     (add1 m)
+     (sub1 n)
+     (dual-eval-body-bindings 1 body bindings state-bindings netlist)
+     state-bindings
+     netlist)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    V-BUF
+;;;    V-OR
+;;;    V-XOR
+;;;    V-PULLUP
+;;;    V-WIRE
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(vector-module v-buf (g (y) b-buf (a)) ((v-threefix a)) :enable (f-buf))
+
+(vector-module v-or (g (y) b-or (a b)) ((fv-or a b)))
+
+(vector-module v-xor (g (y) b-xor (a b)) ((fv-xor a b)))
+
+(vector-module v-pullup (g (y) pullup (a)) ((v-pullup a)))
+
+(vector-module v-wire (g (y) t-wire (a b)) ((v-wire a b)))

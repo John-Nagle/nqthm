@@ -1,0 +1,2069 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    FLAG-INTERPRETATION.EVENTS
+;;;
+;;;    Bishop Brock
+;;;    Computational Logic, Inc.
+;;;    May, 1993
+;;;
+;;;    Matt Kaufmann did much of the work when he proved the ALU interpretation
+;;;    lemmas.  The lemmas in this file simply repackage the things he proved
+;;;    into a potentially more useful format.  Since I didn't know his state of
+;;;    mind concerning the libraries when he did his proofs, mine may have many
+;;;    more DISABLE/ENABLE hints than really necessary.
+;;;
+;;;    The approach taken here is to prove a general lemma about the
+;;;    STORE-RESULTP interpretations of the FLAGS, after a particular
+;;;    instruction, and a minimal choice of set flags. In other words, assuming
+;;;    that the current instruction performs some operation, these lemmas tell
+;;;    how subsequent instructions would interpret the flags. E.g.,
+;;;
+;;;    (IMPLIES
+;;;     (AND (BV2P a b)
+;;;          <some flags in SET-FLAGS are set to be updated>)
+;;;     (EQUAL (STORE-RESULTP (UPDATE-FLAGS flags set-flags <alu-output>)
+;;;                           <store-cc code>)
+;;;            <some meaningful arithmetic or logical interpretation>)).
+;;;
+;;;    These lemmas are not stored as rewrite rules because they simply serve
+;;;    as consistency checks for the specification.  They would be necessary,
+;;;    however, for someone trying to prove an assembly language program on the
+;;;    FM9001. 
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;  This file was first developed after "flatten.events", which has the
+;;  following, seemingly extremely important macro invocation:
+
+(better-disable-back-to xs-suffice-for-reset-lemma)
+
+;;  These are very bothersome lemmas!
+
+(disable v-alu-correct-int-not-output)
+(disable v-alu-correct-nat-not-output)
+(disable v-alu-correct-nat-lsr-carry-out)
+(disable v-adder-output=v-sum)
+(disable v-alu-correct-nat-inc)
+(disable v-alu-correct-nat-adder)
+(disable v-alu-correct-int-asr)
+(disable v-alu-correct-nat-lsr)
+
+;;  These are very useful lemmas to have on.
+
+(enable v-to-nat-of-nat-to-v)
+(enable iplus-0-left)
+(enable iplus-0-right)
+(enable commutativity-of-iplus)
+
+;;
+;; These maybe go elsewhere.
+
+(prove-lemma v-negp->v-nzerop (rewrite)
+  (implies
+   (v-negp v)
+   (v-nzerop v))
+  ;;Hint
+  ((enable v-negp v-nzerop)))
+
+(prove-lemma v-zerop-implies-v-to-nat-0 (rewrite)
+  (implies
+   (v-zerop a)
+   (equal (v-to-nat a) 0))
+  ;;Hint
+  ((enable v-nzerop v-to-nat)))
+
+(prove-lemma boolp-flag-extracters (rewrite)
+  (and
+   (boolp (c-flag (update-flags flags set-flags cvzbv)))
+   (boolp (v-flag (update-flags flags set-flags cvzbv)))
+   (boolp (n-flag (update-flags flags set-flags cvzbv)))
+   (boolp (z-flag (update-flags flags set-flags cvzbv))))
+  ;;Hint
+  ((enable update-flags)
+   (enable-theory flags-theory)))
+
+(prove-lemma v-to-nat-equal (rewrite)
+  (implies
+   (bv2p a b)
+   (equal (equal (v-to-nat a) (v-to-nat b))
+          (equal a b)))
+  ;;Hint
+  ((induct (v-iff a b))
+   (enable bvp v-to-nat)))
+
+; Prove that NAT-TO-V on 0 gives a V-ZEROP bvp.
+
+(prove-lemma v-nzerop-nat-to-v-zero (rewrite)
+  (implies
+   (zerop z)
+   (not (v-nzerop (nat-to-v z l))))
+  ;;Hint
+  ((enable v-nzerop nat-to-v)))
+
+;;  A nice fact about V-NOT.
+
+(prove-lemma v-not-v-not (rewrite)
+  (implies
+   (bvp a)
+   (equal (v-not (v-not a))
+          a))
+  ;;Hint
+  ((enable v-not bvp)))
+
+; Maybe we don't want this one around all the time. Redundant??
+
+(prove-lemma rewrite-equal-v-to-nat-0 (rewrite)
+  (equal (equal (v-to-nat a) 0)
+         (v-zerop a))
+  ;;Hint
+  ((enable v-to-nat v-zerop v-nzerop)))
+
+(disable rewrite-equal-v-to-nat-0)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;  PRELIMINARIES
+;;;
+;;;  Definition of constants for readability.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn cc-cc () #v0000)
+(defn cc-cs () #v0001)
+(defn cc-vc () #v0010)
+(defn cc-vs () #v0011)
+(defn cc-pl () #v0100)
+(defn cc-mi () #v0101)
+(defn cc-ne () #v0110)
+(defn cc-eq () #v0111)
+(defn cc-hi () #v1000)
+(defn cc-ls () #v1001)
+(defn cc-ge () #v1010)
+(defn cc-lt () #v1011)
+(defn cc-gt () #v1100)
+(defn cc-le () #v1101)
+(defn cc-t  () #v1110)
+(defn cc-f  () #v1111)
+
+(deftheory condition-code-theory 
+  (cc-cc cc-cs cc-vc cc-vs cc-pl cc-mi cc-ne cc-eq cc-hi cc-ls cc-ge cc-lt 
+         cc-gt cc-le cc-t cc-f))
+
+(defn op-move () #v0000)
+(defn op-inc  () #v0001)
+(defn op-addc () #v0010)
+(defn op-add  () #v0011)
+(defn op-neg  () #v0100)
+(defn op-dec  () #v0101)
+(defn op-subb () #v0110)
+(defn op-sub  () #v0111)
+(defn op-ror  () #v1000)
+(defn op-asr  () #v1001)
+(defn op-lsr  () #v1010)
+(defn op-xor  () #v1011)
+(defn op-or   () #v1100)
+(defn op-and  () #v1101)
+(defn op-not  () #v1110)
+(defn op-m15  () #v1111)
+
+(deftheory opcode-theory
+  (op-move op-inc op-addc op-add op-neg op-dec op-subb op-sub op-ror op-asr
+           op-lsr op-xor op-or op-and op-not op-m15))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;  BIT VECTORS
+;;;
+;;;  Here we include interpretations valid for all functions of the ALU, as
+;;;  well as some interpretation lemmas for the carry out on logical shifts.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  First, prove that the Z bit and N bit are always set as expected.
+
+; Go get a cup of coffee while this one grinds out!
+(prove-lemma zb-v-alu ()
+  (equal (zb (v-alu c a b op-code))
+         (v-zerop (bv (v-alu c a b op-code))))
+  ((enable zb v-alu bv)))
+
+(prove-lemma n-v-alu ()
+  (equal (n (v-alu c a b op-code))
+         (v-negp (bv (v-alu c a b op-code))))
+  ((enable n v-alu bv)))
+
+(prove-lemma universal-flags-interpretations ()
+  (let
+    ((new-flags (update-flags flags set-flags (v-alu c a b op-code))))
+    (implies
+     (and (bvp a)
+          (boolp c)
+          (not (zerop (length a))))
+     (and
+      (implies
+       (z-set set-flags)
+       (and (equal (store-resultp (cc-ne) new-flags)
+                   (v-nzerop (bv (v-alu c a b op-code))))
+            (equal (store-resultp (cc-eq) new-flags)
+                   (not (v-nzerop (bv (v-alu c a b op-code)))))))
+      (implies
+       (n-set set-flags)
+       (and (equal (store-resultp (cc-pl) new-flags)
+                   (not (v-negp (bv (v-alu c a b op-code)))))
+            (equal (store-resultp (cc-mi) new-flags)
+                   (v-negp (bv (v-alu c a b op-code))))))
+      (equal (store-resultp (cc-t) new-flags)
+             t)
+      (equal (store-resultp (cc-f) new-flags)
+             f))))
+  ;;Hint
+  ((use (zb-v-alu) (n-v-alu))
+   (enable set-flags update-flags store-resultp boolp)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;   SUB
+;;
+;;   The proof that SUB is a compare for bit vectors.
+;;
+;;   We show that if the result of a subtract is 0, then a=b.
+;;   We first prove a lemma about V-SUM.  This is a V-SUM lemma because
+;;   V-SUBTRACTER-OUTPUT is defined in terms of V-ADDER-OUTPUT which can be
+;;   rewritten to V-SUM. 
+
+(prove-lemma v-sum-on-not-a-a (rewrite)
+  (implies
+   (bv2p a b)
+   (equal (v-nzerop (v-sum t a b))
+          (not (equal (v-not a) b))))
+  ;;Hint
+  ((enable v-nzerop v-sum v-not)
+   (disable v-alu-correct-nat-not-output)))
+
+(prove-lemma if-v-subtracter-output=0-then-a=b (rewrite)
+  (implies
+   (bv2p a b)
+   (equal (v-nzerop (v-subtracter-output f a b))
+          (not (equal a b))))
+  ;;Hint
+  ((disable v-alu-correct-nat-not-output)
+   (enable v-subtracter-output v-adder-output=v-sum)))
+
+;; Good for all subtracts!
+
+(prove-lemma zero-flag-interpretation-for-sub ()
+  (let
+    ((sub-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+     (implies
+      (and (bv2p a b)
+           (z-set set-flags))
+      (equal (z-flag sub-flags)
+             (equal a b))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           v-alu-nat-dec v-alu-nat-subtracter v-alu-nat-subtracter-carry-out
+           v-alu-nat-subtracter-output
+           c v n cv bv *1*exp *1*b-to-nat
+           zb)
+   (enable-theory set-flags-theory flags-theory)
+   (disable v-subtracter-output v-alu-correct-nat-subtracter
+            v-alu-correct-nat-subtracter-output)))
+
+(prove-lemma flags-interpretation-sub ()
+  (let
+    ((new-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+    (implies
+     (and (bv2p a b)
+          (z-set set-flags))
+     (and (equal (store-resultp (cc-ne) new-flags)
+                 (not (equal a b)))
+          (equal (store-resultp (cc-eq) new-flags)
+                 (equal a b)))))
+  ;;Hint
+  ((use (zero-flag-interpretation-for-sub))
+   (enable set-flags store-resultp)
+   (disable v-alu-correct-nat-inc v-alu-correct-nat-adder)))
+
+;;
+;;  ROR
+;;
+;;  Carry out of ROR
+
+(prove-lemma v-negp-v-shift-right (rewrite)
+  (implies
+   (and (not (equal (length a) 0))
+        (boolp c))
+   (equal (v-negp (v-shift-right a c))
+          c))
+  ;;Hint
+  ((enable v-negp v-shift-right append v-buf)
+   (induct (length a))))
+
+(prove-lemma flags-interpretation-ror ()
+  (let
+    ((new-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-ror)))))
+    (implies
+     (and (bvp a)
+          (boolp (c-flag flags))
+          (not (zerop (length a))))
+     (and
+      (implies
+       (c-set set-flags)
+       (and (equal (store-resultp (cc-cc) new-flags)
+                   (not (nth 0 a)))
+            (equal (store-resultp (cc-cs) new-flags)
+                   (nth 0 a))))
+      (implies
+       (n-set set-flags)
+       (and (equal (store-resultp (cc-pl) new-flags)
+                   (not (c-flag flags)))
+            (equal (store-resultp (cc-mi) new-flags)
+                   (c-flag flags)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu c n bv)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  LSR
+;;
+
+(prove-lemma flags-interpretation-lsr ()
+  (let
+    ((new-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-lsr)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (c-set set-flags))
+     (and (equal (store-resultp (cc-cc) new-flags)
+                 (not (nth 0 a)))
+          (equal (store-resultp (cc-cs) new-flags)
+                 (nth 0 a)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu c)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;   XOR
+;;
+;;   Prove that XOR can also be used as a compare.
+
+(prove-lemma flags-interpretation-xor ()
+  (let
+    ((new-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-xor)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (z-set set-flags))
+     (and (equal (store-resultp (cc-ne) new-flags)
+                 (not (equal a b)))
+          (equal (store-resultp (cc-eq) new-flags)
+                 (equal a b)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu zb)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    NATURALS
+;;;
+;;;    Interpretation of the flags for the cases where the arguments are
+;;;    thought of as natural numbers.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;
+;;  MOV
+;;
+;;  Zero clear and set on natural moves.
+
+(prove-lemma flags-interpretation-nat-move ()
+  (let
+    ((move-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-move))))
+     (m15-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-m15)))))
+    (implies
+     (and (bv2p a b)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-ne) move-flags)
+             (not (equal (v-to-nat a) 0)))
+      (equal (store-resultp (cc-eq) move-flags)
+             (equal (v-to-nat a) 0))
+      (equal (store-resultp (cc-ne) m15-flags)
+             (not (equal (v-to-nat a) 0)))
+      (equal (store-resultp (cc-eq) m15-flags)
+             (equal (v-to-nat a) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu 
+           c v n cv bv *1*exp *1*b-to-nat zb
+           rewrite-equal-v-to-nat-0)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  INC
+;;
+;;  Carry clear and set on natural increment.
+
+(prove-lemma flags-interpretation-nat-inc ()
+  (let
+    ((inc-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-inc)))))
+    (implies
+     (and (bv2p a b)
+          (c-set set-flags))
+     (and
+      (equal (store-resultp (cc-cc) inc-flags)
+             (lessp (add1 (v-to-nat a)) (exp 2 (length a))))
+      (equal (store-resultp (cc-cs) inc-flags)
+             (not (lessp (add1 (v-to-nat a)) (exp 2 (length a))))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           c v n cv bv *1*exp *1*b-to-nat)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  ADDC
+;;
+;;  Carry clear and set on natural addition with carry.
+
+(prove-lemma flags-interpretation-nat-addc ()
+  (let
+    ((add-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-addc)))))
+    (implies
+     (and (bv2p a b)
+          (c-set set-flags))
+     (and
+      (equal (store-resultp (cc-cc) add-flags)
+             (lessp (plus (b-to-nat (c-flag flags))
+                          (v-to-nat a)
+                          (v-to-nat b)) (exp 2 (length a))))
+      (equal (store-resultp (cc-cs) add-flags)
+             (not (lessp (plus (b-to-nat (c-flag flags))
+                               (v-to-nat a)
+                               (v-to-nat b))
+                         (exp 2 (length a))))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           c v n cv bv *1*exp *1*b-to-nat)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  ADD
+;;  
+;;  Carry clear and set on natural addition.
+
+(prove-lemma flags-interpretation-nat-add ()
+  (let
+    ((add-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-add)))))
+    (implies
+     (and (bv2p a b)
+          (c-set set-flags))
+     (and
+      (equal (store-resultp (cc-cc) add-flags)
+             (lessp (plus (v-to-nat a) (v-to-nat b)) (exp 2 (length a))))
+      (equal (store-resultp (cc-cs) add-flags)
+             (not (lessp (plus (v-to-nat a) (v-to-nat b))
+                         (exp 2 (length a))))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           c v n cv bv *1*exp *1*b-to-nat)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  DEC
+;;
+;;  Carry clear and set on natural decrement.
+;;  Zero clear and set on natural decrement.
+;;  HIGHER and LOWER OR SAME on natural decrement.
+
+;; Hats off to Warren for this record-breaking name!
+(prove-lemma when-the-mantissa-isnt-0-then-neither-is-the-exponential (rewrite)
+  (implies
+   (not (zerop mantissa))
+   (not (equal (exp mantissa exponent) 0)))
+  ;;hint
+  ((enable exp)))
+
+(defn double-difference-induction (n m l)
+  (if (zerop n)
+      t
+    (if (zerop m)
+        t
+      (if (zerop l)
+          t
+        (double-difference-induction (difference n l) (difference m l) l)))))
+
+(prove-lemma quotient-lessp-double-remainder$help ()
+  (implies
+   (and (lessp n m)
+        (not (zerop n))
+        (not (zerop m))
+        (not (zerop l))
+        (equal (remainder n l) 0)
+        (equal (remainder m l) 0))
+   (lessp (quotient n l) (quotient m l)))
+  ;;Hint
+  ((induct (double-difference-induction n m l))))
+
+(prove-lemma v-nzerop-nat-to-v$help (rewrite)
+  (implies 
+   (and (not (zerop l))
+        (not (zerop n))
+        (equal (remainder n 2) 0)
+        (lessp n (exp 2 l)))
+   (lessp (quotient n 2) 
+          (exp 2 (sub1 l))))
+  ;;Hint
+  ((enable remainder-exp quotient-exp)
+   (use (quotient-lessp-double-remainder$help
+        (n n) (m (exp 2 l)) (l 2)))))
+
+(disable v-nzerop-nat-to-v$help)
+
+(prove-lemma v-nzerop-nat-to-v (rewrite)
+  (implies
+   (lessp n (exp 2 l))
+   (equal (v-nzerop (nat-to-v n l))
+          (not (zerop n))))
+  ;;Hint
+  ((enable v-nzerop nat-to-v quotient exp
+           v-nzerop-nat-to-v$help)
+   (induct (nat-to-v n l))))
+
+(prove-lemma lessp-sub1-plus-a-b-b (rewrite)
+  (equal (lessp (sub1 (plus a b)) b)
+         (and (zerop a)
+              (not (zerop b)))))
+
+(prove-lemma lessp-v-to-nat-exp-2-length-a (rewrite)
+  (implies
+   (equal l (length a))
+   (equal (lessp (v-to-nat a) (exp 2 l))
+          t))
+  ;;Hint
+  ((enable v-to-nat exp length)))
+
+(prove-lemma lessp-v-to-nat-exp-2-length-a$linear (rewrite)
+  (lessp (v-to-nat a) (exp 2 (length a))))
+
+(prove-lemma flags-interpretation-nat-dec ()
+  (let
+    ((dec-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-dec)))))
+    (implies
+     (bv2p a b)
+     (and
+      (implies
+       (c-set set-flags)
+       (and
+        (equal (store-resultp (cc-cc) dec-flags)
+               (not (equal (v-to-nat a) 0)))
+        (equal (store-resultp (cc-cs) dec-flags)
+               (equal (v-to-nat a) 0))))
+      (implies
+       (and (z-set set-flags)
+            (not (equal (length a) 0)))
+       (and
+        (equal (store-resultp (cc-ne) dec-flags)
+               (not (equal (v-to-nat a) 1)))
+        (equal (store-resultp (cc-eq) dec-flags)
+               (equal (v-to-nat a) 1)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           ;;v-alu-nat-adder v-alu-nat-adder-carry-out
+           v-alu-nat-dec v-alu-nat-subtracter v-alu-nat-subtracter-carry-out
+           v-alu-nat-subtracter-output
+           c v n cv bv zb *1*exp *1*b-to-nat
+           equal-sub1-0 equal-exp-1)
+   (expand (remainder (sub1 (plus (v-to-nat a) 
+                                  (exp 2 (length a)))) 
+                      (exp 2 (length a))))
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  SUBB
+;;
+;;  Carry clear and set, and HIGHER or LOWER OR SAME.  The lemmas don't work as
+;;  well when proved together.
+
+(prove-lemma remainder-theorem-for-subb (rewrite)
+  (implies
+   (and (lessp a b)
+        (lessp b c))
+   (equal (remainder (difference (plus b c) a) c)
+          (difference b a)))
+  ;;Hint
+  ((expand (remainder (difference (plus b c) a) c))))
+
+;;  Move elsewhere!
+(prove-lemma difference-linear (rewrite)
+  (implies
+   (lessp a b)
+   (equal (lessp (difference a c) b)
+          t)))
+
+;;  Carry clear and set on natural subb.
+
+(prove-lemma flags-interpretation-nat-subb-carry ()
+  (let
+    ((subb-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-subb)))))
+    (implies
+     (and (bv2p a b)
+          (c-set set-flags))
+       (and
+        (equal (store-resultp (cc-cc) subb-flags)
+               (not (lessp (v-to-nat b)
+                           (plus (v-to-nat a) (b-to-nat (c-flag flags))))))
+        (equal (store-resultp (cc-cs) subb-flags)
+               (lessp (v-to-nat b)
+                      (plus (v-to-nat a) (b-to-nat (c-flag flags))))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           v-alu-nat-dec v-alu-nat-subtracter v-alu-nat-subtracter-carry-out
+           c v n cv bv *1*exp *1*b-to-nat)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;  Carry and Zero on natural SUBB.
+
+(prove-lemma flags-interpretation-nat-subb-higher ()
+  (let
+    ((subb-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-subb)))))
+    (implies
+     (and (bv2p a b)
+          (c-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-hi) subb-flags)
+             (lessp (plus (v-to-nat a) (b-to-nat (c-flag flags)))
+                    (v-to-nat b)))
+      (equal (store-resultp (cc-ls) subb-flags)
+             (not (lessp (plus (v-to-nat a) (b-to-nat (c-flag flags)))
+                         (v-to-nat b)))))))
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           v-alu-nat-dec v-alu-nat-subtracter v-alu-nat-subtracter-carry-out
+           v-alu-nat-subtracter-output
+           c v n cv bv zb *1*exp)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  SUB
+;;
+
+(prove-lemma carry-flag-nat-interpretation-for-sub ()
+  (let
+    ((sub-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+    (implies
+     (and (bv2p a b)
+          (c-set set-flags))
+     (equal (c-flag sub-flags)
+            (lessp (v-to-nat b) (v-to-nat a)))))
+
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-adder v-alu-nat-adder-carry-out
+           v-alu-nat-dec v-alu-nat-subtracter v-alu-nat-subtracter-carry-out
+           v-alu-nat-subtracter-output
+           c v n cv bv *1*exp *1*b-to-nat
+           zb)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;  The flags interpretation lemma for natural subtract.
+
+(prove-lemma flags-interpretation-nat-sub ()
+  (let
+   ((sub-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+    (implies
+     (bv2p a b)
+     (and
+      ;; Carry clear and set.
+      (implies
+       (c-set set-flags)
+       (and (equal (store-resultp (cc-cc) sub-flags)
+                   (not (lessp (v-to-nat b) (v-to-nat a))))
+            (equal (store-resultp (cc-cs) sub-flags)
+                   (lessp (v-to-nat b) (v-to-nat a)))))
+      ;;  Unsigned comparisons
+      (implies
+       (and (c-set set-flags)
+            (z-set set-flags))
+       (and (equal (store-resultp (cc-hi) sub-flags)
+                   (lessp (v-to-nat a) (v-to-nat b)))
+            (equal (store-resultp (cc-ls) sub-flags)
+                   (not (lessp (v-to-nat a) (v-to-nat b)))))))))
+  ;;Hint
+  ((use (zero-flag-interpretation-for-sub)
+        (carry-flag-nat-interpretation-for-sub))
+   (enable c-set z-set store-resultp)
+   (disable boolp)))
+
+;;
+;;  LSR
+;;
+
+;;  Carry clear and set for natural shift right.
+
+(prove-lemma flags-interpretation-nat-lsr-carry ()
+  (let
+    ((lsr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-lsr)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (c-set set-flags))
+     (and
+      (equal (store-resultp (cc-cc) lsr-flags)
+             (equal (remainder (v-to-nat a) 2) 0))
+      (equal (store-resultp (cc-cs) lsr-flags)
+             (not (equal (remainder (v-to-nat a) 2) 0))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-lsr v-alu-nat-lsr-carry-out
+           v-alu-correct-nat-lsr-carry-out
+           c v n cv bv *1*exp *1*b-to-nat)
+   (enable-theory set-flags-theory flags-theory)
+   (disable v-negp-v-shift-right open-nth)))
+
+;;  Zero clear and set for natural shift right.
+
+(prove-lemma flags-interpretation-nat-lsr-zero ()
+  (let
+    ((lsr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-lsr)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-ne) lsr-flags)
+             (not (equal (quotient (v-to-nat a) 2) 0)))
+      (equal (store-resultp (cc-eq) lsr-flags)
+             (equal (quotient (v-to-nat a) 2) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu v-alu-nat-inc
+           v-alu-nat-lsr-output
+           zb c v n cv bv *1*exp *1*b-to-nat)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    INTEGERS
+;;;
+;;;    Interpretation of the flags for the cases where the arguments are
+;;;    thought of as integers.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;
+;;  We begin with a raft of useful lemmas.
+;;
+
+(prove-lemma idifference-0 (rewrite)
+  (implies
+   (and (integerp a)
+        (integerp b))
+   (equal (equal (idifference a b) 0)
+          (equal a b)))
+  ;;Hint
+  ((enable integerp fix-int idifference iplus ineg)))
+
+(prove-lemma v-to-nat-lessp-exp-2-length (rewrite)
+  (lessp (v-to-nat a) (exp 2 (length a)))
+  ;;Hint
+  ((enable v-to-nat exp length)))
+
+(prove-lemma integerp-v-to-int (rewrite)
+  (integerp (v-to-int a))
+  ;;Hint
+  ((enable integerp v-to-int idifference iplus)))
+
+; Unfortunate, but V-NEGP doesn't BOOLFIX the sign bit, so we can't get a
+; hypothesis-free equality.
+(prove-lemma v-negp-as-bounds (rewrite)
+  (implies
+   (bvp x)
+   (equal (v-negp x) (not (lessp (v-to-nat x) (exp 2 (sub1 (length x)))))))
+  ;;Hint
+  ((enable v-to-nat v-negp exp length bvp)))
+
+(disable v-negp-as-bounds)
+
+(prove-lemma negativep-idifference-on-numberps (rewrite)
+  (implies
+   (and (numberp a)
+        (numberp b))
+   (equal (negativep (idifference a b))
+          (lessp a b)))
+  ;;Hint
+  ((enable idifference iplus ineg)))
+
+(prove-lemma v-negp->negativep-v-to-int (rewrite)
+  (implies
+   (bvp a)
+   (equal (v-negp a) (negativep (v-to-int a))))
+  ;;Hint
+  ((enable v-negp-as-bounds v-to-int)))
+
+(disable v-negp->negativep-v-to-int)
+
+(prove-lemma rewrite-equal-v-to-int-0 (rewrite)
+  (equal (equal (v-to-int a) 0)
+         (v-zerop a))
+  ;;Hint
+  ((enable integerp v-to-int v-zerop v-nzerop rewrite-equal-v-to-nat-0)))
+
+(disable rewrite-equal-v-to-int-0)
+
+(prove-lemma int-to-v-v-to-int-0 (rewrite)
+  (equal (v-to-int (int-to-v 0 l)) 0)
+  ;;Hint
+  ((enable v-to-int int-to-v ilessp)))
+
+(prove-lemma bvp-int-to-v (rewrite)
+  (bvp (int-to-v i l))
+  ;;Hint
+  ((enable bvp int-to-v)))
+
+(prove-lemma v-to-int-nat-to-v-0 (rewrite)
+  (equal (v-to-int (nat-to-v 0 l))
+         0)
+  ;;Hint
+  ((enable v-to-int nat-to-v)))
+
+(prove-lemma integer-in-rangep-minus-0 (rewrite)
+  (integer-in-rangep (minus 0) l)
+  ;;Hint
+  ((enable integer-in-rangep *1*exp ileq ilessp ineg)))
+
+(prove-lemma not-equal-iplus-minus-0 (rewrite)
+  (not (equal (iplus a b) (minus 0)))
+  ;;Hint
+  ((enable-theory all-integer-defns)))
+
+(prove-lemma lessp-1-plus-x-x (rewrite)
+  (equal (lessp 1 (plus x x))
+         (not (zerop x))))
+
+(prove-lemma integer-in-rangep-1 (rewrite)
+  (implies
+   (and (not (zerop l))
+        (not (equal l 1)))
+   (integer-in-rangep 1 l))
+  ;;Hint
+  ((enable integer-in-rangep ileq ilessp iplus ineg)
+   (expand (exp 2 (sub1 l)))))
+
+(prove-lemma lessp-a-plus-a-a (rewrite)
+  (equal (lessp a (plus a a))
+         (not (zerop a))))
+
+(prove-lemma exp-linear-bounds (rewrite)
+  (implies
+   (and (leq (exp 2 (sub1 n)) v)
+        (lessp v (exp 2 n)))
+   (not (lessp (exp 2 (sub1 n)) (difference (exp 2 n) v))))
+  ;;Hint
+  ((expand (exp 2 n))))
+
+(prove-lemma integer-in-rangep-v-to-int (rewrite)
+  (implies
+   (equal l (length a))
+   (integer-in-rangep (v-to-int a) l))
+  ;;Hint
+  ((enable integer-in-rangep v-to-int)
+   (enable-theory all-integer-defns)
+   (disable bvp)))
+
+;;  These lemmas are very important for the interpretation of the carry and
+;;  negative flags, and not at all straightforward to prove.
+
+(prove-lemma addition-cases-for-integer-in-rangep-lemmas ()
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (lessp (iplus a b) (exp 2 l)))
+  ;;Hint
+  ((enable exp integer-in-rangep ilessp ileq ineg iplus int-to-v
+           v-negp-as-bounds)))
+
+(prove-lemma subtraction-cases-for-integer-in-rangep-lemmas ()
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (lessp (iplus b (ineg a)) (exp 2 l)))
+  ;;Hint
+  ((enable exp integer-in-rangep ilessp ileq ineg iplus int-to-v fix-int
+           v-negp-as-bounds)))
+        
+(prove-lemma exp-2-l-1<=exp-2-l ()
+  (implies
+   (not (zerop l))
+   (lessp (exp 2 (sub1 l)) (exp 2 l)))
+  ;;Hint
+  ((enable exp)))
+
+(prove-lemma lessp-remainder-theorem ()
+  (implies
+   (lessp n m)
+   (lessp (remainder n r) m)))
+
+(prove-lemma integer-in-rangep-the-obvious-way (rewrite)
+  (implies
+   (and 
+    (not (zerop l))
+    (integerp i)
+    (integer-in-rangep i l))
+   (equal (v-negp (int-to-v i l))
+          (negativep i)))
+  ;;Hint
+  ((use (lessp-remainder-theorem
+         (n i) (m (exp 2 (sub1 l)))
+         (r (plus (exp 2 (sub1 l)) (exp 2 (sub1 l))))))
+   (enable exp integer-in-rangep v-negp-as-bounds int-to-v)
+   (enable-theory all-integer-defns)))
+
+(disable integer-in-rangep-the-obvious-way)
+
+(prove-lemma integer-in-rangep-iplus (rewrite)
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (equal (integer-in-rangep (iplus a b) l)
+          (equal (v-negp (int-to-v (iplus a b) l))
+                 (negativep (iplus a b)))))
+  ;;Hint
+  ((use                                 
+    (addition-cases-for-integer-in-rangep-lemmas)
+    (exp-2-l-1<=exp-2-l))
+   (enable integer-in-rangep exp v-negp-as-bounds int-to-v)
+   (enable-theory all-integer-defns)))
+
+(disable integer-in-rangep-iplus)
+
+(prove-lemma integer-in-rangep-iplus$commuted ()
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (equal (negativep (iplus a b))
+          (iff (integer-in-rangep (iplus a b) l)
+               (v-negp (int-to-v (iplus a b) l)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus))))
+
+(prove-lemma integer-in-rangep-iplus-carry (rewrite)
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (equal (integer-in-rangep (iplus 1 (iplus a b)) l)
+          (equal (v-negp (int-to-v (iplus 1 (iplus a b)) l))
+                 (negativep (iplus 1 (iplus a b))))))
+  ;;Hint
+  ((use (addition-cases-for-integer-in-rangep-lemmas)
+        (exp-2-l-1<=exp-2-l))
+   (enable exp integer-in-rangep v-negp-as-bounds int-to-v)
+   (enable-theory all-integer-defns)))
+
+(disable integer-in-rangep-iplus-carry)
+
+(prove-lemma integer-in-rangep-iplus-carry$commuted ()
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (equal (negativep (iplus 1 (iplus a b)))
+          (iff (integer-in-rangep (iplus 1 (iplus a b)) l)
+               (v-negp (int-to-v (iplus 1 (iplus a b)) l)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus-carry))))
+
+(prove-lemma not-integerp-minus-zero (rewrite)
+  (equal (integerp (minus x))
+         (not (zerop x)))
+  ;;Hint
+  ((enable integerp)))
+
+(prove-lemma integer-in-rangep-iplus-ineg (rewrite)
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (equal (integer-in-rangep (iplus b (ineg a)) l)
+          (equal (v-negp (int-to-v (iplus b (ineg a)) l))
+                 (negativep (iplus b (ineg a))))))
+  ;;Hint
+  ((use (subtraction-cases-for-integer-in-rangep-lemmas)
+        (exp-2-l-1<=exp-2-l))
+   (enable exp integer-in-rangep ilessp ileq ineg iplus int-to-v
+           fix-int v-negp-as-bounds)))
+
+(disable integer-in-rangep-iplus-ineg)
+
+(prove-lemma integer-in-rangep-iplus-ineg$commuted ()
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l)))
+   (equal (negativep (iplus b (ineg a)))
+          (iff (integer-in-rangep (iplus b (ineg a)) l)
+               (v-negp (int-to-v (iplus b (ineg a)) l)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus-ineg))))
+
+(prove-lemma integer-in-rangep-iplus-ineg-carry (rewrite)
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l))
+        (not (equal l 1)))
+   (equal (integer-in-rangep (iplus b (ineg (iplus 1 a))) l)
+          (equal (v-negp (int-to-v (iplus b (ineg (iplus 1 a))) l))
+                 (negativep (iplus b (ineg (iplus 1 a)))))))
+  ;;Hint
+  ((use (subtraction-cases-for-integer-in-rangep-lemmas)
+        (exp-2-l-1<=exp-2-l))
+   (expand (remainder b (plus (exp 2 (sub1 l)) (exp 2 (sub1 l)))))
+   (enable exp integer-in-rangep ilessp ileq ineg iplus int-to-v
+           idifference fix-int v-negp-as-bounds)))
+
+(disable integer-in-rangep-iplus-ineg-carry)
+
+(prove-lemma integer-in-rangep-iplus-ineg-carry$commuted ()
+  (implies
+   (and (integer-in-rangep a l)
+        (integer-in-rangep b l)
+        (not (zerop l))
+        (not (equal l 1)))
+   (equal (negativep (iplus b (ineg (iplus 1 a))))
+          (iff (v-negp (int-to-v (iplus b (ineg (iplus 1 a))) l))
+                 (integer-in-rangep (iplus b (ineg (iplus 1 a))) l))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus-ineg-carry))))
+
+(prove-lemma lessp-1-exp-2 (rewrite)
+  (implies
+   (not (zerop l))
+   (lessp 1 (exp 2 l)))
+  ;;Hint
+  ((enable exp)))
+
+(prove-lemma v-nzerop-int-to-v (rewrite)
+  (implies
+   (and (integer-in-rangep n l)
+        (not (zerop l)))
+   (equal (v-nzerop (int-to-v n l))
+          (not (izerop n))))
+  ;;Hint
+  ((enable int-to-v integer-in-rangep exp)
+   (enable-theory all-integer-defns)))
+
+(prove-lemma izerop-inc-v-nzerop (rewrite)
+  (implies
+   (and (integer-in-rangep a l)
+        (not (zerop l)))
+   (equal (v-nzerop (int-to-v (iplus 1 a) l))
+          (not (izerop (iplus 1 a)))))
+  ;;Hint
+  ((enable-theory all-integer-defns)
+   (enable exp int-to-v integer-in-rangep)))
+
+(prove-lemma v-nzerop-int-to-v-0 (rewrite)
+  (implies
+   (izerop z)
+   (not (v-nzerop (int-to-v z l))))
+  ;;Hint
+  ((enable int-to-v)
+   (enable-theory all-integer-defns)))
+
+(prove-lemma integer-in-rangep-0 (rewrite)
+  (implies
+   (izerop a)
+   (integer-in-rangep a l))
+  ;;Hint
+  ((enable-theory all-integer-defns)
+   (enable integer-in-rangep)))
+
+(prove-lemma not-v-negp-nat-to-v-0 (rewrite)
+  (implies
+   (zerop a)
+   (not (v-negp (nat-to-v a l))))
+  ;;Hint
+  ((enable v-negp nat-to-v)))
+
+(prove-lemma length-int-to-v (rewrite)
+  (equal (length (int-to-v i l))
+         (fix l))
+  ;;Hint
+  ((enable int-to-v)))
+
+(prove-lemma integer-in-rangep--1 (rewrite)
+  (implies
+   (not (zerop l))
+   (integer-in-rangep -1 l))
+  ;;Hint
+  ((enable integer-in-rangep)
+   (enable-theory all-integer-defns)))
+
+;;
+;;  BEGIN LEMMAS
+;;
+
+;;
+;;
+;;  MOVE
+;;
+;;  Overflow clear and set, Zero clear and set, Negative clear and set, and
+;;  inequalities on integer moves.
+
+(prove-lemma flags-interpretation-int-move ()
+  (let
+    ((move-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-move))))
+     (m15-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-m15)))))
+    (implies
+     (bvp a)
+     (and
+      ;;  No overflow on move.
+      (implies
+       (v-set set-flags)
+       (and (equal (store-resultp (cc-vc) move-flags)
+                   (integer-in-rangep (v-to-int a) (length a)))
+            (equal (store-resultp (cc-vc) m15-flags)
+                   (integer-in-rangep (v-to-int a) (length a)))
+            (equal (store-resultp (cc-vs) move-flags)
+                   (not (integer-in-rangep (v-to-int a) (length a))))
+            (equal (store-resultp (cc-vs) m15-flags)
+                   (not (integer-in-rangep (v-to-int a) (length a))))))
+      ;;  Zero
+      (implies
+       (z-set set-flags)
+       (and
+        (equal (store-resultp (cc-ne) move-flags)
+               (not (equal (v-to-int a) 0)))
+        (equal (store-resultp (cc-eq) move-flags)
+               (equal (v-to-int a) 0))
+        (equal (store-resultp (cc-ne) m15-flags)
+               (not (equal (v-to-int a) 0)))
+        (equal (store-resultp (cc-eq) m15-flags)
+               (izerop (v-to-int a)))))
+      ;;  Simple negative.
+      (implies
+       (n-set set-flags)
+       (and
+        (equal (store-resultp (cc-pl) move-flags)
+               (not (negativep (v-to-int a))))
+        (equal (store-resultp (cc-mi) move-flags)
+               (negativep (v-to-int a)))
+        (equal (store-resultp (cc-pl) m15-flags)
+               (not (negativep (v-to-int a))))
+        (equal (store-resultp (cc-mi) m15-flags)
+               (negativep (v-to-int a)))))
+      ;;  Inequalities. Note that V = F on a MOV.
+      (implies
+       (and (v-set set-flags)
+            (n-set set-flags))
+       (and
+        (equal (store-resultp (cc-ge) move-flags)
+               (not (negativep (v-to-int a))))
+        (equal (store-resultp (cc-lt) move-flags)
+               (negativep (v-to-int a)))
+        (equal (store-resultp (cc-ge) m15-flags)
+               (not (negativep (v-to-int a))))
+        (equal (store-resultp (cc-lt) m15-flags)
+               (negativep (v-to-int a)))))
+      ;;  Other inequalities. Note that V = F on a MOV.
+      (implies
+       (and (v-set set-flags)
+            (n-set set-flags)
+            (z-set set-flags))
+       (and
+        (equal (store-resultp (cc-gt) move-flags)
+               (ilessp 0 (v-to-int a)))
+        (equal (store-resultp (cc-le) move-flags)
+               (ileq (v-to-int a) 0))
+        (equal (store-resultp (cc-gt) m15-flags)
+               (ilessp 0 (v-to-int a)))
+        (equal (store-resultp (cc-le) m15-flags)
+               (ileq (v-to-int a) 0)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu 
+           c v n cv bv *1*exp *1*b-to-nat zb
+           izerop fix-int ilessp ileq
+           v-negp->negativep-v-to-int rewrite-equal-v-to-int-0)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  INC
+;;
+
+(prove-lemma flags-interpretation-int-inc-overflow ()
+  (let
+    ((inc-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-inc)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) inc-flags)
+                 (integer-in-rangep (iplus (v-to-int a) 1)
+                                    (length a)))
+          (equal (store-resultp (cc-vs) inc-flags)
+                 (not (integer-in-rangep (iplus (v-to-int a) 1)
+                                         (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;  Note that for integer increment, the Z flag is valid.
+
+(prove-lemma flags-interpretation-int-inc-zero ()
+  (let
+    ((inc-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-inc)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-ne) inc-flags)
+             (not (equal (iplus (v-to-int a) 1) 0)))
+      (equal (store-resultp (cc-eq) inc-flags)
+             (equal (iplus (v-to-int a) 1) 0)))))
+     
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus izerop
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-inc-negative ()
+  (let
+    ((inc-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-inc)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-ge) inc-flags)
+             (not (negativep (iplus (v-to-int a) 1))))
+      (equal (store-resultp (cc-lt) inc-flags)
+             (negativep (iplus (v-to-int a) 1))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output integer-in-rangep-iplus)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-inc-gt-0 ()
+  (let
+    ((inc-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-inc)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) inc-flags)
+             (ilessp 0 (iplus 1 (v-to-int a))))
+      (equal (store-resultp (cc-le) inc-flags)
+             (ileq (iplus 1 (v-to-int a)) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus 
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output
+           integer-in-rangep-iplus izerop ileq)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  ADDC
+;;
+
+(prove-lemma flags-interpretation-int-addc-overflow ()
+  (let
+    ((c (c-flag flags))
+     (addc-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-addc)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) addc-flags)
+                 (integer-in-rangep (iplus (b-to-nat c)
+                                           (iplus (v-to-int a) (v-to-int b)))
+                                    (length a)))
+          (equal (store-resultp (cc-vs) addc-flags)
+                 (not (integer-in-rangep (iplus (b-to-nat c)
+                                                (iplus (v-to-int a)
+                                                       (v-to-int b)))
+                                         (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-addc-negative ()
+  (let
+    ((c (c-flag flags))
+     (addc-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-addc)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-lt) addc-flags)
+             (negativep (iplus (b-to-nat c)
+                               (iplus (v-to-int a) (v-to-int b)))))
+      (equal (store-resultp (cc-ge) addc-flags)
+             (not (negativep (iplus (b-to-nat c)
+                                    (iplus (v-to-int a) (v-to-int b))))))))) 
+
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output integer-in-rangep-iplus
+           integer-in-rangep-iplus-carry)
+   (enable-theory set-flags-theory flags-theory)))
+
+; 256 Cases!
+(prove-lemma flags-interpretation-int-addc-gt-0 ()
+  (let
+    ((c (c-flag flags))
+     (addc-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-addc)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) addc-flags)
+             (ilessp 0 (iplus (b-to-nat c) (iplus (v-to-int a) (v-to-int b)))))
+      (equal (store-resultp (cc-le) addc-flags)
+             (ileq (iplus (b-to-nat c)
+                          (iplus (v-to-int a) (v-to-int b))) 0)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus$commuted
+         (a (v-to-int a)) (b (v-to-int b)) (l (length a)))
+        (integer-in-rangep-iplus-carry$commuted
+         (a (v-to-int a)) (b (v-to-int b)) (l (length a))))
+   (enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus 
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output izerop ileq
+           integer-in-rangep ineg)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  ADD
+;;
+
+(prove-lemma flags-interpretation-int-add-overflow ()
+  (let
+    ((add-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-add)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) add-flags)
+                 (integer-in-rangep (iplus (v-to-int a) (v-to-int b))
+                                    (length a)))
+          (equal (store-resultp (cc-vs) add-flags)
+                 (not (integer-in-rangep (iplus (v-to-int a) (v-to-int b))
+                                         (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-add-negative ()
+  (let
+    ((add-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-add)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-lt) add-flags)
+             (negativep (iplus (v-to-int a) (v-to-int b))))
+      (equal (store-resultp (cc-ge) add-flags)
+             (not (negativep (iplus (v-to-int a) (v-to-int b))))))))
+
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output integer-in-rangep-iplus)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-add-gt-0 ()
+  (let
+    ((add-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-add)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) add-flags)
+             (ilessp 0 (iplus (v-to-int a) (v-to-int b))))
+      (equal (store-resultp (cc-le) add-flags)
+             (ileq (iplus (v-to-int a) (v-to-int b)) 0)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus$commuted
+         (a (v-to-int a)) (b (v-to-int b)) (l (length a))))
+   (enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus 
+           v-alu-int-inc v-alu-int-adder v-alu-int-adder-overflowp
+           v-alu-int-adder-output izerop ileq
+           integer-in-rangep ineg)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  NEG
+;;
+
+(prove-lemma int-neg-range-implications (rewrite)
+  (and
+   (implies 
+    (and (negativep (v-to-int a)) 
+         (not (integer-in-rangep (negative-guts (v-to-int a)) (length a))) )
+    (v-negp (int-to-v (negative-guts (v-to-int a)) (length a))))
+   (implies
+    (and (not (negativep (v-to-int a))) 
+         (not (integer-in-rangep (minus (v-to-int a)) (length a))))
+    (not (v-negp (int-to-v (minus (v-to-int a)) (length a)))))
+   (implies
+    (and 
+     (not (negativep (v-to-int a))) 
+     (not (integer-in-rangep (minus (v-to-int a)) (length a))) )
+    (v-nzerop (int-to-v (minus (v-to-int a)) (length a)))))
+  ;;Hint
+  ((enable integer-in-rangep exp v-negp-as-bounds int-to-v remainder
+           v-to-int)
+   (enable-theory all-integer-defns)))
+
+(prove-lemma flags-interpretation-int-neg-overflow ()
+  (let
+    ((neg-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-neg)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) neg-flags)
+                 (integer-in-rangep (ineg (v-to-int a)) (length a)))
+          (equal (store-resultp (cc-vs) neg-flags)
+                 (not (integer-in-rangep (ineg (v-to-int a)) (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop
+           v-alu-int-neg v-alu-int-subtracter v-alu-int-subtracter-overflowp)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-neg-negative ()
+  (let
+    ((neg-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-neg)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-lt) neg-flags)
+             (negativep (ineg (v-to-int a))))
+      (equal (store-resultp (cc-ge) neg-flags)
+             (not (negativep (ineg (v-to-int a))))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop integerp
+           v-alu-int-neg v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-the-obvious-way)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;  The Z flag is valid for negation. 
+
+(prove-lemma flags-interpretation-int-neg-zero ()
+  (let
+    ((neg-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-neg)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-ne) neg-flags)
+             (not (equal (ineg (v-to-int a)) 0)))
+      (equal (store-resultp (cc-eq) neg-flags)
+             (equal (ineg (v-to-int a)) 0)))))
+     
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop integerp
+           v-alu-int-neg v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-the-obvious-way)
+   (enable-theory set-flags-theory flags-theory)))
+
+
+(prove-lemma flags-interpretation-int-neg-gt-0 ()
+  (let
+    ((neg-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-neg)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) neg-flags)
+             (ilessp 0 (ineg (v-to-int a))))
+      (equal (store-resultp (cc-le) neg-flags)
+             (ileq (ineg (v-to-int a)) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop integerp ileq
+           v-alu-int-neg v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-the-obvious-way)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;   DEC
+;;
+
+(prove-lemma int-dec-rangep-lemmas (rewrite)
+  (and
+   (implies 
+    (not (integer-in-rangep (sub1 (v-to-int a)) (length a)))
+    (v-nzerop (int-to-v (sub1 (v-to-int a)) (length a))))
+   (implies 
+    (and (not (equal (length a) 1))
+         (not (integer-in-rangep (minus (add1 (negative-guts (v-to-int a)))) 
+                                 (length a))))
+    (v-nzerop (int-to-v (minus (add1 (negative-guts (v-to-int a))))
+                        (length a))))
+   (implies
+    (and 
+     (not (negativep (iplus -1 (v-to-int a)))) 
+     (v-nzerop (int-to-v (iplus -1 (v-to-int a)) (length a)))) 
+    (not (equal (iplus -1 (v-to-int a)) 0)))
+   (implies 
+    (and 
+     (not (zerop (length a)))
+     (not (negativep (iplus -1 (v-to-int a)))) 
+     (not (v-nzerop (int-to-v (iplus -1 (v-to-int a)) (length a))))) 
+    (equal (iplus -1 (v-to-int a)) 0)))
+  ;;Hint
+  ((enable integer-in-rangep exp v-negp-as-bounds int-to-v remainder
+           v-to-int)
+   (enable-theory all-integer-defns)))    
+
+(prove-lemma flags-interpretation-int-dec-overflow ()
+  (let
+    ((dec-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-dec)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) dec-flags)
+                 (integer-in-rangep (idifference (v-to-int a) 1) (length a)))
+          (equal (store-resultp (cc-vs) dec-flags)
+                 (not (integer-in-rangep (idifference (v-to-int a) 1)
+                                         (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop integerp
+           v-alu-int-dec v-alu-int-subtracter
+           v-alu-int-subtracter-overflowp)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-dec-negative ()
+  (let
+    ((dec-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-dec)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-lt) dec-flags)
+             (negativep (idifference (v-to-int a) 1)))
+      (equal (store-resultp (cc-ge) dec-flags)
+             (not (negativep (idifference (v-to-int a) 1)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop integerp
+           v-alu-int-dec v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-iplus)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;  Z flag is valid for decrement.
+
+(prove-lemma flags-interpretation-int-dec-zero ()
+  (let
+    ((dec-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-dec)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-ne) dec-flags)
+             (not (equal (idifference (v-to-int a) 1) 0)))
+      (equal (store-resultp (cc-eq) dec-flags)
+             (equal (idifference (v-to-int a) 1) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus ineg idifference izerop integerp iplus
+           v-alu-int-dec v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-dec-gt-0 ()
+  (let
+    ((dec-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-dec)))))
+    (implies
+     (and (bvp a)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) dec-flags)
+             (ilessp 0 (idifference (v-to-int a) 1)))
+      (equal (store-resultp (cc-le) dec-flags)
+             (ileq (idifference (v-to-int a) 1) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus 
+           ineg idifference izerop integerp ileq 
+           v-alu-int-dec v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-iplus)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;  SUBB
+;;
+
+(prove-lemma flags-interpretation-int-subb-overflow ()
+  (let
+    ((c (c-flag flags))
+     (subb-flags (update-flags flags set-flags
+                               (v-alu (c-flag flags) a b (op-subb)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) subb-flags)
+                 (integer-in-rangep
+                  (idifference (v-to-int b)
+                               (iplus (v-to-int a) (b-to-nat c)))
+                  (length a)))
+          (equal (store-resultp (cc-vs) subb-flags)
+                 (not (integer-in-rangep
+                       (idifference (v-to-int b)
+                                    (iplus (v-to-int a) (b-to-nat c)))
+                       (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus
+           v-alu-int-subtracter v-alu-int-subtracter-overflowp)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-subb-negative ()
+  (let
+    ((c (c-flag flags))
+     (subb-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-subb)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-lt) subb-flags)
+             (negativep (idifference (v-to-int b)
+                                     (iplus (v-to-int a) (b-to-nat c)))))
+      (equal (store-resultp (cc-ge) subb-flags)
+             (not (negativep
+                   (idifference (v-to-int b)
+                                (iplus (v-to-int a) (b-to-nat c)))))))))
+
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus idifference
+           v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-iplus-ineg
+           integer-in-rangep-iplus-ineg-carry)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-subb-gt-0 ()
+  (let
+    ((c (c-flag flags))
+     (subb-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-subb)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) subb-flags)
+             (ilessp 0 (idifference (v-to-int b)
+                                    (iplus (v-to-int a) (b-to-nat c)))))
+      (equal (store-resultp (cc-le) subb-flags)
+             (ileq (idifference (v-to-int b)
+                                (iplus (v-to-int a) (b-to-nat c))) 0)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus-ineg-carry$commuted
+         (a (v-to-int a)) (b (v-to-int b)) (c (b-to-nat (c-flag flags)))
+         (l (length a)))
+        (integer-in-rangep-iplus-ineg$commuted
+         (a (v-to-int a)) (b (v-to-int b)) (l (length a))))
+   (enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus 
+           v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output
+           izerop ileq idifference integer-in-rangep ineg)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;    SUB
+;;
+
+(prove-lemma flags-interpretation-int-sub-overflow ()
+  (let
+    ((sub-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+    (implies
+     (and (bv2p a b)
+          (not (zerop (length a)))
+          (v-set set-flags))
+     (and (equal (store-resultp (cc-vc) sub-flags)
+                 (integer-in-rangep (idifference (v-to-int b) (v-to-int a))
+                                    (length a)))
+          (equal (store-resultp (cc-vs) sub-flags)
+                 (not (integer-in-rangep (idifference (v-to-int b)
+                                                      (v-to-int a))
+                                         (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus
+           v-alu-int-subtracter v-alu-int-subtracter-overflowp)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-sub-negative ()
+  (let
+    ((sub-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (v-set set-flags)
+          (n-set set-flags))
+     (and
+      (equal (store-resultp (cc-lt) sub-flags)
+             (negativep (idifference (v-to-int b) (v-to-int a))))
+      (equal (store-resultp (cc-ge) sub-flags)
+             (not (negativep (idifference (v-to-int b) (v-to-int a))))))))
+
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus idifference
+           v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output integer-in-rangep-iplus-ineg)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-sub-gt-0 ()
+  (let
+    ((sub-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-sub)))))
+    (implies
+     (and (bv2p a b)
+          (not (equal (length a) 0))
+          (not (equal (length a) 1))
+          (n-set set-flags)
+          (v-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt)sub-flags)
+             (ilessp 0 (idifference (v-to-int b) (v-to-int a))))
+      (equal (store-resultp (cc-le) sub-flags)
+             (ileq (idifference (v-to-int b) (v-to-int a)) 0)))))
+  ;;Hint
+  ((use (integer-in-rangep-iplus-ineg$commuted
+         (a (v-to-int a)) (b (v-to-int b)) (l (length a))))
+   (enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb fix-int ilessp integerp-iplus 
+           v-alu-int-subtracter v-alu-int-subtracter-overflowp
+           v-alu-int-subtracter-output
+           izerop ileq idifference integer-in-rangep ineg)
+   (enable-theory set-flags-theory flags-theory)))
+
+;;
+;;   ASR
+;;
+
+(prove-lemma equal-idiv-2-0 (rewrite)
+  (equal (equal (idiv i 2) 0)
+         (or (izerop i) (equal i 1)))
+  ;;Hint
+  ((enable idiv fix-int izerop integerp)))
+
+(prove-lemma integer-in-rangep-idiv (rewrite)
+  (implies
+   (integer-in-rangep i l)
+   (integer-in-rangep (idiv i 2) l))
+  ;;Hint
+  ((enable integer-in-rangep exp v-negp-as-bounds int-to-v remainder
+           v-to-int quotient exp
+            quotient-lessp quotient-stuff not-lessp-quotient)
+   (enable-theory all-integer-defns)))  
+
+(prove-lemma flags-interpretation-int-asr-zero ()
+  (let
+    ((asr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-asr)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (z-set set-flags))
+     (and (equal (store-resultp (cc-ne) asr-flags)
+                 (not (equal (idiv (v-to-int a) 2) 0)))
+          (equal (store-resultp (cc-eq) asr-flags)
+                 (equal (idiv (v-to-int a) 2) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu integerp-idiv
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus izerop
+           v-alu-int-asr v-alu-int-asr-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma equal-sub1-plus-x-x (rewrite)
+  (equal (equal (sub1 (plus x x)) 0)
+         (zerop x)))
+
+(prove-lemma remainder-difference-plus-x-x-plus-y-y (rewrite)
+   (equal (remainder (difference (plus x x) (plus y y)) 2) 0)
+  ;;Hint
+  ((enable remainder difference plus)
+   (induct (difference x y))))
+
+(prove-lemma remainder-difference-plus-x-x-add1-plus-y-y (rewrite)
+  (implies
+   (lessp (add1 (plus y y)) (plus x x))
+   (equal (remainder (difference (plus x x) (add1 (plus y y))) 2) 1))
+  ;;Hint
+  ((enable remainder difference plus)
+   (induct (difference x y))))
+
+(prove-lemma quotient-difference-plus-x-x-plus-y-y-2 (rewrite)
+  (equal
+   (quotient (difference (plus x x) (plus y y)) 2)
+   (difference x y))
+  ;;Hint
+  ((enable quotient difference plus)
+   (induct (difference x y))))
+
+(prove-lemma quotient-difference-plus-x-x-add1-plus-y-y-2 (rewrite)
+  (equal
+   (quotient (difference (plus x x) (add1 (plus y y))) 2)
+   (sub1 (difference x y)))
+  ;;Hint
+  ((enable quotient difference plus)
+   (induct (difference x y))))
+
+(prove-lemma quotient-add1-plus-x-x-2 (rewrite)
+  (equal (quotient (add1 (plus x x)) 2)
+         (fix x))
+  ;;Hint
+  ((enable quotient plus)))
+
+(prove-lemma imod-v-to-int-2 (rewrite)
+  (implies
+   (listp a)
+   (equal (imod (v-to-int a) 2)
+          (b-to-nat (car a))))
+  ;;Hint
+  ((enable imod v-to-int v-to-nat b-to-nat exp quotient-plus-x-x-2)
+   (enable-theory all-integer-defns)
+   (expand (v-to-nat a))))
+
+(prove-lemma flags-interpretation-int-asr-carry ()
+  (let
+    ((asr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-asr)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (c-set set-flags))
+     (and (equal (store-resultp (cc-cc) asr-flags)
+                 (equal (imod (v-to-int a) 2) 0))
+          (equal (store-resultp (cc-cs) asr-flags)
+                 (not (equal (imod (v-to-int a) 2) 0))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus izerop
+           v-alu-int-asr v-alu-int-asr-output)
+   (enable-theory set-flags-theory flags-theory)))
+
+;  Note that for ASR the V bit is always F.
+(prove-lemma flags-interpretation-int-asr-negative ()
+  (let
+    ((asr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-asr)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a))))
+     (and
+      (implies
+       (n-set set-flags)
+       (and
+        (equal (store-resultp (cc-pl) asr-flags)
+               (not (negativep (idiv (v-to-int a) 2))))
+        (equal (store-resultp (cc-mi) asr-flags)
+               (negativep (idiv (v-to-int a) 2)))))
+      (implies
+       (and (n-set set-flags)
+            (v-set set-flags))
+       (and
+        (equal (store-resultp (cc-ge) asr-flags)
+               (not (negativep (idiv (v-to-int a) 2))))
+        (equal (store-resultp (cc-lt) asr-flags)
+               (negativep (idiv (v-to-int a) 2))))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-asr v-alu-int-asr-output
+           integerp-idiv integer-in-rangep-the-obvious-way)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-asr-gt-0 ()
+  (let
+    ((asr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-asr)))))
+    (implies
+     (and (bvp a)
+          (not (zerop (length a)))
+          (v-set set-flags)
+          (n-set set-flags)
+          (z-set set-flags))
+     (and
+      (equal (store-resultp (cc-gt) asr-flags)
+             (ilessp 0 (idiv (v-to-int a) 2)))
+      (equal (store-resultp (cc-le) asr-flags)
+             (ileq (idiv (v-to-int a) 2) 0)))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-asr v-alu-int-asr-output
+           integerp-idiv ilessp ileq izerop
+           integer-in-rangep-the-obvious-way)
+   (enable-theory set-flags-theory flags-theory)))
+
+(prove-lemma flags-interpretation-int-asr-overflow ()
+  ;;  We prove that our decision to set V = F for ASR is well founded.
+  (let
+    ((asr-flags (update-flags flags set-flags
+                              (v-alu (c-flag flags) a b (op-asr)))))
+    (implies
+     (and (bvp a)
+          (v-set set-flags))
+     (and
+      (equal (store-resultp (cc-vc) asr-flags)
+             (integer-in-rangep (idiv (v-to-int a) 2) (length a)))
+      (equal (store-resultp (cc-vs) asr-flags)
+             (not (integer-in-rangep (idiv (v-to-int a) 2) (length a)))))))
+  ;;Hint
+  ((enable set-flags update-flags store-resultp v-alu
+           c v n cv bv b-to-nat zb
+           fix-int ilessp integerp-iplus
+           v-alu-int-asr v-alu-int-asr-output
+           integerp-idiv ilessp ileq izerop
+           integer-in-rangep-the-obvious-way)
+   (enable-theory set-flags-theory flags-theory)))

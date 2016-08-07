@@ -1,0 +1,210 @@
+     Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+     Reserved.  See the file LICENSE in this directory for the
+     complete license agreement.
+
+                      The FM9001 Microprocessor:
+                     Its Formal Specification and
+                     Mechanical Correctness Proof
+
+	       Bishop C. Brock and Warren A. Hunt, Jr.
+                   brock@cli.com       hunt@cli.com
+
+                      Computational Logic, Inc.
+                  1717 West Sixth Street, Suite 290
+                       Austin, Texas 78703-4776
+                                 USA
+
+                         Tel: +1 512 322 9951
+                         FAX: +1 512 322 0656
+
+                              Fall, 1994
+
+
+		     Obtaining the FM9001 System
+
+To obtain the FM9001 system, which includes the definition of the
+DUAL-EVAL formal hardware description language, connect to Internet
+site ftp.cli.com by anonymous ftp, giving your email address as the
+password.  There are both compressed and gzipped versions available.
+For the gzipped version `get' the file /pub/fm9001/fm9001.tar.gz,
+unzip with gunzip, extract with tar xfv fm9001.tar, and follow the
+instructions in the next section of this file.  Remember to use
+`binary' mode when transferring the file.  For the compressed version,
+`get' the file /pub/fm9001/fm9001.tar.Z, uncompress with uncompress,
+and extract with tar xvf fm9001.tar.  Alternatively, get either of the
+URLs ftp://ftp.cli.com/pub/fm9001/fm9001.tar.gz or
+ftp://ftp.cli.com/pub/fm9001/fm9001.tar.Z via your WWW browser.
+
+
+                  The FM9001 Specification and Proof
+
+In this directory are the files for the FM9001 microprocessor
+specification along with the commands for producing the mechanical
+proof of correctness of the FM9001 using the Nqthm-1992
+theorem-proving system.  All the files are authored by Bishop Brock
+and Warren Hunt unless otherwise noted in a file.
+
+To run the proofs, and thereby create not only proof scripts but also
+library files, execute the command
+
+  (with-open-file (*standard-output* "nqthm-proof-output"
+                                     :direction :output
+                                     :if-exists :rename-and-delete)
+                  (load "sysdef.lisp"))
+
+from within Nqthm-1992.
+
+After this proof run has completed it is possible to load the created
+libraries.  See the file "sysload.lisp".
+
+
+		       Published Documentation
+
+The FM9001 microprocessor and the proof of its correctness are described
+in:
+
+   Hunt, W.A., and Brock, B.C., A Formal HDL and Its Use in the FM9001
+   Verification, in "Mechanized Reasoning and Hardware Design",
+   C. Hoare and M. Gordon, eds., Prentice Hall, 35-47, 1992.  First
+   published in "Philosophical Transactions of the Royal Society of
+   London", Series A, Vol. 339, 1992.
+
+   Brock, B.C., Hunt, W.A., Young, W.D., Introduction to a Formally
+   Defined Hardware Description Language, in "Theorem Provers in
+   Circuit Design", V. Stavridou, T. Melham, and R. Boute, eds.,
+   North-Holland, 3-35, 1992.
+
+   CLI Technical Report 86 provides the entire formal specification of
+   the FM9001, the netlist used for fabricating the FM9001, all of the
+   Nqthm commands used in the verification of the FM9001, and
+   extensive commentary on the specifications and commands.
+
+
+
+	     The DUAL-EVAL Hardware Description Language
+
+The FM9001 implementation is defined via the DUAL-EVAL hardware
+description language.  DUAL-EVAL provides a general-purpose
+interpreter-based simulator semantics for sequential hardware designs
+(Mealy machines).  The DUAL-EVAL system provides a means for
+hierarchical verification of Mealy machines.  The verification of the
+FM9001 implementation was performed by hierarchically verifying that
+the many different Mealy machines that comprise the implementation
+successfully cooperate to implement the behavioral-level FM9001
+specification.  The process of executing the FM9001 proofs, as
+described above, results in the construction of reusable libraries for
+the verification of other hardware designs described in the DUAL-EVAL
+language.  To commence a new DUAL-EVAL based hardware verification
+effort, it suffices to initialize Nqthm with the DUAL-EVAL library by
+the two commands:
+
+ (load "sysload.lisp")
+ (note-lib "dual-eval" t)
+
+For some simple example circuits expressed in the DUAL-EVAL language,
+see the two files examples.events and example-v-add.events.  These
+example circuits are not part of the FM9001 implementation, even
+though they are included in the FM9001 proof scripts.  These example
+files may be loaded after executing the two commands above.  In the
+files predicate-simple.events and predicate.events are recognizers for
+the DUAL-EVAL language.  The primitives for the DUAL-EVAL language
+are defined in the file primp-database.lisp.
+
+
+			   FM9001 Overview
+
+An overview of the FM9001 may be found in the PostScript file
+intro-overview.ps.
+
+To aid the reader in comprehending the various levels of the FM9001
+specification, we have extracted some definitions from the result of
+evaluating the entire proof script (which is composed of most of the
+files in this directory).  Here are the names of these summary files
+and the levels of which they are summaries:
+
+  high-level-spec.events     --  machine code programmer's level 
+  rtl-level-spec.events      --  four-valued register transfer level
+  dual-eval-spec.events      --  definition of DUAL-EVAL HDL simulator
+  compressed-netlist.events  --  FM9001 netlist in DUAL-EVAL format
+
+At the beginning of the file fm9001-spec.events a summary of the
+instruction set of the FM9001 may be found.  The file
+asm-fm9001.events contains a simple assembler and a few example
+programs for execution on the FM9001 by the high level specification.
+The external memory model is axiomatized in the file memory.events.
+
+The most important theorems proved about the FM9001 are contained
+in the following files.
+
+  proofs.events 
+    the principal result that the netlist implements the high level
+
+  approx.events 
+    the monotonicity of the DUAL-EVAL HDL
+
+  final-reset.events
+    that the processor can be reset and a more refined version of
+    lemmas from proofs.events
+
+  well-formed-fm9001.events
+    that the netlist is well-formed
+
+  alu-interpretation.events
+    correctness of the ALU wrt natural number and integer operations
+
+  flag-interpretation.events
+    correctness of arithmetic flag results
+
+  more-alu-interpretation.events
+    refinements of alu-interpretation.events
+
+
+                             Fabrication
+
+To produce the file of NDL (LSI Logic's Netlist Description Language)
+that was supplied to LSI Logic, Inc. to fabricate the FM9001 as an
+ASIC, see the file "translate.lisp" in this directory.  This will
+generate the actual netlist used by LSI Logic, Inc. to produce working
+FM9001s.
+
+Note: the total fabrication process includes more than this netlist.
+This directory does not include things such as post fabrication test
+vectors, simulation files, package pin assignments, nor stuck-at fault
+vector generation and fault grading files.
+
+
+                           Physical Testing
+
+In CLI Technical Report 90, we document our post-fabrication testing
+of the physical device.  The testing included both executing FM9001
+machine code and also low-level testing with a Tektronix LV500 chip
+tester.  To date, all tests have confirmed that the FM9001 behaves as
+formally specified.
+
+
+			    The CLI Stack
+
+The FM9001 is the foundation of the CLI stack, which also includes the
+these pieces of software verified with Nqthm: 
+
+  the Piton assembler,
+  the micro-Gypsy compiler,
+  a compiler for a very small subset of the Nqthm logic, and
+  several software applications, including a program that
+    wins at the game Nim, if possible.
+
+Documentation for these pieces of verified software may be found in CLI
+technical reports 22, 30, 33, 34, 74, 78, and 83.
+
+                              Nqthm-1992
+
+You may obtain Boyer and Moore's prover Nqthm, (the system documented
+in their book `A Computational Logic Handbook,' Academic Press, 1988)
+via anonymous ftp from Internet site ftp.cli.com (192.214.82.2).  `cd'
+to pub/nqthm, `get' the file README, and follow the directions.
+(For Nqthm-1992 purists -- To produce from the FM9001 libraries a
+single event file that can be processed by the Nqthm-1992 command
+PROVE-FILE, see the two final, commented-out forms in the file
+"sysdef.lisp".)
+
+

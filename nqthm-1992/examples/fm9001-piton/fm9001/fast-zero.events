@@ -1,0 +1,91 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;  FAST-ZERO
+;;;
+;;;  A zero detector optimized for quick detection of the last 2 bits of the
+;;;  input vector.  It should save a few nanoseconds in the FM9001.
+;;;  
+;;;  LSI Logic timing analysis of the final design showed that this "fast"
+;;;  zero-detector was about the same as simple, fully-balanced zero-detectors
+;;;  defined in "t-or-nor.events".
+;;;  
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$fast-zero (v)
+  (f-nor3 (tr-or-nor (firstn (sub1 (sub1 (length v))) v)
+                     f
+                     (make-tree (sub1 (sub1 (length v)))))
+          (nth (sub1 (sub1 (length v))) v)
+          (nth (sub1 (length v)) v)))
+
+(disable f$fast-zero)
+
+(prove-lemma f$fast-zero=tr-or-nor ()
+  (implies
+   (and (properp v)
+        (geq (length v) 3))
+   (equal (f$fast-zero v)
+          (tr-or-nor v t (cons (make-tree (sub1 (sub1 (length v))))
+                               (cons 0 0)))))
+  ;;Hint
+  ((enable f$fast-zero tr-or-nor f-nor3 f-nor nth-restn cdr-restn)
+   (disable-theory f-gates)))
+
+(prove-lemma f$fast-zero=v-zerop (rewrite)
+  (implies
+   (and (bvp v)
+        (geq (length v) 3))
+   (equal (f$fast-zero v)
+          (v-zerop v)))
+  ;;Hint
+  ((use (f$fast-zero=tr-or-nor))
+   (enable tree-size)))
+
+;;;  Hardware
+
+(module-generator
+ (fast-zero* n)
+ #i(fast-zero n)
+ #i(a 0 n)
+ '(z)
+ (list
+  (list 'front '(zfront) #i(t-or (tree-number (make-tree (sub1 (sub1 n)))))
+        (firstn (sub1 (sub1 n)) #i(a 0 n)))
+  (list 'result '(z) 'b-nor3
+        (list 'zfront #i(a (sub1 (sub1 n))) #i(a (sub1 n)))))
+ nil)
+
+(defn fast-zero& (netlist n)
+  (and (equal (lookup-module #i(fast-zero n) netlist) (fast-zero* n))
+       (let ((netlist (delete-module #i(fast-zero n) netlist)))
+         (and (t-or-nor& netlist (make-tree (sub1 (sub1 n))) f)
+              (b-nor3& netlist)))))
+
+(disable fast-zero&)
+
+(defn fast-zero$netlist (n)
+  (cons (fast-zero* n)
+        (union (t-or-nor$netlist (make-tree (sub1 (sub1 n))) f)
+               (b-nor3$netlist))))
+
+(prove-lemma check-fast-zero$netlist ()
+  (fast-zero& (fast-zero$netlist 5) 5))
+
+(prove-lemma fast-zero$value (rewrite)
+  (implies
+   (and (fast-zero& netlist n)
+        (properp v)
+        (equal (length v) n)
+        (geq n 3))
+   (equal (dual-eval 0 #i(fast-zero n) v state netlist)
+          (list (f$fast-zero v))))
+  ;;Hint
+  ((enable fast-zero& f$fast-zero fast-zero*$destructure t-or-nor$value
+           b-nor3$value)
+   (disable open-indices)
+   (disable-theory f-gates)))
+              

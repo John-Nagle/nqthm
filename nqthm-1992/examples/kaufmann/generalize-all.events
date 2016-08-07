@@ -1,0 +1,3190 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+(boot-strap nqthm)
+
+
+;; These are events in support of the paper ``A Mechanically-Checked
+;; Correctness Proof for Generalization in the Presence of Free
+;; Variables,'' Journal of Automated Reasoning, Vol. 7, 1991.
+
+;; This events file contains no DEFN-SK events, but instead contains two
+;; DCLs and two ADD-AXIOMs from a DEFN-SK event that I commented out.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; sets.events file
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Requires deftheory enhancement.
+;; Requires only ground-zero theory, nqthm mode.
+
+;; Sets; Matt Kaufmann, Dec. 1989, revised March 1990.  The first few events
+;; are some basic events about lists.  I'll take the approach that all these
+;; basic functions will be disabled once enough algebraic properties have
+;; been proved.
+
+;; Theories:
+
+;; (deftheory set-defns
+;;  (length properp fix-properp member append subsetp delete
+;;          disjoint intersection set-diff setp))
+
+
+(defn length (x)
+  (if (listp x)
+      (add1 (length (cdr x)))
+    0))
+
+(prove-lemma length-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (length x) 0)))
+
+(prove-lemma length-cons (rewrite)
+  (equal (length (cons a x))
+         (add1 (length x))))
+
+(prove-lemma length-append (rewrite)
+  (equal (length (append x y))
+         (plus (length x) (length y))))
+
+(disable length)
+
+(prove-lemma append-assoc (rewrite)
+  (equal (append (append x y) z)
+         (append x (append y z))))
+
+(prove-lemma member-cons (rewrite)
+  (equal (member a (cons x l))
+         (or (equal a x)
+             (member a l))))
+
+(prove-lemma member-nlistp (rewrite)
+  (implies (nlistp l)
+           (not (member a l))))
+
+(disable member)
+
+(defn subsetp (x y)
+  (if (nlistp x)
+      t
+    (and (member (car x) y)
+         (subsetp (cdr x) y))))
+
+(defn subsetp-wit (x y)
+  (if (nlistp x)
+      t
+      (if (member (car x) y)
+          (subsetp-wit (cdr x) y)
+        (car x))))
+
+(prove-lemma subsetp-wit-witnesses (rewrite)
+  ;; for occasional use in messy proofs; it and its lemma are kept disabled
+  (equal (subsetp x y)
+         (not (and (member (subsetp-wit x y) x)
+                   (not (member (subsetp-wit x y) y))))))
+
+(prove-lemma subsetp-wit-witnesses-general-1 (rewrite)
+  (implies (and (not (member (subsetp-wit x y) x))
+                (member a x))
+           (member a y)))
+
+(prove-lemma subsetp-wit-witnesses-general-2 (rewrite)
+  (implies (and (member (subsetp-wit x y) y)
+                (member a x))
+           (member a y)))
+
+(disable subsetp-wit-witnesses)
+(disable subsetp-wit-witnesses-general-1)
+(disable subsetp-wit-witnesses-general-2)
+
+(prove-lemma subsetp-cons-1 (rewrite)
+  (equal (subsetp (cons a x) y)
+         (and (member a y) (subsetp x y))))
+
+(prove-lemma subsetp-cons-2
+             (rewrite)
+             (implies (subsetp l m)
+                      (subsetp l (cons a m))))
+
+(prove-lemma subsetp-reflexivity
+             (rewrite)
+             (subsetp x x))
+
+(prove-lemma cdr-subsetp
+             (rewrite)
+             (subsetp (cdr x) x))
+
+(prove-lemma member-subsetp
+             (rewrite)
+             (implies (and (member x y) (subsetp y z))
+                      (member x z)))
+
+(prove-lemma subsetp-is-transitive
+             (rewrite)
+             (implies (and (subsetp x y) (subsetp y z))
+                      (subsetp x z)))
+
+(prove-lemma member-append (rewrite)
+  (equal (member a (append x y))
+         (or (member a x) (member a y))))
+
+(prove-lemma subsetp-append (rewrite)
+  (equal (subsetp (append x y) z)
+         (and (subsetp x z) (subsetp y z))))
+
+(prove-lemma subsetp-of-append-sufficiency (rewrite)
+  (implies (or (subsetp a b) (subsetp a c))
+           (subsetp a (append b c))))
+
+(prove-lemma subsetp-nlistp (rewrite)
+  (implies (nlistp x)
+           (and (subsetp x y)
+                (equal (subsetp y x)
+                       (nlistp y)))))
+
+(prove-lemma subsetp-cons-not-member (rewrite)
+  (implies (not (member z x))
+           (equal (subsetp x (cons z v))
+                  (subsetp x v))))
+
+(disable subsetp)
+
+;;;;; Other set-theoretic and list-theoretic definitions, and properp observations.
+
+(defn properp (x)
+  (if (listp x)
+      (properp (cdr x))
+    (equal x nil)))
+
+(defn fix-properp (x)
+  (if (listp x)
+      (cons (car x)
+            (fix-properp (cdr x)))
+    nil))
+
+(prove-lemma properp-fix-properp (rewrite)
+  (properp (fix-properp x)))
+
+(prove-lemma fix-properp-properp (rewrite)
+  (implies (properp x)
+           (equal (fix-properp x) x)))
+
+(prove-lemma properp-cons (rewrite)
+  (equal (properp (cons x y))
+         (properp y)))
+
+(prove-lemma properp-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (properp x)
+                  (equal x nil))))
+
+(prove-lemma fix-properp-cons (rewrite)
+  (equal (fix-properp (cons x y))
+         (cons x (fix-properp y))))
+
+(prove-lemma fix-properp-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (fix-properp x)
+                  nil)))
+
+(prove-lemma properp-append (rewrite)
+  (equal (properp (append x y))
+         (properp y)))
+
+(prove-lemma fix-properp-append (rewrite)
+  (equal (fix-properp (append x y))
+         (append x (fix-properp y))))
+
+(prove-lemma append-nil (rewrite)
+  (equal (append x nil)
+         (fix-properp x)))
+
+(defn delete (x l)
+      (if (listp l)
+          (if (equal x (car l))
+              (cdr l)
+              (cons (car l) (delete x (cdr l))))
+          l))
+
+(prove-lemma properp-delete (rewrite)
+  (equal (properp (delete x l))
+         (properp l)))
+
+(defn disjoint (x y)
+  (if (listp x)
+      (and (not (member (car x) y)) 
+           (disjoint (cdr x) y))
+    t))
+
+(defn disjoint-wit (x y)
+  ;; for occasional use in messy proofs; it and the following lemma are kept disabled
+  (if (listp x)
+      (if (member (car x) y)
+          (car x)
+        (disjoint-wit (cdr x) y))
+      t))
+
+(prove-lemma disjoint-wit-witnesses (rewrite)
+  (equal (disjoint x y)
+         (not (and (member (disjoint-wit x y) x)
+                   (member (disjoint-wit x y) y)))))
+
+(disable disjoint-wit)
+
+(disable disjoint-wit-witnesses)
+
+(defn intersection (x y)
+  (if (listp x)
+      (if (member (car x) y)
+          (cons (car x)
+                (intersection (cdr x) y))
+        (intersection (cdr x) y))
+    nil))
+
+(prove-lemma properp-intersection (rewrite)
+  (properp (intersection x y)))
+
+(defn set-diff (x y)
+  (if (listp x)
+      (if (member (car x) y)
+          (set-diff (cdr x) y)
+        (cons (car x) (set-diff (cdr x) y)))
+    nil))
+
+(prove-lemma properp-set-diff (rewrite)
+  (properp (set-diff x y)))
+
+(defn setp (x)
+  (if (not (listp x))
+      (equal x nil)
+      (and (not (member (car x) (cdr x)))
+           (setp (cdr x)))))
+
+(prove-lemma setp-implies-properp (rewrite)
+  (implies (setp x)
+           (properp x)))
+
+(disable properp)
+
+(deftheory set-defns
+  (length properp fix-properp member append subsetp delete
+          disjoint intersection set-diff setp properp))
+
+;; Set theory lemmas
+
+(prove-lemma delete-cons (rewrite)
+  (equal (delete a (cons b x))
+         (if (equal a b)
+             x
+           (cons b (delete a x)))))
+
+(prove-lemma delete-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (delete a x) x)))
+
+(prove-lemma listp-delete (rewrite)
+  (equal (listp (delete x l))
+         (if (listp l)
+             (or (not (equal x (car l)))
+                 (listp (cdr l)))
+             f)))
+
+(prove-lemma delete-non-member (rewrite)
+  (implies (not (member x y))
+           (equal (delete x y) y)))
+
+(prove-lemma delete-delete (rewrite)
+  (equal (delete y (delete x z))
+         (delete x (delete y z))))
+
+(prove-lemma member-delete (rewrite)
+  (implies (setp x)
+           (equal (member a (delete b x))
+                  (and (not (equal a b))
+                       (member a x)))))                
+
+(prove-lemma setp-delete (rewrite)
+  (implies (setp x)
+           (setp (delete a x))))
+
+(disable delete)
+
+(prove-lemma disjoint-cons-1 (rewrite)
+  (equal (disjoint (cons a x) y)
+         (and (not (member a y))
+              (disjoint x y))))
+
+(prove-lemma disjoint-cons-2 (rewrite)
+  (equal (disjoint x (cons a y))
+         (and (not (member a x))
+              (disjoint x y))))
+
+(prove-lemma disjoint-nlistp (rewrite)
+  (implies (or (nlistp x) (nlistp y))
+           (disjoint x y)))
+
+(prove-lemma disjoint-symmetry (rewrite)
+  (equal (disjoint x y)
+         (disjoint y x)))
+
+(prove-lemma disjoint-append-right (rewrite)
+  (equal (disjoint u (append y z))
+         (and (disjoint u y)
+              (disjoint u z))))
+
+(prove-lemma disjoint-append-left (rewrite)
+  (equal (disjoint (append y z) u)
+         (and (disjoint y u)
+              (disjoint z u))))
+
+(prove-lemma disjoint-non-member (rewrite)
+  (implies (and (member a x)
+                (member a y))
+           (not (disjoint x y))))
+
+(prove-lemma disjoint-subsetp-monotone-second (rewrite)
+  (implies (and (subsetp y z)
+                (disjoint x z))
+           (disjoint x y)))
+
+(prove-lemma subsetp-disjoint-2 (rewrite)
+  (implies (and (subsetp x y)
+                (disjoint y z))
+           (disjoint z x)))
+
+(prove-lemma subsetp-disjoint-1 (rewrite)
+  (implies (and (subsetp x y)
+                (disjoint y z))
+           (disjoint x z))
+  ((use (disjoint-symmetry (x x) (y z)))
+   (disable disjoint-symmetry)))
+
+(prove-lemma subsetp-disjoint-3 (rewrite)
+  (implies (and (subsetp x y)
+                (disjoint z y))
+           (disjoint x z)))
+
+(disable disjoint)
+
+(prove-lemma intersection-disjoint (rewrite)
+  (equal (equal (intersection x y) nil)
+         (disjoint x y)))
+
+(prove-lemma intersection-nlistp (rewrite)
+  (implies (or (nlistp x) (nlistp y))
+           (equal (intersection x y) nil)))
+
+(prove-lemma member-intersection (rewrite)
+  (equal (member a (intersection x y))
+         (and (member a x) (member a y))))
+
+(prove-lemma subsetp-intersection (rewrite)
+  (equal (subsetp x (intersection y z))
+         (and (subsetp x y) (subsetp x z)))
+  ((induct (subsetp x y))))
+
+(prove-lemma intersection-symmetry (rewrite)
+  (subsetp (intersection x y)
+           (intersection y x)))
+
+(prove-lemma intersection-cons-1 (rewrite)
+  (equal (intersection (cons a x) y)
+         (if (member a y)
+             (cons a (intersection x y))
+           (intersection x y))))
+
+(prove-lemma intersection-cons-2 (rewrite)
+  (implies (not (member a y))
+           (equal (intersection y (cons a x))
+                  (intersection y x))))
+
+;; The following is needed because DISJOINT-INTERSECTION-COMMUTER,
+;; added during polishing, caused the proof of
+;; DISJOINT-DOMAIN-CO-RESTRICT (in "alists.events") to fail.
+
+(prove-lemma intersection-cons-3 (rewrite)
+  (implies (member w x)
+           (equal (subsetp (intersection y (cons w z))
+                           x)
+                  (subsetp (intersection y z)
+                           x)))
+  ((enable intersection)))
+
+(prove-lemma intersection-cons-subsetp (rewrite)
+  (subsetp (intersection x y)
+           (intersection x (cons a y))))
+
+(prove-lemma subsetp-intersection-left-1 (rewrite)
+  (subsetp (intersection x y) x)
+  ((enable intersection)))
+
+(prove-lemma subsetp-intersection-left-2 (rewrite)
+  (subsetp (intersection x y) y)
+  ((enable intersection)))
+
+(prove-lemma subsetp-intersection-sufficiency-1 (rewrite)
+  (implies (subsetp y z)
+           (subsetp (intersection x y) z))
+  ((enable intersection)))
+
+(prove-lemma subsetp-intersection-sufficiency-2 (rewrite)
+  (implies (subsetp y z)
+           (subsetp (intersection y x) z))
+  ((enable intersection)))
+
+(prove-lemma intersection-associative (rewrite)
+  (equal (intersection (intersection x y) z)
+         (intersection x (intersection y z)))
+  ((enable intersection)))
+
+(prove-lemma intersection-elimination (rewrite)
+  (implies (subsetp x y)
+           (equal (intersection x y)
+                  (fix-properp x))))
+
+(prove-lemma length-intersection (rewrite)
+  (not (lessp (length x)
+              (length (intersection x y)))))
+
+(prove-lemma subsetp-intersection-member (rewrite)
+  (implies (and (subsetp (intersection x y) z)
+                (not (member a z)))
+           (and (implies (member a x)
+                         (not (member a y)))
+                (implies (member a y)
+                         (not (member a x))))))
+
+;; The following wasn't needed in the proof about generalization, but it's a nice rule.
+(prove-lemma intersection-append (rewrite)
+  (equal (intersection (append x y) z)
+         (append (intersection x z) (intersection y z))))
+
+;; I'd rather just prove that intersection distributes over append on
+;; the right but that isn't true.  Congruence relations would probably
+;; help a lot with that problem.  In the meantime, I content myself
+;; with the following.
+(prove-lemma disjoint-intersection-append (rewrite)
+  (equal (disjoint x (intersection y (append z1 z2)))
+         (and (disjoint x (intersection y z1))
+              (disjoint x (intersection y z2))))
+  ((enable intersection)))
+
+;; See comment just above DISJOINT-INTERSECTION-APPEND
+(prove-lemma subsetp-intersection-append (rewrite)
+  (equal (subsetp (intersection u (append x y))
+                  z)
+         (and (subsetp (intersection u x) z)
+              (subsetp (intersection u y) z))))
+
+(prove-lemma subsetp-intersection-elimination-lemma (rewrite)
+  (implies (and (subsetp y x)
+                (not (subsetp y z)))
+           (not (subsetp (intersection x y) z)))
+  ((use (subsetp-is-transitive (x y) (y (intersection x y)) (z z)))
+   (disable intersection)))
+
+(prove-lemma subsetp-intersection-elimination (rewrite)
+  ;; interstingly, the prover failed to prove this when I used EQUAL
+  (implies (subsetp y x)
+           (iff (subsetp (intersection x y) z)
+                (subsetp y z)))
+  ((disable intersection)))
+
+(prove-lemma disjoint-intersection (rewrite)
+  (equal (disjoint (intersection x y) z)
+         (disjoint x (intersection y z)))
+  ((enable intersection)
+   (disable disjoint)))
+
+(prove-lemma subsetp-intersection-monotone-1 (rewrite)
+  (implies (and (subsetp (intersection x y) z)
+                (subsetp x1 x))
+           (subsetp (intersection x1 y)
+                    z))
+  ((enable disjoint subsetp)))
+
+;; The lemma SUBSETP-INTERSECTION-MONOTONE-2 below was added during
+;; polishing of the final proof in "generalize.events", since the
+;; lemma immediately above wasn't enough at that point.  Actually
+;; I realized at this point that intersection commutes from the point
+;; of view of subsetp:
+
+(prove-lemma subsetp-intersection-commuter (rewrite)
+  (equal (subsetp (intersection x y) z)
+         (subsetp (intersection y x) z))
+  ((use (subsetp-wit-witnesses (x (intersection y x)) (y z))
+        (subsetp-wit-witnesses (x (intersection x y)) (y z)))))
+
+(prove-lemma subsetp-intersection-monotone-2 (rewrite)
+  (implies (and (subsetp (intersection y x) z)
+                (subsetp x1 x))
+           (subsetp (intersection x1 y)
+                    z)))
+
+(prove-lemma disjoint-intersection-commuter (rewrite)
+  (equal (disjoint x (intersection y z))
+         (disjoint x (intersection z y)))
+  ((use (disjoint-wit-witnesses (x x) (y (intersection y z)))
+        (disjoint-wit-witnesses (x x) (y (intersection z y))))
+   (disable intersection)))
+
+(prove-lemma disjoint-intersection3 (rewrite)
+  (implies (disjoint free
+                     (intersection vars x))
+           (equal (intersection x (intersection vars free))
+                  nil))
+  ((use (disjoint-wit-witnesses
+         (x x)
+         (y (intersection vars free))))))
+
+(disable intersection)
+
+(prove-lemma member-set-diff (rewrite)
+  (equal (member a (set-diff y z))
+         (and (member a y)
+              (not (member a z)))))
+
+(prove-lemma subsetp-set-diff-1 (rewrite)
+  (subsetp (set-diff x y) x))
+
+(prove-lemma disjointp-set-diff (rewrite)
+  (disjoint (set-diff x y) y))
+
+(prove-lemma subsetp-set-diff-2 (rewrite)
+  (equal (subsetp x (set-diff y z))
+         (and (subsetp x y)
+              (disjoint x z)))
+  ((enable-theory set-defns)))
+
+(prove-lemma set-diff-cons (rewrite)
+  (equal (set-diff (cons a x) y)
+         (if (member a y)
+             (set-diff x y)
+           (cons a (set-diff x y)))))
+
+(prove-lemma set-diff-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (set-diff x y) nil)))
+
+;; The following was discovered during final polishing, for the
+;; proof of MAIN-HYPS-RELIEVED-6-FIRST.
+(prove-lemma disjoint-set-diff-general (rewrite)
+  (equal (disjoint x (set-diff y z))
+         (subsetp (intersection x y) z))
+  ((induct (intersection x y))))
+
+;; No longer relevant:
+;(prove-lemma disjoint-set-diff-subsetp (rewrite)
+;  (implies (and (disjoint x (set-diff y z))
+;               (subsetp z z1))
+;          (disjoint x (set-diff y z1)))
+;  ((use (disjoint-wit-witnesses (y (set-diff y z1))))
+;   (disable member-set-diff set-diff)))
+
+;; Instead of the following I'll prove the corresponding (in light of
+;; DISJOINT-SET-DIFF-GENERAL) fact INTERSECTION-X-X about intersection.
+;(prove-lemma disjoint-set-diff (rewrite)
+;  (disjoint x (set-diff y x)))
+
+(prove-lemma intersection-subsetp-identity (rewrite)
+  (implies (and (properp x)
+                (subsetp x y))
+           (equal (intersection x y) x))
+  ((enable subsetp)))
+
+(prove-lemma intersection-x-x (rewrite)
+  (implies (properp x)
+           (equal (intersection x x) x)))
+
+(prove-lemma subsetp-set-diff-mononone-2 (rewrite)
+  (subsetp (set-diff x (append y z))
+           (set-diff x z))
+  ((disable set-diff)))
+
+(prove-lemma subsetp-set-diff-monotone-second (rewrite)
+  (equal (subsetp (set-diff x y) (set-diff x z))
+         (subsetp (intersection x z) y))
+  ((enable intersection)))
+
+(prove-lemma set-diff-nil (rewrite)
+  (equal (set-diff x nil)
+         (fix-properp x)))
+
+(prove-lemma set-diff-cons-non-member-1 (rewrite)
+  (implies (not (member a x))
+           (equal (set-diff x (cons a y))
+                  (set-diff x y))))
+
+(prove-lemma length-intersection-set-diff ()
+  (equal (length x)
+         (plus (length (set-diff x y))
+               (length (intersection x y))))
+  ((enable set-diff intersection length)))
+
+(prove-lemma length-set-diff-opener (rewrite)
+  (equal (length (set-diff x y))
+         (difference (length x)
+                     (length (intersection x y))))
+  ((use (length-intersection-set-diff))))
+
+(prove-lemma listp-set-diff (rewrite)
+  (equal (listp (set-diff x y))
+         (not (subsetp x y)))
+  ((enable set-diff)))
+
+;; Here is a messy lemma about disjoint and such
+(prove-lemma disjoint-intersection-set-diff-intersection (rewrite)
+  (disjoint x (intersection y (set-diff z (intersection y x))))
+  ((enable disjoint-wit-witnesses)
+   (disable set-diff)))
+
+(disable set-diff)
+
+(prove-lemma member-fix-properp (rewrite)
+  (equal (member a (fix-properp x))
+         (member a x)))
+
+(prove-lemma setp-append (rewrite)
+  (equal (setp (append x y))
+         (and (disjoint x y)
+              (setp (fix-properp x))
+              (setp y))))
+
+(prove-lemma setp-cons (rewrite)
+  (equal (setp (cons a x))
+         (and (not (member a x))
+              (setp x))))
+
+(prove-lemma setp-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (setp x)
+                  (equal x nil))))
+
+(defn make-set
+      (l)
+      (if (not (listp l))
+          nil
+          (if (member (car l) (cdr l))
+              (make-set (cdr l))
+              (cons (car l) (make-set (cdr l))))))
+
+(prove-lemma make-set-preserves-member
+             (rewrite)
+             (equal (member x (make-set l))
+                    (member x l)))
+
+(prove-lemma make-set-preserves-subsetp-1
+             (rewrite)
+             (equal (subsetp (make-set x) (make-set y))
+                    (subsetp x y)))
+
+(prove-lemma make-set-preserves-subsetp-2
+             (rewrite)
+             (equal (subsetp x (make-set y))
+                    (subsetp x y))
+             ((enable subsetp)))
+
+(prove-lemma make-set-preserves-subsetp-3
+             (rewrite)
+             (equal (subsetp (make-set x) y)
+                    (subsetp x y)))
+
+(prove-lemma make-set-gives-setp
+             (rewrite)
+             (setp (make-set x)))
+
+(prove-lemma make-set-set-diff (rewrite)
+  (equal (make-set (set-diff x y))
+         (set-diff (make-set x) (make-set y))))
+
+(prove-lemma set-diff-make-set (rewrite)
+  (equal (set-diff x (make-set y))
+         (set-diff x y))
+  ((enable set-diff)))
+
+(prove-lemma listp-make-set (rewrite)
+  (equal (listp (make-set x))
+         (listp x)))
+
+(disable setp)
+
+;;;;;; The following were proved in the course of the final run
+;;;;;; through the generalization proof.  There are a couple or
+;;;;;; so noted above here, too.
+
+(prove-lemma set-diff-append (rewrite)
+  (equal (set-diff x (append y z))
+         (set-diff (set-diff x z) y))
+  ((induct (set-diff x z))))
+
+(prove-lemma length-set-diff-leq (rewrite)
+  (not (lessp (length x)
+              (length (set-diff x y)))))
+
+(prove-lemma lessp-length (rewrite)
+  (implies (listp x)
+           (lessp 0 (length x)))
+  ((enable length)))
+
+(prove-lemma listp-intersection (rewrite)
+  (equal (listp (intersection x y))
+         (not (disjoint x y)))
+  ((enable intersection)))
+
+(prove-lemma length-set-diff-lessp (rewrite)
+  (implies (not (disjoint x new))
+           (lessp (length (set-diff x new))
+                  (length x))))
+
+(prove-lemma disjoint-implies-empty-intersection (rewrite)
+  (implies (disjoint x y)
+           (equal (intersection x y) nil)))
+
+;; The following lemma DISJOINT-INTERSECTION3-MIDDLE is needed for the
+;; proof of ALL-VARS-DISJOINT-OR-SUBSETP-GEN-CLOSURE in
+;; generalize.events.  I think I could avoid lemmas like this one
+;; INTERSECTION were actually commutative-associative (in which case
+;; I'd get rid of disjoint and rely on normalization).
+
+(prove-lemma disjoint-intersection3-middle (rewrite)
+  (implies (disjoint y (intersection x z))
+           (equal (intersection x (intersection y z))
+                  nil))
+  ((use (disjoint-wit-witnesses
+         (x x) (y (intersection y z))))))
+
+;; Maybe I should redo the notion of disjoint sometime, perhaps using
+;; the fact that intersection is commutative and associative when it's
+;; equated with nil.
+
+(prove-lemma disjoint-subsetp-hack (rewrite)
+  (implies (and (disjoint x
+                          (intersection u v))
+                (subsetp w x))
+           (disjoint u
+                     (intersection w v)))
+  ((use (disjoint-wit-witnesses
+         (x u)
+         (y (intersection w v)))
+        (disjoint-non-member
+         (a (disjoint-wit u (intersection w v)))
+         (x x)
+         (y (intersection u v)))
+        (member-subsetp
+         (x (disjoint-wit u
+                          (intersection w v)))
+         (y w)
+         (z x)))
+   (disable disjoint-non-member member-subsetp)))
+
+(prove-lemma subsetp-set-diff-sufficiency (rewrite)
+  (implies (subsetp x y)
+           (subsetp (set-diff x z) y))
+  ((enable set-diff)))
+
+;; The following lemma SETP-INTERSECTION-SUFFICIENCY is needed for
+;; MAPPING-RESTRICT from "alists.events", because (I believe)
+;; DOMAIN-RESTRICT, which was added during polishing, changed the
+;; course of the previous proof.  Similarly for
+;; SETP-SET-DIFF-SUFFICIENCY and the lemma MAPPING-CO-RESTRICT.
+
+(prove-lemma setp-intersection-sufficiency (rewrite)
+  (implies (setp x)
+           (setp (intersection x y)))
+  ((enable intersection)))
+
+(prove-lemma setp-set-diff-sufficiency (rewrite)
+  (implies (setp x)
+           (setp (set-diff x y)))
+  ((enable set-diff)))
+
+;; The definition of FIX-PROPERP was also added in polishing because
+;; of a problem with the proof of GEN-CLOSURE-ACCEPT in
+;; "generalize.events".  Here are a couple of lemmas about it that
+;; might or might not be useful; all other lemmas about it above, and
+;; the definition, were added during polishing.
+
+(disable fix-properp)
+
+(prove-lemma subsetp-fix-properp-1 (rewrite)
+  (equal (subsetp (fix-properp x) y)
+         (subsetp x y))
+  ((enable subsetp)))
+
+(prove-lemma subsetp-fix-properp-2 (rewrite)
+  (equal (subsetp x (fix-properp y))
+         (subsetp x y))
+  ((enable subsetp)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; alists.events file
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Requires deftheory enhancement.
+;; Requires sets.
+
+;; Alists, March 1990.  Most of the definitions and some of the lemmas
+;; were contributed by Bill Bevier; the rest are by Matt Kaufmann.
+
+;; Functions defined here:
+
+;; (deftheory alist-defns
+;;   (alistp domain range value bind rembind invert mapping
+;;           restrict co-restrict))
+
+(defn alistp (x)
+  (if (listp x)
+      (and (listp (car x))
+           (alistp (cdr x)))
+    (equal x nil)))
+
+(prove-lemma alistp-implies-properp (rewrite)
+  (implies (alistp x)
+           (properp x)))
+
+(prove-lemma alistp-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (alistp x)
+                  (equal x nil))))
+
+(prove-lemma alistp-cons (rewrite)
+  (equal (alistp (cons a x))
+         (and (listp a)
+              (alistp x))))
+
+(disable alistp)
+
+(prove-lemma alistp-append (rewrite)
+  (equal (alistp (append x y))
+         (and (alistp (fix-properp x)) (alistp y))))
+
+(defn domain (map)
+  (if (listp map)
+      (if (listp (car map))
+          (cons (car (car map)) (domain (cdr map)))
+        (domain (cdr map)))
+    nil))
+
+(prove-lemma properp-domain (rewrite)
+  (properp (domain map)))
+
+(prove-lemma domain-append (rewrite)
+  (equal (domain (append x y))
+         (append (domain x) (domain y))))
+
+(prove-lemma domain-nlistp (rewrite)
+  (implies (nlistp map)
+           (equal (domain map) nil)))
+
+(prove-lemma domain-cons (rewrite)
+  (equal (domain (cons a map))
+         (if (listp a)
+             (cons (car a) (domain map))
+           (domain map))))
+
+(prove-lemma member-domain-sufficiency (rewrite)
+  (implies (member (cons a x) y)
+           (member a (domain y))))
+
+(prove-lemma subsetp-domain (rewrite)
+  (implies (subsetp x y)
+           (subsetp (domain x) (domain y))))
+
+(disable domain)
+
+(defn range (map)
+  (if (listp map)
+      (if (listp (car map))
+          (cons (cdr (car map)) (range (cdr map)))
+        (range (cdr map)))
+    nil))
+
+(prove-lemma properp-range (rewrite)
+  (properp (range map)))
+
+(prove-lemma range-append (rewrite)
+  (equal (range (append s1 s2))
+         (append (range s1) (range s2))))
+
+(prove-lemma range-nlistp (rewrite)
+  (implies (nlistp map)
+           (equal (range map) nil)))
+
+(prove-lemma range-cons (rewrite)
+  (equal (range (cons a map))
+         (if (listp a)
+             (cons (cdr a) (range map))
+           (range map))))
+
+(disable range)
+
+;; BOUNDP has been eliminated in favor of membership in domain.
+;; Notice that I have to talk about things like disjointness of
+;; domains anyhow.  New definition body would be (member x (domain map)).
+
+;(defn boundp (x map)
+;  (if (listp map)
+;      (if (listp (car map))
+;          (if (equal x (caar map))
+;              t
+;            (boundp x (cdr map)))
+;        (boundp x (cdr map)))
+;    f))
+
+(defn value (x map)
+  (if (listp map)
+      (if (and (listp (car map))
+               (equal x (caar map)))
+          (cdar map)
+        (value x (cdr map)))
+    0))
+
+(prove-lemma value-nlistp (rewrite)
+  (implies (nlistp map)
+           (equal (value x map) 0)))
+
+(prove-lemma value-cons (rewrite)
+  (equal (value x (cons pair map))
+         (if (and (listp pair)
+                  (equal x (car pair)))
+             (cdr pair)
+           (value x map))))
+
+(disable value)
+
+(defn bind (x v map)
+  (if (listp map)
+      (if (listp (car map))
+          (if (equal x (caar map))
+              (cons (cons x v) (cdr map))
+            (cons (car map) (bind x v (cdr map))))
+        (cons (car map) (bind x v (cdr map))))
+    (cons (cons x v) nil)))
+
+(defn rembind (x map)
+  (if (listp map)
+      (if (listp (car map))
+          (if (equal x (caar map))
+              (cdr map)
+            (cons (car map) (rembind x (cdr map))))
+        (cons (car map) (rembind x (cdr map))))
+    nil))
+
+(defn invert (map)
+  (if (listp map)
+      (if (listp (car map))
+          (cons (cons (cdr (car map))
+                      (car (car map)))
+                (invert (cdr map)))
+        (invert (cdr map)))
+    nil))
+
+(prove-lemma properp-invert (rewrite)
+  (properp (invert map)))
+
+(prove-lemma invert-nlistp (rewrite)
+  (implies (nlistp map)
+           (equal (invert map) nil)))
+
+(prove-lemma invert-cons (rewrite)
+  (equal (invert (cons pair map))
+         (if (listp pair)
+             (cons (cons (cdr pair) (car pair))
+                   (invert map))
+           (invert map))))
+
+(prove-lemma value-invert-not-member-of-domain (rewrite)
+  (implies (and (member g (range sg))
+                (disjoint (domain s) (domain sg)))
+           (not (member (value g (invert sg)) (domain s)))))
+
+(disable invert)
+
+(defn mapping (map)
+  ;; an alist with no duplicate keys
+  (and (alistp map)
+       (setp (domain map))))
+
+;; For when we disable mapping:
+(prove-lemma mapping-implies-alistp (rewrite)
+  (implies (mapping map)
+           (alistp map)))
+
+(prove-lemma mapping-implies-setp-domain (rewrite)
+  (implies (mapping map)
+           (setp (domain map))))
+
+(defn restrict (s new-domain)
+  (if (listp s)
+      (if (and (listp (car s))
+               (member (caar s) new-domain))
+          (cons (car s)
+                (restrict (cdr s) new-domain))
+        (restrict (cdr s) new-domain))
+    nil))
+
+(defn co-restrict (s new-domain)
+  (if (listp s)
+      (if (and (listp (car s))
+               (not (member (caar s) new-domain)))
+          (cons (car s)
+                (co-restrict (cdr s) new-domain))
+        (co-restrict (cdr s) new-domain))
+    nil))
+
+(deftheory alist-defns
+  (alistp domain range value bind rembind invert mapping
+          restrict co-restrict))
+
+;;;;; alist lemmas
+
+; DOMAIN
+
+;; The following was proved in the course of the final run through
+;; the generalization proof.  The one after it isn't needed but
+;; seems like it's worth proving too.  Actually now I see that
+;; some other lemmas are now obsolete, so I'll put these both
+;; early in the file and delete the others.
+
+(prove-lemma domain-restrict (rewrite)
+  (equal (domain (restrict s dom))
+         (intersection (domain s) dom))
+  ((enable restrict)))
+
+(prove-lemma domain-co-restrict (rewrite)
+  (equal (domain (co-restrict s dom))
+         (set-diff (domain s) dom))
+  ((enable co-restrict)))
+
+(prove-lemma domain-bind (rewrite)
+  (equal (domain (bind x v map))
+         (if (member x (domain map))
+             (domain map)
+           (append (domain map) (list x)))))
+
+(prove-lemma domain-rembind (rewrite)
+  (equal (domain (rembind x map))
+         (delete x (domain map))))
+
+(prove-lemma domain-invert (rewrite)
+  (equal (domain (invert map))
+         (range map))
+  ((enable-theory alist-defns)))
+
+; RANGE
+
+(prove-lemma range-invert (rewrite)
+  (equal (range (invert map))
+         (domain map))
+  ((enable-theory alist-defns)))
+
+; BOUNDP
+
+(prove-lemma boundp-bind (rewrite)
+  (equal (member x (domain (bind y v map)))
+         (or (equal x y)
+             (member x (domain map)))))
+
+(prove-lemma boundp-rembind (rewrite)
+  (implies (mapping map)
+           (equal (member x (domain (rembind y map)))
+                  (if (equal x y)
+                      f
+                    (member x (domain map))))))
+
+(prove-lemma boundp-subsetp ()
+       (implies (and (subsetp map1 map2)
+                     (member name (domain map1)))
+                (member name (domain map2))))
+
+(prove-lemma disjoint-domain-singleton (rewrite)
+  (and (equal (disjoint (domain s) (list x))
+              (not (member x (domain s))))
+       (equal (disjoint (list x) (domain s))
+              (not (member x (domain s))))))
+
+(prove-lemma boundp-value-invert (rewrite)
+  (implies (member x (range map))
+           (member (value x (invert map)) (domain map)))
+  ((induct (domain map))))
+
+; VALUE
+
+(prove-lemma value-when-not-bound (rewrite)
+  (implies (not (member name (domain map)))
+           (equal (value name map)
+                  0))
+  ((induct (domain map))))
+
+(prove-lemma value-bind (rewrite)
+  (equal (value x (bind y v map))
+         (if (equal x y)
+             v
+           (value x map))))
+
+(prove-lemma value-rembind (rewrite)
+  (implies (mapping map)
+           (equal (value x (rembind y map))
+                  (if (equal x y)
+                      0
+                    (value x map)))))
+
+(prove-lemma value-append (rewrite)
+  (equal (value x (append s1 s2))
+         (if (member x (domain s1))
+             (value x s1)
+           (value x s2))))
+
+(prove-lemma value-value-invert (rewrite)
+  (implies (and (member x (range s))
+                (mapping s))
+           (equal (value (value x (invert s))
+                         s)
+                  x))
+  ((enable-theory alist-defns)))
+
+; MAPPING
+
+(prove-lemma mapping-append (rewrite)
+  (equal (mapping (append s1 s2))
+         (and (disjoint (domain s1) (domain s2))
+              (mapping (fix-properp s1))
+              (mapping s2))))
+
+(disable mapping)
+
+;; RESTRICT and CO-RESTRICT
+
+(prove-lemma alistp-restrict (rewrite)
+  (alistp (restrict s r)))
+
+(prove-lemma alistp-co-restrict (rewrite)
+  (alistp (co-restrict s r)))
+
+(prove-lemma value-restrict (rewrite)
+  (implies (and (member a r)
+                (member a (domain s)))
+           (equal (value a (restrict s r))
+                  (value a s))))
+
+(prove-lemma value-co-restrict (rewrite)
+  (implies (and (not (member a r))
+                (member a (domain s)))
+           (equal (value a (co-restrict s r))
+                  (value a s))))
+
+(prove-lemma mapping-restrict (rewrite)
+  (implies (mapping s)
+           (mapping (restrict s x)))
+  ((enable mapping)))
+
+(prove-lemma mapping-co-restrict (rewrite)
+  (implies (mapping s)
+           (mapping (co-restrict s x)))
+  ((enable mapping)))
+
+(disable restrict)
+(disable co-restrict)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; terms.events file
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Requires deftheory and constrain enhancments.
+;; Requires sets and alists libraries.
+
+;; This is a library of events about terms, including substitutions.
+;; A TERMP is either a variable or the application of a function
+;; symbol to a "proper list" of terms.  Variables and function symbols
+;; are introduced with CONSTRAIN.
+
+;; NOTE:  In functions like TERMP that have a flag, it seems to be
+;; important to use T and F rather than, say, T and 'LIST.  That's
+;; because otherwise, the "worse-than" heuristic will otherwise
+;; prevent some necessary backchaining in cases where the hypothesis
+;; to be relieved is of the form (TERMP 'LIST ...) and an "ancestor"
+;; is of the form (TERMP T ...).
+
+;; Definitions:
+
+;; (deftheory term-defns
+;;  (variablep-intro variable-listp termp function-symbol-intro all-vars))
+
+;; (deftheory substitution-defns
+;;   (instance var-substp compose apply-to-subst subst
+;;    nullify-subst ;; returns a substitution whose range has no variables
+;;    ))
+
+(constrain variablep-intro (rewrite)
+           (and (implies (listp x)
+                         (not (variablep x)))
+                (or (truep (variablep x))
+                    (falsep (variablep x))))
+           ((variablep nlistp)))
+
+(defn variable-listp (x)
+  (if (listp x)
+      (and (variablep (car x))
+           (variable-listp (cdr x)))
+    (equal x nil)))
+
+(prove-lemma variable-listp-implies-properp (rewrite)
+  (implies (variable-listp x)
+           (properp x)))
+
+(prove-lemma variable-listp-cons (rewrite)
+  (equal (variable-listp (cons a x))
+         (and (variablep a)
+              (variable-listp x))))
+
+(prove-lemma variable-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (variable-listp x)
+                  (equal x nil))))
+
+(disable variable-listp)
+
+(constrain function-symbol-intro (rewrite)
+           ;; We designate ZERO as a function symbol
+           (function-symbol-p (fn))
+           ((function-symbol-p litatom)
+            (fn (lambda () 'zero))))
+
+(defn termp (flg x)
+  (if flg
+      (if (variablep x)
+          t
+        (if (listp x)
+            (and (function-symbol-p (car x))
+                 (termp f (cdr x)))
+          f))
+    (if (listp x)
+        (and (termp t (car x))
+             (termp f (cdr x)))
+      (equal x nil))))
+
+(prove-lemma termp-list-cons (rewrite)
+  (equal (termp f (cons a x))
+         (and (termp t a)
+              (termp f x))))
+
+(prove-lemma termp-list-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (termp f x)
+                  (equal x nil))))
+
+(prove-lemma termp-t-cons (rewrite)
+  (implies flg
+           (equal (termp flg (cons a x))
+                  (and (function-symbol-p a)
+                       (termp f x)))))
+
+(prove-lemma termp-t-nlistp (rewrite)
+  (implies (and flg
+                (not (listp x)))
+           (equal (termp flg x)
+                  (variablep x))))
+
+(disable termp)
+
+(prove-lemma termp-list-implies-properp (rewrite)
+  (implies (termp f x)
+           (properp x))
+  ((induct (properp x))))
+
+(defn all-vars (flg x)
+  ;; duplicates are ok
+  (if flg
+      (if (variablep x)
+          (list x)
+        (if (listp x)
+            (all-vars f (cdr x))
+          nil))
+    (if (listp x)
+        (append (all-vars t (car x))
+                (all-vars f (cdr x)))
+      nil)))
+
+(prove-lemma properp-all-vars (rewrite)
+  (properp (all-vars flg x)))
+
+(prove-lemma all-vars-list-cons (rewrite)
+  (equal (all-vars f (cons a x))
+         (append (all-vars t a)
+                 (all-vars f x)))
+  ((enable all-vars)))
+
+(prove-lemma all-vars-t-cons (rewrite)
+  (implies flg
+           (equal (all-vars flg (cons a x))
+                  (all-vars f x))))
+
+;; Here is a hack to deal with the flags.
+
+(prove-lemma all-vars-subsetp-append-hack (rewrite)
+  (implies (and flg1 flg2)
+           (and (subsetp (all-vars flg1 x)
+                         (append (all-vars flg2 x) y))
+                (subsetp (all-vars flg1 x)
+                         (append y (all-vars flg2 x))))))
+
+;; The following is used later in the proof of MEMBER-PRESERVES-DISJOINT-ALL-VARS
+;; and could conceivably be of use elsewhere.
+(prove-lemma all-vars-flg-boolean nil
+             (implies flg
+                      (equal (all-vars flg x)
+                             (all-vars t x)))
+             ((enable-theory t)))
+
+(disable all-vars)
+
+(deftheory term-defns
+  (variablep-intro variable-listp termp function-symbol-intro all-vars))
+
+;;;;; lemmas about termps
+
+(prove-lemma variable-listp-set-diff (rewrite)
+  (implies (variable-listp x)
+           (variable-listp (set-diff x y)))
+  ((enable-theory term-defns)))
+
+(prove-lemma all-vars-variablep (rewrite)
+  (implies (and flg (variablep x))
+           (equal (all-vars flg x) (list x)))
+  ((enable-theory t)))
+
+(prove-lemma member-variable-listp-implies-variablep (rewrite)
+  (implies (and (member a x) (variable-listp x))
+           (variablep a))
+  ((enable-theory t)))
+
+;; The following was proved in the course of the final run through the
+;; generalization proof.  But in fact it's useful for the next result,
+;; especially in the presence of domain-restrict -- so I don't need to
+;; enable restrict there any longer.  Similarly for the lemma after
+;; that.
+
+(prove-lemma variable-listp-intersection (rewrite)
+  (implies (or (variable-listp x) (variable-listp y))
+           (variable-listp (intersection x y)))
+  ((enable intersection)))
+
+(prove-lemma variable-listp-domain-restrict (rewrite)
+  (implies (variable-listp (domain s))
+           (variable-listp (domain (restrict s x)))))
+
+(prove-lemma variable-listp-domain-co-restrict (rewrite)
+  (implies (variable-listp (domain s))
+           (variable-listp (domain (co-restrict s x)))))
+
+(prove-lemma termp-range-restrict (rewrite)
+  (implies (termp f (range s))
+           (termp f (range (restrict s x))))
+  ((enable restrict)))
+
+(prove-lemma termp-range-co-restrict (rewrite)
+  (implies (termp f (range s))
+           (termp f (range (co-restrict s x))))
+  ((enable co-restrict)))
+
+(prove-lemma member-preserves-disjoint-all-vars-lemma nil
+  (implies (and (disjoint y (all-vars f x))
+                (member g x))
+           (disjoint y (all-vars t g)))
+  ((induct (member g x))))
+
+(prove-lemma member-preserves-disjoint-all-vars (rewrite)
+  (implies (and flg
+                (disjoint y (all-vars f x))
+                (member g x))
+           (disjoint y (all-vars flg g)))
+  ((use (member-preserves-disjoint-all-vars-lemma)
+        (all-vars-flg-boolean (x g)))))
+
+(prove-lemma member-all-vars-subsetp (rewrite)
+  (implies (and flg
+                (member a x))
+           (subsetp (all-vars flg a)
+                    (all-vars f x)))
+  ((enable member)))
+
+(prove-lemma all-vars-f-monotone (rewrite)
+  (implies (subsetp x y)
+           (subsetp (all-vars f x) (all-vars f y)))
+  ((enable subsetp all-vars)))
+
+;;;;; substitutions:  definitions
+
+(defn var-substp (s)
+  (and (mapping s)
+       (variable-listp (domain s))
+       (termp f (range s))))
+
+(defn subst (flg s x)
+  ;; works for other than var-substp's
+  (if flg
+      (if (member x (domain s))
+          (value x s)
+        (if (variablep x)
+            x
+          (if (listp x)
+              (cons (car x)
+                    (subst f s (cdr x)))
+            ;; impossible value of f for non-termp
+            f)))
+    (if (listp x)
+        (cons (subst t s (car x))
+              (subst f s (cdr x)))
+      nil)))
+
+(defn apply-to-subst (s1 s2)
+  ;; apply s1 to each term in range of s2
+  (if (listp s2)
+      (if (listp (car s2))
+          (cons (cons (caar s2) (subst t s1 (cdar s2)))
+                (apply-to-subst s1 (cdr s2)))
+        (apply-to-subst s1 (cdr s2)))
+    nil))
+
+(defn compose (s1 s2)
+  ;; represents the result of applying s1 and then s2
+  (append (apply-to-subst s2 s1)
+          s2))
+
+;; The following was in the original version, but isn't needed.
+;;;  (defn-sk instance (flg term1 term2)
+;;;    ;; term1 is an instance of term2
+;;;    (exists one-way-unifier
+;;;            (and (var-substp one-way-unifier)
+;;;                 (equal term1 (subst flg one-way-unifier term2)))))
+
+;;;;; substitution lemmas
+
+(prove-lemma subst-list-cons (rewrite)
+  (equal (subst f s (cons a x))
+         (cons (subst t s a)
+               (subst f s x))))
+
+(prove-lemma subst-list-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (subst f s x) nil)))
+
+(prove-lemma subst-t-variablep (rewrite)
+  (implies (and flg
+                (variablep x))
+           (equal (subst flg s x)
+                  (if (member x (domain s))
+                      (value x s)
+                    x))))
+
+(prove-lemma subst-t-non-variablep (rewrite)
+  (implies flg
+           (equal (subst flg s (cons fn x))
+                  (if (member (cons fn x) (domain s))
+                      (value (cons fn x) s)
+                    (cons fn (subst f s x)))))
+  ((enable subst)))
+
+(prove-lemma all-vars-subst-lemma (rewrite)
+  (implies (and flg
+                (member x (domain s)))
+           (subsetp (all-vars flg (value x s))
+                    (all-vars f (range s))))
+  ;; hint needed for induction
+  ((enable range)))
+
+(prove-lemma all-vars-subst (rewrite)
+  (implies (termp flg x)
+           (subsetp (all-vars flg (subst flg s x))
+                    (append (all-vars flg x)
+                            (all-vars f (range s)))))
+  ((enable termp)))
+
+(prove-lemma subst-occur (rewrite)
+  (implies (and flg
+                (member x (domain s)))
+           (equal (subst flg s x)
+                  (value x s))))
+
+(prove-lemma boundp-in-var-substp-implies-variablep (rewrite)
+  (implies (and (variable-listp (domain s))
+                (not (variablep a)))
+           (not (member a (domain s))))
+  ((induct (domain s))))
+
+(prove-lemma variablep-value-invert (rewrite)
+  (implies (and (variable-listp (domain s))
+                (member x (range s)))
+           (variablep (value x (invert s))))
+  ((induct (range s))))
+
+(prove-lemma subst-invert (rewrite)
+  (implies (and (termp flg x)
+                (disjoint (domain s) (all-vars flg x))
+                (var-substp s))
+           (equal (subst flg s (subst flg (invert s) x))
+                  x))
+  ((enable termp)))
+
+(prove-lemma boundp-apply-to-subst (rewrite)
+  (equal (member x (domain (apply-to-subst s1 s2)))
+         (member x (domain s2))))
+
+(prove-lemma mapping-apply-to-subst (rewrite)
+  (implies (mapping s)
+           (mapping (apply-to-subst s1 s)))
+  ((enable mapping)))
+
+(prove-lemma alistp-apply-to-subst (rewrite)
+  (alistp (apply-to-subst s1 s2)))
+
+(prove-lemma subst-flg-not-list (rewrite)
+  (implies flg
+           (and (equal (equal (subst flg s x)
+                              (subst t s x))
+                       t)
+                (equal (equal (subst t s x)
+                              (subst flg s x))
+                       t))))
+
+(prove-lemma subst-co-restrict (rewrite)
+  (implies (and (disjoint x
+                          (intersection (domain s) (all-vars flg term)))
+                (variable-listp (domain s))
+                (termp flg term))
+           (equal (subst flg (co-restrict s x) term)
+                  (subst flg s term))))
+
+(prove-lemma subst-restrict (rewrite)
+  (implies (and (subsetp (intersection (domain s) (all-vars flg term))
+                         x)
+                (variable-listp (domain s))
+                (termp flg term))
+           (equal (subst flg (restrict s x) term)
+                  (subst flg s term))))
+
+(prove-lemma termp-value (rewrite)
+  (implies (and flg
+                (member x (domain s))
+                (termp f (range s)))
+           (termp flg (value x s)))
+  ((enable termp)
+   (induct (value x s))))
+
+(prove-lemma termp-subst (rewrite)
+  (implies (and (termp flg x)
+                (termp f (range s)))
+           (termp flg (subst flg s x)))
+  ((enable termp)))
+
+(prove-lemma termp-domain (rewrite)
+  (implies (variable-listp (domain s))
+           (termp f (domain s)))
+  ((enable termp)
+   (induct (domain s))))
+
+(prove-lemma domain-apply-to-subst (rewrite)
+  (equal (domain (apply-to-subst s1 s2))
+         (domain s2)))
+
+(prove-lemma var-substp-apply-to-subst (rewrite)
+  (implies (and (termp f (range s))
+                (termp f (range sg)))
+           (termp f (range (apply-to-subst sg s))))
+  ((enable termp)))
+
+(prove-lemma value-apply-to-subst (rewrite)
+  (implies (member g (domain s))
+           (equal (value g (apply-to-subst sg s))
+                  (subst t sg (value g s)))))
+
+(prove-lemma non-variablep-not-member-of-variable-listp (rewrite)
+  (implies (and (variable-listp d)
+                (not (variablep term)))
+           (not (member term d)))
+  ((induct (member term d))))
+  
+(prove-lemma compose-property (rewrite)
+  (implies (and (variable-listp (domain s2))
+                (termp flg x))
+           (equal (subst flg (compose s1 s2) x)
+                  (subst flg s2 (subst flg s1 x))))
+  ((enable termp)))
+
+(prove-lemma compose-property-reversed
+             (rewrite)
+             (implies (and (variable-listp (domain s2))
+                           (termp flg x))
+                      (equal (subst flg s2 (subst flg s1 x))
+                             (subst flg (compose s1 s2) x)))
+             ((disable compose)))
+
+(disable compose-property)
+
+(prove-lemma subst-not-occur (rewrite)
+  (implies (and (termp flg x)
+                (variable-listp (domain s))
+                (disjoint (domain s) (all-vars flg x)))
+           (equal (subst flg s x) x))
+  ((enable termp)))
+
+(prove-lemma disjoint-range-implies-disjoint-value (rewrite)
+  (implies (and (member x (domain s))
+                flg
+                (disjoint z (all-vars f (range s))))
+           (disjoint z (all-vars flg (value x s))))
+  ((use (subsetp-disjoint-2
+         (x (all-vars flg (value x s)))
+         (y (all-vars f (range s)))
+         (z z)))))
+
+(prove-lemma disjoint-all-vars-subst (rewrite)
+  (implies (and (termp flg x)
+                (disjoint z (all-vars flg x))
+                (disjoint z (all-vars f (range s))))
+           (disjoint z (all-vars flg (subst flg s x))))
+  ((enable termp)))
+
+(prove-lemma all-vars-variable-listp (rewrite)
+  (implies (variable-listp x)
+           (equal (all-vars f x)
+                  x))
+  ((induct (variable-listp x))))
+
+(prove-lemma variable-listp-append (rewrite)
+  (equal (variable-listp (append x y))
+         (and (variable-listp (fix-properp x))
+              (variable-listp y)))
+  ((induct (domain s))))
+
+(prove-lemma termp-list-append (rewrite)
+  (equal (termp f (append x y))
+         (and (termp f (fix-properp x))
+              (termp f y)))
+  ((induct (range s))))
+
+(prove-lemma apply-to-subst-append (rewrite)
+  (equal (apply-to-subst sg (append s1 s2))
+         (append (apply-to-subst sg s1)
+                 (apply-to-subst sg s2))))
+
+(prove-lemma subst-apply-to-subst (rewrite)
+  (implies (and flg
+                (member g (domain s)))
+           (equal (subst flg (apply-to-subst sg s) g)
+                  (subst flg sg (value g s)))))
+
+(prove-lemma subst-append-not-occur-1 (rewrite)
+  (implies (and (termp flg x)
+                (variable-listp (domain s1))
+                (disjoint (all-vars f (domain s1))
+                          (all-vars flg x)))
+           (equal (subst flg (append s1 s2) x)
+                  (subst flg s2 x)))
+  ((induct (subst flg s2 x))))
+
+(prove-lemma subst-append-not-occur-2 (rewrite)
+  (implies (and (termp flg x)
+                (variable-listp (domain s2))
+                (disjoint (all-vars f (domain s2))
+                          (all-vars flg x)))
+           (equal (subst flg (append s1 s2) x)
+                  (subst flg s1 x)))
+  ((induct (subst flg s2 x))))
+
+(prove-lemma apply-to-subst-is-no-op-for-disjoint-domain (rewrite)
+  (implies (and (variable-listp (domain s1))
+                (alistp s2)
+                (termp f (range s2))
+                (disjoint (domain s1) (all-vars f (range s2))))
+           (equal (apply-to-subst s1 s2)
+                  s2)))
+
+(prove-lemma member-subst (rewrite)
+  (implies (and flg (member a x))
+           (member (subst flg s a)
+                   (subst f s x)))
+  ((enable member)))
+
+(prove-lemma subsetp-subst (rewrite)
+  (implies (subsetp x y)
+           (subsetp (subst f s x)
+                    (subst f s y)))
+  ((enable subsetp)))
+
+;;; (disable instance) -- not included in this version
+;;;(disable compose) -- COMPOSE is left enabled for use with COMPOSE-PROPERTY-REVERSED
+(disable apply-to-subst)
+(disable subst)
+(disable rembind)
+(disable bind)
+
+;;;;; nullify-subst:  a substitution that has a range containing
+;;                    no variables
+
+(defn nullify-subst (s)
+  (if (listp s)
+      (if (listp (car s))
+          (cons (cons (caar s) (list (fn)))
+                (nullify-subst (cdr s)))
+        (nullify-subst (cdr s)))
+    nil))
+
+(prove-lemma properp-nullify-subst (rewrite)
+  (properp (nullify-subst s)))
+
+(prove-lemma all-vars-f-range-nullify-subst (rewrite)
+  (equal (all-vars f (range (nullify-subst s)))
+         nil))
+
+(prove-lemma termp-range-nullify-subst (rewrite)
+  (termp f (range (nullify-subst s))))
+
+(prove-lemma domain-nullify-subst (rewrite)
+  (equal (domain (nullify-subst s))
+         (domain s)))
+
+(prove-lemma mapping-nullify-subst (rewrite)
+  (implies (alistp s)
+           (equal (mapping (nullify-subst s))
+                  (mapping s)))
+  ((enable mapping)))
+
+(prove-lemma disjoint-all-vars-subst-nullify-subst (rewrite)
+  (implies (termp flg term)
+           (disjoint (domain sg)
+                     (all-vars flg
+                               (subst flg (nullify-subst sg) term))))
+  ((enable subst)
+   (disable nullify-subst)))
+
+(prove-lemma disjoint-all-vars-range-apply-subst-nullify-subst (rewrite)
+  (implies (termp f (range s))
+           (disjoint (domain sg)
+                     (all-vars f
+                               (range (apply-to-subst (nullify-subst sg) s)))))
+  ((enable apply-to-subst)
+   (disable nullify-subst)))
+
+(disable nullify-subst)
+
+(deftheory substitution-defns ;;;; INSTANCE omitted in this version
+  (var-substp compose apply-to-subst subst nullify-subst))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; generalize.events file
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Requires sets, alists, and terms, which currently contain a number
+;; of rules that aren't really needed here, even indirectly.
+
+;; This is a proof soundness of a slight abstraction of the GENERALIZE
+;; command of PC-NQTHM.
+
+#| Here's what I want to prove.
+
+(implies (and (generalize-okp sg state)
+              (valid-state (generalize sg state)))
+         (valid-state state))
+
+I also prove the much simpler fact, GENERALIZE-STATEP:
+
+(implies (generalize-okp sg state)
+         (statep (generalize sg state)))
+
+|#
+
+;; << 1 >>
+(constrain theorem-intro (rewrite)
+  (and (implies (and (theorem x)
+                     flg)
+                (termp flg x))
+       (implies (and (theorem x)
+                     flg
+                     (var-substp s)) 
+                (theorem (subst flg s x))))
+  ((theorem (lambda (x) f))))
+
+;; << 2 >>
+(defn theorem-list (x)
+  (if (listp x)
+      (and (theorem (car x))
+           (theorem-list (cdr x)))
+    (equal x nil)))
+
+;; << 3 >>
+(prove-lemma theorem-list-properties (rewrite)
+  (and (implies (theorem-list x)
+                (termp f x))
+       (implies (and (theorem-list x)
+                     (var-substp s)) 
+                (theorem-list (subst f s x)))))
+
+;; << 4 >>
+(defn statep (state)
+  (and (listp state)
+       (termp f (car state))
+       (variable-listp (cdr state))))
+
+;; << 5 >>
+#|
+(DEFN-SK VALID-STATE
+         (STATE)
+         (AND (STATEP STATE)
+              (EXISTS WITNESSING-INSTANTIATION
+                      (AND (VAR-SUBSTP WITNESSING-INSTANTIATION)
+                           (SUBSETP (DOMAIN WITNESSING-INSTANTIATION)
+                                    (CDR STATE))
+                           (THEOREM-LIST (SUBST F WITNESSING-INSTANTIATION
+                                                (CAR STATE)))))))
+
+
+Adding the Skolem axiom:
+      (AND
+       (IMPLIES (AND (STATEP STATE)
+                     (VAR-SUBSTP WITNESSING-INSTANTIATION)
+                     (SUBSETP (DOMAIN WITNESSING-INSTANTIATION)
+                              (CDR STATE))
+                     (THEOREM-LIST (SUBST F WITNESSING-INSTANTIATION
+                                          (CAR STATE))))
+                (VALID-STATE STATE))
+       (IMPLIES (NOT (AND (STATEP STATE)
+                          (VAR-SUBSTP (WITNESSING-INSTANTIATION STATE))
+                          (SUBSETP (DOMAIN (WITNESSING-INSTANTIATION STATE))
+                                   (CDR STATE))
+                          (THEOREM-LIST (SUBST F
+                                               (WITNESSING-INSTANTIATION STATE)
+                                               (CAR STATE)))))
+                (NOT (VALID-STATE STATE)))).
+
+
+     As this is a DEFN-SK we can conclude that:
+      (OR (TRUEP (VALID-STATE STATE))
+          (FALSEP (VALID-STATE STATE)))
+is a theorem.
+
+
+|#
+
+(dcl witnessing-instantiation (state))
+(dcl valid-state (state))
+
+(add-axiom valid-state-intro (rewrite)
+  (AND
+   (IMPLIES (AND (STATEP STATE)
+                 (VAR-SUBSTP WITNESSING-INSTANTIATION)
+                 (SUBSETP (DOMAIN WITNESSING-INSTANTIATION)
+                          (CDR STATE))
+                 (THEOREM-LIST (SUBST F WITNESSING-INSTANTIATION
+                                      (CAR STATE))))
+            (VALID-STATE STATE))
+   (IMPLIES (NOT (AND (STATEP STATE)
+                      (VAR-SUBSTP (WITNESSING-INSTANTIATION STATE))
+                      (SUBSETP (DOMAIN (WITNESSING-INSTANTIATION STATE))
+                               (CDR STATE))
+                      (THEOREM-LIST (SUBST F
+                                           (WITNESSING-INSTANTIATION STATE)
+                                           (CAR STATE)))))
+            (NOT (VALID-STATE STATE)))))
+
+(add-axiom valid-state-type (rewrite) 
+  (OR (TRUEP (VALID-STATE STATE))
+      (FALSEP (VALID-STATE STATE))))
+
+;; << 6 >>
+(defn new-gen-vars (goals free vars)
+  (if (listp goals)
+      (let ((current-free-vars (intersection free (all-vars t (car goals)))))
+        (if (disjoint current-free-vars vars)
+            (new-gen-vars (cdr goals) free vars)
+          (append current-free-vars
+                  (new-gen-vars (cdr goals) free vars))))
+    nil))
+
+;; << 7 >>
+(defn cardinality (x)
+  (length (make-set x)))
+
+;; Next goal:  get the definition of GEN-CLOSURE accepted.  In fact,
+;; the lemma GEN-CLOSURE-ACCEPT below suffices, taking NEW to be
+;; (NEW-GEN-VARS GOALS FREE FREE-VARS-SO-FAR), as long as we prove the
+;; following lemma, NEW-GEN-VARS-SUBSET.
+
+;; << 8 >>
+(prove-lemma new-gen-vars-subset (rewrite)
+  (subsetp (new-gen-vars goals free vars)
+           free))
+
+;; It is interesting to note that the exact form of the following
+;; lemma changed while polishing the proof, since rewrite rules
+;; applied to the old version so as to make it irrelevant.
+
+;; << 9 >>
+(prove-lemma gen-closure-accept (rewrite)
+  (implies (and (not (subsetp new free-vars-so-far))
+                (subsetp new free))
+           (lessp (difference (difference (length (make-set free))
+                                          (length (intersection (make-set free)
+                                                                free-vars-so-far)))
+                              (length (intersection (set-diff (make-set free)
+                                                              free-vars-so-far)
+                                                    new)))
+                  (difference (length (make-set free))
+                              (length (intersection (make-set free)
+                                                    free-vars-so-far))))))
+
+;; Here I have a choice:  I could intersect the accumulator with free
+;; at the end, or I could assume that it's intersected with free
+;; before it's input.  I'll choose the former approach, so that I'll
+;; have a simpler rewrite rule and so that I can call gen-closure more
+;; simply.  I may wish to commute the arguments to intersection in the
+;; exit below, but probably that won't matter because I'll only be
+;; talking about membership.
+
+;; << 10 >>
+(defn gen-closure (goals free free-vars-so-far)
+  ;; Returns the goals with variables among the closure of the vars of
+  ;; goals-so-far under the "occurs in the same goal as" relation,
+  ;; restricted to free, together with the set of goals in which the
+  ;; resulting vars occur.
+  (let ((new-free-vars (new-gen-vars goals free free-vars-so-far)))
+    (if (subsetp new-free-vars free-vars-so-far)
+        (intersection free-vars-so-far free)
+      (gen-closure goals free (append new-free-vars free-vars-so-far))))
+  ((lessp (cardinality (set-diff free free-vars-so-far)))))
+
+;; << 11 >>
+(defn generalize-okp (sg state)
+  (and (var-substp sg)
+       (statep state)
+       (disjoint (domain sg)
+                 (all-vars f (car state))) 
+       (listp (car state))
+       (disjoint (domain sg) (cdr state))))
+
+;; << 12 >>
+(defn generalize (sg state)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (sg-vars (all-vars f (range sg))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((new-free
+             (set-diff free
+                       (intersection
+                        (gen-closure (cons new-g p) free (all-vars t new-g))
+                        (all-vars f (range sg))))))
+        (cons (cons new-g p)
+              new-free)))))
+
+;; Here is a fact, not needed elsewhere, that is worth noticing, in
+;; case we wish to extend the current theorem to a sequence of commands.
+
+;; << 13 >>
+(prove-lemma generalize-statep nil
+  (implies (generalize-okp sg state)
+           (statep (generalize sg state))))
+
+;; << 14 >>
+(defn gen-inst (sg state)
+  (let ((s (witnessing-instantiation (generalize sg state)))
+        (domain-1 (gen-closure (cons (subst t (invert sg) (caar state))
+                                     (cdar state))
+                               (cdr state)
+                               (all-vars t (subst t (invert sg) (caar state))))))
+    (let ((s1 (restrict s domain-1))
+          (s2 (apply-to-subst
+               (nullify-subst sg)
+               (co-restrict s domain-1))))
+      (apply-to-subst
+       (apply-to-subst s2 sg)
+       (append s1 s2)))))
+
+;; Let's see that it suffices to prove the result of opening up the
+;; conclusion of the main theorem with a particular witness.
+
+#|
+
+(add-axiom main-theorem-1 (rewrite)
+  (let ((wit (gen-inst sg state)))
+    (implies (and (generalize-okp sg state)
+                  (valid-state (generalize sg state)))
+             (and (statep state)
+                  (var-substp wit)
+                  (subsetp (domain wit) (cdr state))
+                  (theorem-list (subst f wit (car state)))))))
+
+(prove-lemma generalize-is-correct (rewrite)
+  (implies (and (generalize-okp sg state)
+                (valid-state (generalize sg state)))
+           (valid-state state))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable main-theorem-1)
+   (use (valid-state-intro
+         (witnessing-instantiation (gen-inst sg state))))))
+
+|#
+
+;; So, it suffices to prove main-theorem-1.  The first three conjuncts
+;; of the conclusion are quite trivial.
+
+;; << 15 >>
+(prove-lemma main-theorem-1-case-1 (rewrite)
+  (implies (generalize-okp sg state)
+           (statep state)))
+
+;; We put one direction of the definition of valid-state here, for
+;; efficiency in proofs.
+
+;; << 16 >>
+(prove-lemma valid-state-opener (rewrite)
+  (equal (valid-state state)
+         (and (statep state)
+              (let ((witnessing-instantiation (witnessing-instantiation state)))
+                (and (var-substp witnessing-instantiation)
+                     (subsetp (domain witnessing-instantiation) (cdr state))
+                     (theorem-list (subst f witnessing-instantiation (car state)))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (use (valid-state-intro (witnessing-instantiation (witnessing-instantiation state))))))
+
+;; << 17 >>
+(prove-lemma main-theorem-1-case-2 (rewrite)
+  (let ((wit (gen-inst sg state)))
+    (implies (and (generalize-okp sg state)
+                  (valid-state (generalize sg state)))
+             (var-substp wit)))
+  ((disable generalize)))
+
+;; << 18 >>
+(prove-lemma subsetp-cdr-generalize (rewrite)
+  (subsetp (cdr (generalize sg state)) (cdr state)))
+
+;; At this point I had to prove SUBSETP-SET-DIFF-SUFFICIENCY because
+;; of some lemma that was created during the polishing process
+;; (perhaps DOMAIN-RESTRICT).
+
+;; << 19 >>
+(prove-lemma main-theorem-1-case-3 (rewrite)
+  (let ((wit (gen-inst sg state)))
+    (implies (valid-state (generalize sg state))
+             (subsetp (domain wit) (cdr state))))
+  ((disable generalize)))
+
+;; So now we only have to prove MAIN-THEOREM-1-CASE-4 (written here
+;; without use of LET):
+
+#|
+
+(add-axiom main-theorem-1-case-4 (rewrite)
+  (implies (and (generalize-okp sg state)
+                (valid-state (generalize sg state)))
+           (theorem-list (subst f (gen-inst sg state) (car state)))))
+
+(prove-lemma main-theorem-1 (rewrite)
+  (let ((wit (gen-inst sg state)))
+    (implies (and (generalize-okp sg state)
+                  (valid-state (generalize sg state)))
+             (and (statep state)
+                  (var-substp wit)
+                  (subsetp (domain wit) (cdr state))
+                  (theorem-list (subst f wit (car state))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable main-theorem-1-case-1 main-theorem-1-case-2
+           main-theorem-1-case-3 main-theorem-1-case-4)))
+
+|#
+
+;; << 20 >>
+(defn gen-setting-substitutions (s1 s2 sg)
+  (and (var-substp s1)
+       (var-substp s2)
+       (var-substp sg)
+       (disjoint (domain s1) (domain s2))
+       (disjoint (domain s1) (domain sg))
+       (disjoint (domain s2) (domain sg))
+       (disjoint (all-vars f (range sg))
+                 (domain s1))
+       (disjoint (all-vars f (range s2)) (domain sg))))
+
+;; << 21 >>
+(defn main-hyps (s1 s2 sg g p)
+  (and (termp t g)
+       (disjoint (all-vars t g) (domain sg))
+       (termp f p)
+       (disjoint (all-vars f p) (domain sg))
+       (gen-setting-substitutions s1 s2 sg)
+       (theorem-list (subst f (append s1 s2)
+                            (cons (subst t (invert sg) g) p)))))
+
+;; The goal above, MAIN-THEOREM-1-CASE-4, should follow from the
+;; following two lemmas.
+
+#|
+
+(add-axiom main-hyps-suffice (rewrite)
+  (implies (and (listp goals)
+                (main-hyps s1 s2 sg (car goals) (cdr goals)))
+           (theorem-list (subst f
+                                (apply-to-subst (apply-to-subst s2 sg)
+                                                (append s1 s2))
+                                goals))))
+
+(add-axiom main-hyps-relieved (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (main-hyps s1 s2 sg g p)))))))
+
+(prove-lemma main-theorem-1-case-4 (rewrite)
+  (implies (and (generalize-okp sg state)
+                (valid-state (generalize sg state)))
+           (theorem-list (subst f (gen-inst sg state) (car state))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable gen-inst main-hyps-suffice generalize-okp main-hyps-relieved)))
+
+|#
+
+;; So, now let us start with MAIN-HYPS-SUFFICE.  It should follow from
+;; two subgoals, as shown:
+
+#|
+
+(add-axiom main-hyps-suffice-first (rewrite)
+  (implies (main-hyps s1 s2 sg g p)
+           (theorem (subst t
+                           (apply-to-subst (apply-to-subst s2 sg)
+                                           (append s1 s2))
+                           g))))
+
+(add-axiom main-hyps-suffice-rest (rewrite)
+  (implies (main-hyps s1 s2 sg g p)
+           (theorem-list (subst f
+                                (apply-to-subst (apply-to-subst s2 sg)
+                                                (append s1 s2))
+                                p))))
+
+(prove-lemma main-hyps-suffice (rewrite)
+  (implies (and (listp goals)
+                (main-hyps s1 s2 sg (car goals) (cdr goals)))
+           (theorem-list (subst f
+                                (apply-to-subst (apply-to-subst s2 sg)
+                                                (append s1 s2))
+                                goals)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable theorem-list subst main-hyps-suffice-first main-hyps-suffice-rest)))
+
+|#
+
+;; Consider the first of these.  Although COMPOSE-PROPERTY-REVERSED is
+;; used in the proof (because it's enabled), it's actually not
+;; necessary.  A proof took slightly over 10 minutes with the rule
+;; enabled, and roughly 9 minutes without.
+
+;; << 22 >>
+(prove-lemma main-hyps-suffice-first-lemma-general nil
+  (implies (and (termp flg g)
+                (disjoint (all-vars flg g) (domain sg))
+                (gen-setting-substitutions s1 s2 sg)
+                (equal sg-1 (invert sg)))
+           (equal (subst flg
+                         (apply-to-subst (apply-to-subst s2 sg)
+                                         (append s1 s2))
+                         g)
+                  (subst flg (apply-to-subst s2 sg)
+                         (subst flg (append s1 s2)
+                                (subst flg sg-1 g)))))
+  ((induct (subst flg sg-1 g))))
+
+;; << 23 >>
+(prove-lemma main-hyps-suffice-first-lemma (rewrite)
+  (implies (and (termp t g)
+                (disjoint (all-vars t g) (domain sg))
+                (gen-setting-substitutions s1 s2 sg))
+           (equal (subst t
+                         (apply-to-subst (apply-to-subst s2 sg)
+                                         (append s1 s2))
+                         g)
+                  (subst t (apply-to-subst s2 sg)
+                         (subst t (append s1 s2)
+                                (subst t (invert sg) g)))))
+  ((use (main-hyps-suffice-first-lemma-general (flg t) (sg-1 (invert sg))))
+   (disable-theory t)
+   (enable-theory ground-zero)))
+
+;; << 24 >>
+(prove-lemma main-hyps-suffice-first (rewrite)
+  (implies (main-hyps s1 s2 sg g p)
+           (theorem (subst t
+                           (apply-to-subst (apply-to-subst s2 sg)
+                                           (append s1 s2))
+                           g)))
+  ;; Disabling COMPOSE-PROPERTY-REVERSED is necessary so that the fact
+  ;; that theoremhood is inherited upon substitution is used.  Disabling
+  ;; APPLY-TO-SUBST-APPEND is necessary so that
+  ;; MAIN-HYPS-SUFFICE-FIRST-LEMMA is used (a Knuth-Bendix sort of
+  ;; problem).
+  ((disable compose-property-reversed apply-to-subst-append)))
+
+;; The following is useful with s = (append s1 s2).
+
+;; << 25 >>
+(prove-lemma main-hyps-suffice-rest-lemma (rewrite)
+  (implies (and (termp flg p)
+                (variable-listp (domain sg))
+                (disjoint (all-vars flg p) (domain sg)))
+           (equal (subst flg
+                         (apply-to-subst (apply-to-subst s2 sg)
+                                         s)
+                         p)
+                  (subst flg
+                         (apply-to-subst s2 sg)
+                         (subst flg s p)))))
+
+;; << 26 >>
+(prove-lemma main-hyps-suffice-rest (rewrite)
+  (implies (main-hyps s1 s2 sg g p)
+           (theorem-list (subst f
+                                (apply-to-subst (apply-to-subst s2 sg)
+                                                (append s1 s2))
+                                p)))
+  ;; If I don't disable COMPOSE-PROPERTY-REVERSED I get an infinite loop
+  ;; in the rewriter, it seems.
+  ((disable apply-to-subst-append compose-property-reversed)))
+
+;; << 27 >>
+(prove-lemma main-hyps-suffice (rewrite)
+  (implies (and (listp goals)
+                (main-hyps s1 s2 sg (car goals) (cdr goals)))
+           (theorem-list (subst f
+                                (apply-to-subst (apply-to-subst s2 sg)
+                                                (append s1 s2))
+                                goals)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable theorem-list subst main-hyps-suffice-first main-hyps-suffice-rest)))
+
+;; I'll disable the two lemmas used above so that I avoid the possibility
+;; of looping with COMPOSE-PROPERTY-REVERSED.
+
+;; << 28 >>
+(disable main-hyps-suffice-first-lemma)
+;; << 29 >>
+(disable main-hyps-suffice-rest-lemma)
+
+;; All that remains now is to prove MAIN-HYPS-RELIEVED.  If we open up
+;; MAIN-HYPS we see what the necessary subgoals are.  Recall the
+;; definition of MAIN-HYPS:
+
+#| 
+(defn main-hyps (s1 s2 sg g p)
+  (and (termp t g)
+       (disjoint (all-vars t g) (domain sg))
+       (termp f p)
+       (disjoint (all-vars f p) (domain sg))
+       (gen-setting-substitutions s1 s2 sg)
+       (theorem-list (subst f (append s1 s2)
+                            (cons (subst t (invert sg) g) p)))))
+|#
+
+;; << 30 >>
+(prove-lemma main-hyps-relieved-1 (rewrite)
+  (let ((g (caar state)))
+    (implies (generalize-okp sg state)
+             (termp t g))))
+
+;; << 31 >>
+(prove-lemma main-hyps-relieved-2 (rewrite)
+  (let ((g (caar state)))
+    (implies (generalize-okp sg state)
+             (disjoint (all-vars t g) (domain sg)))))
+
+;; << 32 >>
+(prove-lemma main-hyps-relieved-3 (rewrite)
+  (let ((p (cdar state)))
+    (implies (generalize-okp sg state)
+             (termp f p))))
+
+;; << 33 >>
+(prove-lemma main-hyps-relieved-4 (rewrite)
+  (let ((p (cdar state)))
+    (implies (generalize-okp sg state)
+             (disjoint (all-vars f p) (domain sg)))))
+
+#|
+
+(add-axiom main-hyps-relieved-5 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (gen-setting-substitutions s1 s2 sg)))))))
+
+(add-axiom main-hyps-relieved-6 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem-list (subst f (append s1 s2)
+                                        (cons (subst t (invert sg) g) p)))))))))
+
+(prove-lemma main-hyps-relieved (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (main-hyps s1 s2 sg g p))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable main-hyps main-hyps-relieved-1 main-hyps-relieved-2 main-hyps-relieved-3
+           main-hyps-relieved-4 main-hyps-relieved-5 main-hyps-relieved-6)))
+
+|#
+
+;; So, we have left the goals MAIN-HYPS-RELIEVED-5 and
+;; MAIN-HYPS-RELIEVED-6.  Let us start with the first.  Opening up
+;; GEN-SETTING-SUBSTITUTIONS gives us a number of subgoals.
+
+;; The first two cases below do not require knowledge about DOMAIN-1
+;; (or G, P, FREE, or NEW-G), but simply following from the validity
+;; of the state (GENERALIZE SG STATE).  Disabling GENERALIZE is very
+;; useful (probably not necessary, though I didn't let the prover run
+;; long enough to find out).
+
+;; << 34 >>
+(prove-lemma main-hyps-relieved-5-lemma-1 (rewrite)
+  (let ((s (witnessing-instantiation (generalize sg state))))
+    (let ((s1 (restrict s domain-1))
+          (s2 (apply-to-subst (nullify-subst sg)
+                              (co-restrict s domain-1))))
+      (implies (valid-state (generalize sg state))
+               (and (var-substp s1)
+                    (var-substp s2)))))
+  ((disable generalize)))
+
+;; The next case is trivial.
+
+;; << 35 >>
+(prove-lemma main-hyps-relieved-5-lemma-2 (rewrite)
+  (implies (generalize-okp sg state)
+           (var-substp sg)))
+
+;; The next case is also quite trivial; notice how abstracted it is.
+
+;; << 36 >>
+(prove-lemma main-hyps-relieved-5-lemma-3 (rewrite)
+  (let ((s1 (restrict s domain-1))
+        (s2 (apply-to-subst (nullify-subst sg)
+                            (co-restrict s domain-1))))
+    (disjoint (domain s1) (domain s2))))
+
+;; For the next two cases we first observe that (DOMAIN S) is disjoint
+;; from (DOMAIN SG), and then we use SUBSETP-DISJOINT-1 where X is the
+;; domain of S1 or S2, Y is the domain of S, and Z is the domain of
+;; SG:
+;;             (IMPLIES (AND (SUBSETP X Y) (DISJOINT Y Z))
+;;                      (DISJOINT X Z))
+
+;; << 37 >>
+(prove-lemma witnessing-instantiation-is-disjoint-from-generalizing-substitution nil
+  (let ((s (witnessing-instantiation (generalize sg state))))
+    (implies (and (generalize-okp sg state)
+                  (valid-state (generalize sg state)))
+             (disjoint (domain s) (domain sg)))))
+
+;; In the next case we abstract away DOMAIN-1 (and hence G, P, FREE,
+;; and NEW-G).  Incidentally, a similar phenomenon occurred here to
+;; the one reported just above the statement above of MAIN-THEOREM-1-CASE-3:
+;; final polishing resulted in the need for another lemma.  That extra
+;; lemma is DISJOINT-SET-DIFF-SUFFICIENCY in this case, to be found
+;; in "sets.events".
+
+;; << 38 >>
+(prove-lemma main-hyps-relieved-5-lemma-4 (rewrite)
+  (let ((s (witnessing-instantiation (generalize sg state))))
+    (let ((s1 (restrict s domain-1))
+          (s2 (apply-to-subst (nullify-subst sg)
+                              (co-restrict s domain-1))))
+      (implies (and (generalize-okp sg state)
+                    (valid-state (generalize sg state)))
+               (and (disjoint (domain s1) (domain sg))
+                    (disjoint (domain s2) (domain sg))))))
+  ((use (witnessing-instantiation-is-disjoint-from-generalizing-substitution))
+   (disable generalize-okp valid-state-opener generalize)))
+
+;; The lemma MAIN-HYPS-RELIEVED-5-LEMMA-5-WIT is true because the
+;; domain of s is contained in the free variables of the generalized
+;; state (by choice, i.e. definition, of witnessing-instantiation),
+;; which is disjoint from the intersection of the indicated
+;; GEN-CLOSURE with the variables in the range of sg.  I'll use a
+;; trick that I learned from Ken Kunen (definable Skolem function is
+;; all, really) to reduce disjointness considerations to membership
+;; considerations.
+
+;; << 39 >>
+(prove-lemma main-hyps-relieved-5-lemma-5-wit (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1)))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state))
+                        (member wit (all-vars f (range sg)))
+                        (member wit (domain s)))
+                   (not (member wit domain-1)))))))
+  ((disable gen-closure subst invert all-vars restrict)))
+
+;; << 40 >>
+(prove-lemma main-hyps-relieved-5-lemma-5 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1)))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (disjoint (all-vars f (range sg))
+                             (domain s1)))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable domain-restrict member-intersection
+           disjoint-wit-witnesses main-hyps-relieved-5-lemma-5-wit)))
+
+;; << 41 >>
+(prove-lemma main-hyps-relieved-5-lemma-6 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (disjoint (all-vars f (range s2))
+                             (domain sg))))))))
+
+;; << 42 >>
+(prove-lemma main-hyps-relieved-5 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (gen-setting-substitutions s1 s2 sg))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable gen-setting-substitutions
+           main-hyps-relieved-5-lemma-1 main-hyps-relieved-5-lemma-2
+           main-hyps-relieved-5-lemma-3 main-hyps-relieved-5-lemma-4
+           main-hyps-relieved-5-lemma-5 main-hyps-relieved-5-lemma-6)))
+
+;; Now all that is left is MAIN-HYPS-RELIEVED-6.  Actually, this lemma
+;; doesn't have anything to do with inverse substitutions or even with
+;; generalization, really.  The idea is simply that one takes a valid
+;; state and wishes to split its witnessing substitution into two
+;; parts.  The parts are the respective restriction and co-restriction
+;; of the original substitution to some set that is ``closed'' in the
+;; appropriate sense.  Actually, the co-restriction is allowed to have
+;; a substitution applied to it, whose domain is disjoint from the
+;; goals ``outside'' that closure.  Below we give the lemmas and the
+;; proof of MAIN-HYPS-RELIEVED-6 from those lemmas.  But first let us
+;; introduce the necessary notions.
+
+;; << 43 >>
+(defn all-vars-disjoint-or-subsetp (goals free x)
+  ;; says that every goals's free variables are either contained
+  ;; in x or are disjoint from x
+  (if (listp goals)
+      (and (or (subsetp (intersection free (all-vars t (car goals)))
+                        x)
+               (disjoint (intersection free (all-vars t (car goals)))
+                         x))
+           (all-vars-disjoint-or-subsetp (cdr goals) free x))
+    t))
+
+;; Our plan will be to show that (CDR STATE) has the above property
+;; with respect to the free variables of the generalized state and the
+;; appropriate gen-closure.  In cases where one applies a substitution
+;; of the form (append s1 s2) to such a list of goals, where the
+;; domain of s1 is contained in the intersection of those free
+;; variables with that closure and the domain of s2 is disjoint from
+;; that intersection, we'll show that the result is a theorem-list iff
+;; each of the following are theorem-lists:  apply s1 to the goals
+;; whose vars intersect its domain, and apply s2 to the rest.
+;; Reduction rules about applying restrictions etc. will then finish
+;; the job.
+
+;; Notice the similarity of the following definition with new-gen-vars.
+;; Think of vars as the closure variables, and free as the free variable
+;; set within which this all "takes place".
+
+;; << 44 >>
+(defn goals-intersecting-vars (goals free vars)
+  (if (listp goals)
+      (let ((current-free-vars (intersection free (all-vars t (car goals)))))
+        (if (disjoint current-free-vars vars)
+            (goals-intersecting-vars (cdr goals) free vars)
+          (cons (car goals)
+                (goals-intersecting-vars (cdr goals) free vars))))
+    nil))
+
+;; << 45 >>
+(defn goals-disjoint-from-vars (goals free vars)
+  (if (listp goals)
+      (let ((current-free-vars (intersection free (all-vars t (car goals)))))
+        (if (disjoint current-free-vars vars)
+            (cons (car goals)
+                  (goals-disjoint-from-vars (cdr goals) free vars))
+          (goals-disjoint-from-vars (cdr goals) free vars)))
+    nil))
+
+;; Now we begin the remaining goal, MAIN-HYPS-RELIEVED-6.  The idea is
+;; to show that the appropriate goal list is a theorem-list by showing
+;; separately that the first and the rest are theorems, since the
+;; reasons are slightly different.  The first is a theorem because its
+;; free vars are all in domain-1, hence in the domain of s1; so, s2
+;; can be dropped from the APPEND.  The rest all have the property
+;; that their free vars are contained in or disjoint from domain-1,
+;; and for those disjoint from it, they do not contain variables from
+;; the domain of sg.  Notice that the new current goal may violate the
+;; latter requirement, since it may have no free vars at all but
+;; contain vars from the domain of sg, and that's why we have to make
+;; a special case out of it.
+
+#|
+
+(add-axiom main-hyps-relieved-6-first (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem (subst t (append s1 s2)
+                                   (subst t (invert sg) g)))))))))
+
+(add-axiom main-hyps-relieved-6-rest (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem-list (subst f (append s1 s2) p))))))))
+
+(prove-lemma main-hyps-relieved-6 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem-list (subst f (append s1 s2)
+                                        (cons (subst t (invert sg) g) p))))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable main-hyps-relieved-6-first main-hyps-relieved-6-rest subst theorem-list)))
+
+|#
+
+;; The first is true because the free vars in new-g are all in the
+;; domain of s1, since they are all in domain-1.  By the way, the
+;; proof-checker was useful here; I dove to the subst term (after
+;; adding abbreviations and promoting hypotheses) and saw that I
+;; wanted to rewrite with SUBST-APPEND-NOT-OCCUR-2.  I also notice the
+;; need for GEN-CLOSURE-CONTAINS-THIRD-ARG during the attempt to prove
+;; a goal.
+
+;; First, we only want to open up GENERALIZE when we are looking at
+;; goals, not when we are simply asking about the witnessing
+;; substitution.
+
+;; << 46 >>
+(prove-lemma car-generalize (rewrite)
+  (equal (car (generalize sg state))
+         (cons (subst t (invert sg) (caar state))
+               (cdar state)))
+  ((enable generalize)))
+
+;; << 47 >>
+(disable generalize)
+
+;; Inspection of the proof of a subgoal of MAIN-HYPS-RELIEVED-6-FIRST
+;; suggests that we need the following lemma.  Actually, before the
+;; final polishing it was the case that the following version sufficed.
+;; But final polishing led me to prove a "better" version, as well
+;; as the lemma DISJOINT-SET-DIFF-GENERAL in "sets.events".
+
+#|
+(prove-lemma gen-closure-contains-third-arg (rewrite)
+  (implies (subsetp domain free)
+           (subsetp (intersection domain free-vars-so-far)
+                    (gen-closure goals free free-vars-so-far))))
+|#
+
+;; << 48 >>
+(prove-lemma gen-closure-contains-third-arg (rewrite)
+  (implies (subsetp x (intersection free free-vars-so-far))
+           (subsetp x
+                    (gen-closure goals free free-vars-so-far))))
+
+
+;; << 49 >>
+(prove-lemma main-hyps-relieved-6-first (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem (subst t (append s1 s2) new-g))))))))
+
+
+;; Now all that remains is MAIN-HYPS-RELIEVED-6-REST.
+
+#|
+
+;; I originally forgot the (TERMP F P) hypothesis below, but it wasn't
+;; very hard to back up and fix this.
+
+(add-axiom main-hyps-relieved-6-rest-generalization (rewrite)
+  (let ((s1 (restrict s domain-1))
+        (s2 (apply-to-subst (nullify-subst sg)
+                            (co-restrict s domain-1))))
+    (implies (and (var-substp sg)
+                  (var-substp s)
+                  (subsetp (domain s) new-free)
+                  (termp f p)
+                  (theorem-list (subst f s p)) 
+                  (disjoint (domain sg)
+                            (all-vars f (goals-disjoint-from-vars
+                                         p new-free domain-1)))
+                  (all-vars-disjoint-or-subsetp p new-free domain-1)) 
+             (theorem-list (subst f (append s1 s2) p)))))
+
+(add-axiom main-hyps-relieved-6-rest-lemma-1 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (disjoint (domain sg)
+                             (all-vars f (goals-disjoint-from-vars
+                                          p (cdr (generalize sg state)) domain-1)))))))))
+
+;; Minor note:  I used the BREAK-LEMMA feature of NQTHM to realize
+;; that I needed the following lemma.
+
+(add-axiom main-hyps-relieved-6-rest-lemma-2 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (all-vars-disjoint-or-subsetp p (cdr (generalize sg state)) domain-1)))))))
+
+(prove-lemma main-hyps-relieved-6-rest (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem-list (subst f (append s1 s2) p)))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable theorem-list subst car-generalize ;; so that we can get at p from (car state)
+           ;; relieving hyps of main-hyps-relieved-6-rest-generalization:
+           main-hyps-relieved-6-rest-lemma-1 main-hyps-relieved-6-rest-lemma-2
+           ;; to relieve the (termp f p) hypothesis in main-hyps-relieved-6-rest-generalization:
+           statep termp-list-cons
+           generalize-okp valid-state-opener main-hyps-relieved-6-rest-generalization)))
+
+;; At this point I did a sanity check and sure enough, the pushed
+;; lemmas all go through at this point:  main-hyps-relieved-6,
+;; main-hyps-relieved, main-theorem-1-case-4, main-theorem-1, and
+;; generalize-is-correct.
+
+|#
+
+;; It remains to prove MAIN-HYPS-RELIEVED-6-REST-LEMMA-1,
+;; MAIN-HYPS-RELIEVED-6-REST-LEMMA-2, and
+;; MAIN-HYPS-RELIEVED-6-REST-GENERALIZATION.
+
+;; For the first of these we need the following trivial observation.
+
+;; << 50 >>
+(prove-lemma goals-disjoint-from-vars-subsetp (rewrite)
+  (subsetp (goals-disjoint-from-vars goals free vars)
+           goals))
+
+;; Unfortunately the observation above doesn't quite suffice, because
+;; of a technical problem with free variables in hypotheses.  The
+;; following consequence does, though.
+
+;; << 51 >>
+(prove-lemma disjoint-all-vars-goals-disjoint-from-vars (rewrite)
+  (implies (disjoint x (all-vars f goals))
+           (disjoint x (all-vars f (goals-disjoint-from-vars goals free vars))))
+  ((use (all-vars-f-monotone (x (goals-disjoint-from-vars goals free vars)) (y goals)))
+   (disable all-vars-f-monotone)))
+
+;; << 52 >>
+(prove-lemma main-hyps-relieved-6-rest-lemma-1 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (disjoint (domain sg)
+                             (all-vars f (goals-disjoint-from-vars
+                                          p (cdr (generalize sg state)) domain-1)))))))))
+
+;; The next goal, MAIN-HYPS-RELIEVED-6-REST-LEMMA-2, needs the lemma
+;; ALL-VARS-DISJOINT-OR-SUBSETP-GEN-CLOSURE below.  That lemma's
+;; mechanical proof depends on the trivial observation
+;; DISJOINT-INTERSECTION3-MIDDLE in file sets.events.
+
+;; << 53 >>
+(prove-lemma all-vars-disjoint-or-subsetp-gen-closure
+         (rewrite)
+         (implies (subsetp domain free)
+                  (all-vars-disjoint-or-subsetp goals domain
+                                                (gen-closure (cons g goals) free vars))))
+
+;; << 54 >>
+(prove-lemma main-hyps-relieved-6-rest-lemma-2 (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (all-vars-disjoint-or-subsetp p (cdr (generalize sg state)) domain-1)))))))
+
+;; Finally, all that's left is
+;; MAIN-HYPS-RELIEVED-6-REST-GENERALIZATION.  An attempted proof by
+;; induction of that theorem results in 11 goals, all but one of which
+;; goes through automatically.  The remaining one is as follows.
+
+#|
+
+(IMPLIES
+ (AND
+  (DISJOINT NEW-FREE
+            (INTERSECTION DOMAIN-1
+                          (ALL-VARS T X)))
+  (THEOREM-LIST
+   (SUBST F
+          (APPEND (RESTRICT S DOMAIN-1)
+                  (APPLY-TO-SUBST (NULLIFY-SUBST SG)
+                                  (CO-RESTRICT S DOMAIN-1)))
+          Z))
+  (MAPPING SG)
+  (VARIABLE-LISTP (DOMAIN SG))
+  (TERMP F (RANGE SG))
+  (MAPPING S)
+  (VARIABLE-LISTP (DOMAIN S))
+  (TERMP F (RANGE S))
+  (SUBSETP (DOMAIN S) NEW-FREE)
+  (TERMP T X)
+  (TERMP F Z)
+  (THEOREM (SUBST T S X))
+  (THEOREM-LIST (SUBST F S Z))
+  (DISJOINT (DOMAIN SG) (ALL-VARS T X))
+  (DISJOINT (DOMAIN SG)
+            (ALL-VARS F
+                      (GOALS-DISJOINT-FROM-VARS Z NEW-FREE DOMAIN-1)))
+  (ALL-VARS-DISJOINT-OR-SUBSETP Z NEW-FREE DOMAIN-1))
+ (THEOREM (SUBST T
+                 (APPEND (RESTRICT S DOMAIN-1)
+                         (APPLY-TO-SUBST (NULLIFY-SUBST SG)
+                                         (CO-RESTRICT S DOMAIN-1)))
+                 X)))
+
+|#
+
+;; Let us attempt to prove this goal with the proof-checker, thus
+;; seeing why the rewriter can't handle it automatically.  We would
+;; like to rewrite with SUBST-APPEND-NOT-OCCUR-1 to replace the
+;; conclusion with:
+
+#|
+(THEOREM (SUBST T
+                (APPLY-TO-SUBST (NULLIFY-SUBST SG)
+                                (CO-RESTRICT S DOMAIN-1))
+                X))
+|#
+
+;; However, in order to do that we need to observe that under the
+;; hypotheses, the following holds.
+
+#|
+(DISJOINT (ALL-VARS F
+                    (DOMAIN (RESTRICT S DOMAIN-1)))
+          (ALL-VARS T X))
+|#
+
+;; This is one of those cases of a problem with free variables in
+;; hypotheses that are so annoying.  The lemma DOMAIN-RESTRICT has
+;; been put in alists.events to help with this.  But then we lose the
+;; fact that the first ALL-VARS in the goal above may be removed.  The
+;; lemma VARIABLE-LISTP-INTERSECTION has been added to terms.events to
+;; take care of that.
+
+;; Now it looks like the rewrite using SUBST-APPEND-NOT-OCCUR-1 should
+;; succeed, since all hypotheses are relieved by rewriting alone.
+;; Just to make sure, we back up in the proof checker and see if BASH
+;; uses this rule on our original goal.  Sure enough, it does.
+
+;; Now our conclusion is the one displayed above, i.e.
+
+#|
+(THEOREM (SUBST T
+                (APPLY-TO-SUBST (NULLIFY-SUBST SG)
+                                (CO-RESTRICT S DOMAIN-1))
+                X))
+|#
+
+;; Since (as we already know) (NULLIFY-SUBST SG) has the same domain
+;; as does SG, and since the hypotheses imply that (DOMAIN SG) is
+;; disjoint from the variables of X, the SUBST expression in this
+;; conclusion should simplify to:
+
+#|
+(SUBST T (NULLIFY-SUBST SG)
+       (SUBST T (CO-RESTRICT S DOMAIN-1)
+              X))
+|#
+
+;; We therefore need the lemma SUBST-APPLY-TO-SUBST-ELIMINATOR below
+;; (which is used under the substitution where S gets (CO-RESTRICT S
+;; DOMAIN-1) and SG gets (NULLIFY-SUBST SG)).  However, we'll
+;; immediately derive the desired consequence and then disable this
+;; lemma, since it appears that it would loop with
+;; COMPOSE-PROPERTY-REVERSED.
+
+;; << 55 >>
+(prove-lemma subst-apply-to-subst-eliminator (rewrite)
+  (implies (and (variable-listp (domain sg))
+                (variable-listp (domain s))
+                (termp t x)
+                (disjoint (domain sg) (all-vars t x)))
+           (equal (subst t (apply-to-subst sg s) x)
+                  (subst t sg
+                         (subst t s x)))))
+
+;; << 56 >>
+(prove-lemma theorem-subst-apply-to-subst-with-disjoint-domain (rewrite)
+  (implies (and (var-substp sg)
+                (var-substp s)
+                (termp t x)
+                (disjoint (domain sg) (all-vars t x))
+                (theorem (subst t s x)))
+           (theorem (subst t (apply-to-subst sg s) x)))
+  ((disable compose-property-reversed)))
+
+;; << 57 >>
+(disable subst-apply-to-subst-eliminator)
+
+;; The proof of the remaining goal should go through now, one might
+;; think.  However, we need one more observation first, because we
+;; need to apply the following lemma.
+
+#|
+(PROVE-LEMMA SUBST-CO-RESTRICT
+             (REWRITE)
+             (IMPLIES (AND (DISJOINT X
+                                     (INTERSECTION (DOMAIN S)
+                                                   (ALL-VARS FLG TERM)))
+                           (VARIABLE-LISTP (DOMAIN S))
+                           (TERMP FLG TERM))
+                      (EQUAL (SUBST FLG (CO-RESTRICT S X) TERM)
+                             (SUBST FLG S TERM))))
+|#
+
+;; but the first hypothesis of this lemma needs special handling because of
+;; free variables.  The lemma DISJOINT-SUBSETP-HACK was proved at this point,
+;; and appears now in sets.events.
+
+;; And finally, we finish.  During polishing I suddenly needed the
+;; lemma SUBSETP-INTERSECTION-MONOTONE-2, which is now included in
+;; "sets.events", and which in turn suggested
+;; SUBSETP-INTERSECTION-COMMUTER there.
+
+;; << 58 >>
+(prove-lemma main-hyps-relieved-6-rest-generalization (rewrite)
+  (let ((s1 (restrict s domain-1))
+        (s2 (apply-to-subst (nullify-subst sg)
+                            (co-restrict s domain-1))))
+    (implies (and (var-substp sg)
+                  (var-substp s)
+                  (subsetp (domain s) new-free)
+                  (termp f p)
+                  (theorem-list (subst f s p)) 
+                  (disjoint (domain sg)
+                            (all-vars f (goals-disjoint-from-vars
+                                         p new-free domain-1)))
+                  (all-vars-disjoint-or-subsetp p new-free domain-1)) 
+             (theorem-list (subst f (append s1 s2) p)))))
+
+;; Now to clean up the goals that have been pushed above:
+
+;; << 59 >>
+(prove-lemma main-hyps-relieved-6-rest (rewrite)
+  (let ((g (caar state))
+        (p (cdar state))
+        (free (cdr state))
+        (s (witnessing-instantiation (generalize sg state))))
+    (let ((new-g (subst t (invert sg) g)))
+      (let ((domain-1
+             (gen-closure (cons new-g p) free (all-vars t new-g))))
+        (let ((s1 (restrict s domain-1))
+              (s2 (apply-to-subst (nullify-subst sg)
+                                  (co-restrict s domain-1))))
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (theorem-list (subst f (append s1 s2) p)))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable theorem-list subst car-generalize ;; so that we can get at p from (car state)
+           ;; relieving hyps of main-hyps-relieved-6-rest-generalization:
+           main-hyps-relieved-6-rest-lemma-1 main-hyps-relieved-6-rest-lemma-2
+           ;; to relieve the (termp f p) hypothesis in main-hyps-relieved-6-rest-generalization:
+           statep termp-list-cons
+           generalize-okp valid-state-opener main-hyps-relieved-6-rest-generalization)))
+
+;; << 60 >>
+(prove-lemma main-hyps-relieved-6
+ (rewrite)
+ (implies
+  (and (generalize-okp sg state)
+       (valid-state (generalize sg state)))
+  (theorem-list
+   (subst f
+    (append
+     (restrict (witnessing-instantiation (generalize sg state))
+               (gen-closure (cons (subst t (invert sg) (caar state))
+                                  (cdar state))
+                            (cdr state)
+                            (all-vars t
+                                      (subst t (invert sg) (caar state)))))
+     (apply-to-subst
+             (nullify-subst sg)
+             (co-restrict (witnessing-instantiation (generalize sg state))
+                          (gen-closure (cons (subst t (invert sg) (caar state))
+                                             (cdar state))
+                                       (cdr state)
+                                       (all-vars t
+                                                 (subst t
+                                                        (invert sg)
+                                                        (caar state)))))))
+    (cons (subst t (invert sg) (caar state))
+          (cdar state)))))
+ ((disable-theory t)
+  (enable-theory ground-zero)
+  (enable main-hyps-relieved-6-first main-hyps-relieved-6-rest subst
+          theorem-list)))
+
+;; << 61 >>
+(prove-lemma main-hyps-relieved
+ (rewrite)
+ (implies
+  (and (generalize-okp sg state)
+       (valid-state (generalize sg state)))
+  (main-hyps
+   (restrict (witnessing-instantiation (generalize sg state))
+             (gen-closure (cons (subst t (invert sg) (caar state))
+                                (cdar state))
+                          (cdr state)
+                          (all-vars t
+                                    (subst t (invert sg) (caar state)))))
+   (apply-to-subst
+     (nullify-subst sg)
+     (co-restrict (witnessing-instantiation (generalize sg state))
+                  (gen-closure (cons (subst t (invert sg) (caar state))
+                                     (cdar state))
+                               (cdr state)
+                               (all-vars t
+                                         (subst t (invert sg) (caar state))))))
+   sg
+   (caar state)
+   (cdar state)))
+ ((disable-theory t)
+  (enable-theory ground-zero)
+  (enable main-hyps main-hyps-relieved-1 main-hyps-relieved-2
+          main-hyps-relieved-3 main-hyps-relieved-4 main-hyps-relieved-5
+          main-hyps-relieved-6)))
+
+;; << 62 >>
+(prove-lemma main-theorem-1-case-4
+             (rewrite)
+             (implies (and (generalize-okp sg state)
+                           (valid-state (generalize sg state)))
+                      (theorem-list (subst f
+                                           (gen-inst sg state)
+                                           (car state))))
+             ((disable-theory t)
+              (enable-theory ground-zero)
+              (enable gen-inst main-hyps-suffice generalize-okp
+                      main-hyps-relieved)))
+
+;; << 63 >>
+(prove-lemma main-theorem-1 (rewrite)
+  (let ((wit (gen-inst sg state)))
+    (implies (and (generalize-okp sg state)
+                  (valid-state (generalize sg state)))
+             (and (statep state)
+                  (var-substp wit)
+                  (subsetp (domain wit) (cdr state))
+                  (theorem-list (subst f wit (car state))))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable main-theorem-1-case-1 main-theorem-1-case-2
+           main-theorem-1-case-3 main-theorem-1-case-4)))
+
+;; << 64 >>
+(prove-lemma generalize-is-correct
+          (rewrite)
+          (implies (and (generalize-okp sg state)
+                        (valid-state (generalize sg state)))
+                   (valid-state state))
+          ((disable-theory t)
+           (enable-theory ground-zero)
+           (enable main-theorem-1)
+           (use (valid-state-intro (witnessing-instantiation (gen-inst sg state))))))
+

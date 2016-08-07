@@ -1,0 +1,786 @@
+#|
+
+ Copyright (C) 1994 by Sakthi Subramanian.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Sakthi Subramanian PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT
+ SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER
+ EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SCRIPT IS
+ WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Sakthi Subramanian BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL
+ OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE
+ THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+ RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF
+ YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR FOR ANY
+ CLAIM BY ANY OTHER PARTY.
+
+|#
+
+;\ \newpage
+;\ \begin{center}
+;\ \Large
+;\ A Mechanically Checked Proof of the \\
+;\ Mutilated Checkerboard Theorem \\[1in]
+;\ \large
+;\ Sakthi Subramanian
+;\ \end{center} \newpage
+
+;\ 
+;\ Here is a formalization of the nxn mutilated checkerboard problem using Bob
+;\ Boyer's representation. I later learnt that Herb Simon uses a 
+;\ similar trick in
+;\ discussing a solution to a ``Cube-brick problem''. Our formalization allows
+;\ us to prove by induction that every sequence of
+;\ domino-placements leads to a state in which the number of covered black
+;\ and white squares are equal. However, in the mutilated board the number of
+;\ black and white squares are not equal and hence it cannot be covered 
+;\ completely. An
+;\ interesting feature is the definition of the color predicates in terms of 
+;\ the representation of the squares. White squares are those whose coordinates
+;\ sum up to an even number and black squares are those whose coordinates
+;\ sum upto an odd number.
+;\ We prove the theorem for a nxn board using mathematical induction. 
+;\
+;\ REPRESENTATION:
+;\
+;\ We label the squares by their coordinates with (0,0) being
+;\ the upper left hand corner and (n,n) being the diagonally opposite
+;\ square.  Thus, there are n+1 rows and columns in the board. If n=7, we are
+;\ talking about the usual 8x8 checkerboard with the rows and columns numbered
+;\ from 0 through 7. More generally, when n is odd, the number of rows and 
+;\ columns is even and vice versa. We use [0..m, 0..n] as  our notation for
+;\ a  board whose rows are numbered from 0 through m and whose 
+;\ columns are numbered from 0 through n.
+
+(boot-strap nqthm)
+
+;\ A square is represented by a pair !t (cons x y) where !t x and !t y are its 
+;\ coordinates.
+
+(defn squarep (x) (and (listp x) (numberp (car x)) (numberp (cdr x))))
+
+;\ A domino is a pair of adjacent squares. 
+;\ Two squares are adjacent if one of their coordinates is the same and the
+;\ other coordinate differs by one. Our predicate is true provided the 
+;\ sum of the coordinates of the first argument is less than that of 
+;\ the second argument. Thus, our definition is asymmetric but this will do:
+;\ there is no loss of generality.
+
+
+(defn adjp (s1 s2)
+  (or (and (equal (car s1) (car s2)) (equal (plus 1 (cdr s1)) (cdr s2)))
+      (and (equal (cdr s1) (cdr s2)) (equal (plus 1 (car s1)) (car s2)))
+      ))
+
+;\ A square !t x in a [0..n,0..n] board is a pair of coordinates each 
+;\ less than or equal to n.
+
+(defn squarenp (x n)
+  (and (squarep x) (leq (car x) n) (leq (cdr x) n)))
+
+;\ Dominoes are adjacent pairs of squares that fall within the board.
+
+(defn dominop (x n) 
+  (and (squarenp (car x) n) (squarenp (cdr x) n) 
+       (adjp (car x) (cdr x))))
+
+;\ Square-listp recognizes a list of squares.
+
+(defn square-listp (x)
+  (if (nlistp x)
+      T
+    (and (squarep (car x)) (square-listp (cdr x)))))
+
+
+;\ A board state is a list of covered squares.
+
+(defn board-statep (x) (square-listp x))
+
+;\ Having modeled all possible states of all possible checkerboards
+;\ let us move on to actions.
+;\ There is exactly one action: place a domino with the
+;\ preconditions that the squares of the domino should not be already covered.
+;\ We don't have to check if the dominoes fall within the board because the
+;\ dominop definition takes care of it. 
+;\
+;\ The state got as a result of placing a domino !t x on a board in state !t s 
+;\ is given by the following function. If the preconditions of the action
+;\ are not satisfied then it returns a non-board-statep whose car 
+;\ is !t 'failed.
+;\ This ``error'' state
+;\ is returned  when other actions are performed on it. Thus, a legal domino
+;\ placement action is one that results in a board state.
+
+(defn res-place (x s)
+  (if (or (member (car x) s) (member (cdr x) s))
+      (list 'failed 'place x s)
+    (cons (car x) (cons (cdr x) s))))
+
+(defn result (a s)
+  (if (equal (car s) 'failed)
+      s
+    (res-place (cadr a) s)))
+
+;\ The state got from !t s as a result of executing a list of 
+;\ actions !t l is given 
+;\ by the following function.
+
+(defn resultlist (l s)
+    (if (nlistp l)
+	s
+      (resultlist (cdr l) (result (car l) s))))
+
+;\ A constructor for the action is given below.
+
+(defn place (x) (list 'place x))
+
+;\ The following are predicates on domino-placement actions and 
+;\ sequences of them.
+
+(defn placep (x n) (dominop (cadr x) n))
+
+(defn place-planp (x n)
+  (if (nlistp x)
+      T
+    (and (placep (car x) n) (place-planp (cdr x) n))))
+
+;\ To express the theorem, we need a predicate on states in which all squares
+;\ except the corner squares (0,0) and (n,n) are covered.
+;\ We write functions to generate the set of all squares on the board and then
+;\ delete the two corner squares from the set.
+;\
+;\ Make-row constructs the set of all squares in the row numbered !t m from 
+;\ columns !t 0 through !t n.
+
+(defn make-row (m n)
+  (if (zerop n)
+      (list (cons m 0))
+    (append (make-row m (sub1 n)) (list (cons m n)))))
+
+;\ Make-all-rows constructs the set of squares in rows !t 0 through !t m and 
+;\ columns !t 0 through !t n.
+
+(defn make-all-rows (m n)
+  (if (zerop m)
+      (make-row 0 n)
+    (append (make-all-rows (sub1 m) n) (make-row m n))))
+
+;\ The following function deletes the first occurrence of !t x in !t l.
+
+(defn delete (x l)
+  (if (nlistp l)
+      l
+    (if (equal x (car l))
+	(cdr l)
+      (cons (car l) (delete x (cdr l))))))
+
+;\ A mutilated [0..n,0..n] board includes all squares in rows 
+;\ 0 through !t n except the squares !t '(0 . 0) and !t (cons n n).
+
+(defn mutilated-board (n) 
+  (delete (cons n n) (delete '(0 . 0) (make-all-rows n n))))
+
+
+(defn set-equal (l1 l2)
+  (if (nlistp l1)
+      (nlistp l2)
+    (and (member (car l1) l2) 
+	 (set-equal (cdr l1) (delete (car l1) l2)))))
+
+;\ A state in which all squares of the mutilated [0..n,0..n] board are
+;\ covered is given by the following predicate.
+
+(defn all-covered-except-cornerp (x n)
+  (set-equal x (mutilated-board n)))
+
+;\ A white square is one whose coordinates add up to an even number. Otherwise
+;\ it is a black square. Predicates on white and black squares are given
+;\ below.
+
+(defn oddp (x) (equal (remainder x 2) 1))
+
+(defn whitep (x) (equal (remainder (plus (car x) (cdr x)) 2) 0))
+
+(defn blackp (x) (equal (remainder (plus (car x) (cdr x)) 2) 1))
+
+;\ The following functions compute the number of white and black squares
+;\ in a state.
+
+(defn nwhite (x)
+  (if (nlistp x)
+      0
+    (if (whitep (car x))
+	(plus 1 (nwhite (cdr x)))
+      (nwhite (cdr x)))))
+
+(defn nblack (x)
+  (if (nlistp x)
+      0
+    (if (blackp (car x))
+	(plus 1 (nblack (cdr x)))
+      (nblack (cdr x)))))
+
+;\ THE PROOF.
+
+;\ What is the impossibility argument? In the desired state the number
+;\ of covered white squares is not equal to number of covered black
+;\ squares.  Every placement operation covers exactly one white square
+;\ and one black square.  Thus, all states reachable starting with a
+;\ state in which there are no dominoes on the board have an equal
+;\ number of covered white and black squares. Ergo the desired state is
+;\ unachievable.
+;\
+
+;\ First we show that !t (make-all-rows n n) 
+;\ has an equal number of white and
+;\ black squares when !t n is odd (theorem eq-bw-board1) and 
+;\ that the number of white
+;\ squares = number of black squares + 1 when !t n is even (theorem
+;\ white-one-plus-black2). 
+;\ The lemmas appearing before them were needed for the proofs.
+
+(prove-lemma add-before-sub1 (rewrite)
+   (implies (geq x 2)	     
+	    (equal (add1 (difference x 2)) (difference (add1 x) 2)))
+)
+
+;\ Odd numbers succeed even numbers.
+
+(prove-lemma odd-succeed-even1 (rewrite)
+   (IMPLIES (EQUAL (REMAINDER N 2) 0)
+	    (EQUAL (REMAINDER (ADD1 N) 2) 1))
+)
+
+(prove-lemma move-1-out (rewrite)
+   (equal (plus m (add1 n)) (add1 (plus m n)))
+)
+
+;\ If a square is white then the next square is black.
+
+(prove-lemma black-follows-white1 (rewrite)
+   (implies (whitep (cons m n)) 
+	    (blackp (cons m (add1 n))))
+)	     
+
+;\ Even numbers succeed odd numbers.
+
+(prove-lemma even-succeed-odd1 (rewrite)
+   (IMPLIES (EQUAL (REMAINDER N 2) 1)
+	    (EQUAL (REMAINDER (ADD1 N) 2) 0))
+)
+
+;\ The square next to a  black square is white.
+
+(prove-lemma white-follows-black1 (rewrite)
+   (implies (blackp (cons m n)) 
+	    (whitep (cons m (add1 n))))
+)
+
+
+(prove-lemma odd-even1 (rewrite)
+   (implies (not (equal (remainder n 2) 0))
+	    (equal (remainder n 2) 1))
+)
+
+;\ The following is the base case of the lemma that the number of 
+;\ white squares  equals the number of black
+;\ squares in a row with an even number of squares.
+
+(prove-lemma expand-make-row1 (rewrite)
+   (equal (make-row m 1) (list (cons m 0) (cons m 1)))
+)
+
+(prove-lemma equal-bw-row-base0 (rewrite)
+   (equal (nwhite (make-row m 1)) (nblack (make-row m 1)))
+)
+
+(prove-lemma t5 (rewrite)
+   (IMPLIES (NOT (EQUAL (REMAINDER Y 2) 1))
+	    (EQUAL (REMAINDER (ADD1 Y) 2) 1))
+)
+
+(prove-lemma append-assoc (rewrite)
+   (equal (append (append l1 l2) l3) (append l1 (append l2 l3)))
+)
+
+(prove-lemma t6 (rewrite)
+   (implies (geq n 2)
+	    (equal (make-row m n)
+		   (append (make-row m (difference n 2))
+			   (list (cons m (sub1 n)) (cons m n)))))
+)
+
+;\ The number of white/black squares obtained on appending two lists is the
+;\ sum of the number of white/black squares of the individual lists.
+
+(prove-lemma nwhite-append1 (rewrite)
+   (equal (nwhite (append l1 l2))
+	  (plus (nwhite l1) (nwhite l2)))
+)
+
+(prove-lemma nblack-append1 (rewrite)
+   (equal (nblack (append l1 l2))
+	  (plus (nblack l1) (nblack l2)))
+)
+
+
+;\ In each row of a chess board [0..m,0..n] where n is odd, the number
+;\ of black squares is equal to the number of white squares.
+
+(prove-lemma equal-bw-row1 (rewrite)
+   (implies (oddp n)
+	    (equal (nwhite (make-row m n))
+		   (nblack (make-row m n))))
+)
+
+
+;\ In an entire [0..m,0..n] board, n odd, 
+;\ there are an equal number of white and black squares.
+
+(prove-lemma eq-bw-board1 (rewrite)
+   (implies (oddp n) 
+	    (equal (nwhite (make-all-rows m n)) (nblack (make-all-rows m n))))
+)
+
+;\ Instantiating !t m as !t n in the above we get the following.
+
+(prove-lemma eq-bw-board (rewrite)
+   (implies (oddp n)	     
+	    (equal (nwhite (make-all-rows n n)) (nblack (make-all-rows n n))))
+)
+
+;\ Now we prove that the number of white
+;\ squares = number of black squares + 1 in a board with an odd number of
+;\ rows and columns (theorem white-one-plus-black2). The following are
+;\ intermediate lemmas needed for the proof.
+;\ 
+
+(defn evenp (x) (equal (remainder x 2) 0))
+
+(prove-lemma zero-ident (rewrite)
+   (equal (plus m 0) (fix m))
+)
+
+;\ The number of white squares of an even numbered row with an odd number
+;\ of columns is equal to the number of black squares + 1.
+
+(prove-lemma white-one-plus-black (rewrite)
+   (implies (and (evenp m) (evenp n))
+	    (equal (nwhite (make-row m n))
+		   (add1 (nblack (make-row m n)))))
+)
+
+(prove-lemma black-one-plus-white (rewrite)
+   (implies (and (oddp m) (evenp n))
+	    (equal (nblack (make-row m n))
+		   (add1 (nwhite (make-row m n)))))
+)
+
+(prove-lemma l13 (rewrite)
+   (equal (make-all-rows 1 n)
+	  (append (make-row 0 n) (make-row 1 n)))
+)
+
+(prove-lemma l14 (rewrite)
+   (implies (evenp n)
+	    (equal (nwhite (make-all-rows 1 n))
+		   (nblack (make-all-rows 1 n))))
+)
+
+
+(prove-lemma base2 (rewrite)
+   (EQUAL (PLUS (NWHITE (MAKE-ROW 0 N))
+		(NWHITE (MAKE-ROW 1 N)))
+	  (PLUS (NBLACK (MAKE-ROW 0 N))
+		(NBLACK (MAKE-ROW 1 N))))
+)
+
+(prove-lemma l15 (rewrite)
+   (implies (greaterp m 0)
+	    (equal (plus (nwhite (make-row (sub1 m) n))
+			 (nwhite (make-row  m n)))
+		   (plus (nblack (make-row (sub1 m) n))
+			 (nblack (make-row  m n)))))
+)
+
+
+(prove-lemma t61 (rewrite)
+   (implies (geq m 2)
+	    (equal (make-all-rows m n)
+		   (append (make-all-rows (difference m 2) n)
+			   (append (make-row (sub1 m) n)
+				   (make-row m n)))))
+)
+
+
+(prove-lemma l16 (rewrite)
+   (equal (equal (plus x1 y1 z1) (plus x1 y2 z2))
+	  (equal (plus y1 z1) (plus y2 z2)))
+)
+
+;\ In a [0..m,0..n] checkerboard in which !t m is odd, the number of
+;\ black squares is equal to the number of white squares.
+
+(prove-lemma eq-bw-board2 (rewrite)
+   (implies (oddp m)
+	    (equal (nwhite (make-all-rows m n))
+		   (nblack (make-all-rows m n))))
+   ((disable sub1-elim))
+)
+
+(prove-lemma l17 (rewrite)
+   (implies (and (evenp m) (greaterp m 0))
+	    (equal (remainder (sub1 m) 2) 1))
+)
+
+;\ The following function is introduced to force Nqthm
+;\ to chose the appropriate induction scheme for theorem white-one-plus-black2.
+;\ A hint to induct on !t m according to the recursive structure of f1
+;\ was given.
+
+(defn f1 (x)
+  (if (zerop x)
+      t
+    (f1 (sub1 x))))
+
+;\ If the number of rows and columns of a checkerboard is odd then
+;\ the number of white squares in the board is 1 greater than the number of
+;\ black squares.
+
+(prove-lemma white-one-plus-black2 (rewrite)
+   (implies (and (evenp m) (evenp n))
+	    (equal (nwhite (make-all-rows m n))
+		   (add1 (nblack (make-all-rows m n)))))
+   ((induct (f1 m)))
+)
+
+
+;\ Having established that the number of white squares is equal to the
+;\ number of black squares in a board with an even number of rows and columns
+;\ and that the number of white squares is 1 greater than the number of black
+;\ squares in a board with an odd number of rows and columns, we would
+;\ like to show that in a mutilated board the number of white squares
+;\ is less than the number of black squares.
+;\ This is proved as theorem mut3 below. The lemmas preceding it are
+;\ intermediate lemmas needed for the proof.
+
+(prove-lemma t7 (rewrite)
+   (implies (numberp n)	     
+	    (member (cons m n) (make-row m n)))
+)   
+
+
+(prove-lemma t8 (rewrite)
+   (implies (member x l2)
+	    (member x (append l1 l2)))
+)
+
+
+(prove-lemma m1 (rewrite)
+   (implies (and (numberp n) (numberp m))
+	    (member (cons m n) (make-all-rows m n)))
+)
+
+;\ If we delete a white square from a list then the number of white squares
+;\ in the new list is less than that in the old list.
+
+(prove-lemma white-delete (rewrite)
+   (implies (and (member x l) (whitep x))
+	    (lessp (nwhite (delete x l)) (nwhite l)))
+)
+
+;\ The (n,n) square is white.
+
+(prove-lemma white1 (rewrite)
+   (whitep (cons n n))
+)
+
+;\ Deleting a white square does not change the number of black squares.
+
+(prove-lemma black-same1 (rewrite)
+   (implies (whitep x)
+	    (equal (nblack (delete x l)) (nblack l)))
+)
+
+;\ Deleting !t '(0 . 0) and !t (cons n n) does not change the number of black
+;\ squares in a list since both of them are white.
+
+(prove-lemma black-del1 (rewrite)
+   (equal (nblack (delete (cons n n) (delete '(0 . 0) x))) (nblack x))
+)
+
+
+(prove-lemma mut-l2 (rewrite)
+   (implies (oddp n) (not (equal n 0)))
+)
+
+(prove-lemma mem-del1 (rewrite)
+   (implies (and (member x l) (not (equal x y)))
+	    (member x (delete y l)))
+)
+
+(prove-lemma m2 (rewrite)
+   (member '(0 . 0) (make-all-rows m n))
+)
+
+(prove-lemma mut-l1 (rewrite)
+   (implies (oddp n)
+	    (member (cons n n) (delete '(0 . 0) (make-all-rows n n))))
+)
+
+
+
+;\ In a mutilated board with an even number of rows and
+;\ columns the number of white squares is less than the number of black
+;\ squares.
+
+(prove-lemma mut1 ()
+   (implies (and (oddp n) (equal x (mutilated-board n)))
+	    (lessp (nwhite x) (nblack x)))
+)
+
+;\ In a mutilated board with an odd number of rows and columns,
+;\ the number of white squares is less than the number
+;\ of black squares.
+
+(prove-lemma mut2 ()
+   (implies (and (evenp n) (equal x (mutilated-board n)) (greaterp n 0))
+	    (lessp (nwhite x) (nblack x)))
+)
+
+;\ In any mutilated board the number of white squares is less than the number
+;\ of black squares.
+
+(prove-lemma mut3 (rewrite)
+   (implies (and (equal x (mutilated-board n)) (greaterp n 0))
+	    (lessp (nwhite x) (nblack x)))
+   ((use (mut2) (mut1)))
+)
+
+;\ The following shows what a mutilated board looks like for n = 7.
+
+(prove-lemma mutboard7 ()
+   (equal (mutilated-board 7)
+	  '(        (0 . 1) (0 . 2) (0 . 3) (0 . 4) (0 . 5) (0 . 6) (0 . 7)
+	    (1 . 0) (1 . 1) (1 . 2) (1 . 3) (1 . 4) (1 . 5) (1 . 6) (1 . 7)
+	    (2 . 0) (2 . 1) (2 . 2) (2 . 3) (2 . 4) (2 . 5) (2 . 6) (2 . 7)
+	    (3 . 0) (3 . 1) (3 . 2) (3 . 3) (3 . 4) (3 . 5) (3 . 6) (3 . 7)
+	    (4 . 0) (4 . 1) (4 . 2) (4 . 3) (4 . 4) (4 . 5) (4 . 6) (4 . 7)
+	    (5 . 0) (5 . 1) (5 . 2) (5 . 3) (5 . 4) (5 . 5) (5 . 6) (5 . 7)
+	    (6 . 0) (6 . 1) (6 . 2) (6 . 3) (6 . 4) (6 . 5) (6 . 6) (6 . 7)
+	    (7 . 0) (7 . 1) (7 . 2) (7 . 3) (7 . 4) (7 . 5) (7 . 6))
+	  ))
+
+;\ We will now use mut3 to show that in all states satisfying
+;\ all-covered-except-cornerp the number of white squares is
+;\ less than the number of black squares. This is proved as theorem
+;\ unequal3 below. We need some more lemmas for
+;\ the proof because all-covered-except-cornerp checks for set equality
+;\ by deleting squares in two given lists.
+
+;\ Deleting a non-white element from a list of white squares does not alter
+;\ the number of white squares.
+
+(prove-lemma white-same1 (rewrite)
+   (implies (not (whitep x))
+	    (equal (nwhite (delete x l)) (nwhite l)))
+)
+
+(prove-lemma white-del1 (rewrite)
+   (implies (and (member x l) (whitep x))
+	    (equal (nwhite l)
+		   (plus 1 (nwhite (delete x l)))))
+)
+
+;\ If two sets of squares are equal then the number of white/black squares in 
+;\ them are equal.
+
+(prove-lemma nwhite-eq1 (rewrite)
+   (implies (set-equal l1 l2)
+	    (equal (nwhite l1) (nwhite l2)))
+   ((disable whitep))
+)
+
+(prove-lemma black-same2 (rewrite) 
+   (implies (not (blackp x))
+	    (equal (nblack (delete x l)) (nblack l)))
+)
+
+(prove-lemma black-del2 (rewrite)
+   (implies (and (member x l) (blackp x))
+	    (equal (nblack l)
+		   (plus 1 (nblack (delete x l)))))
+)
+
+(prove-lemma nblack-eq1 (rewrite)
+   (implies (set-equal l1 l2)
+	    (equal (nblack l1) (nblack l2)))
+   ((disable blackp))
+)
+
+
+;\ If all the squares except the corner ones are covered in a board state
+;\ then the number of white squares covered is less than the number of
+;\ covered black squares.
+
+(prove-lemma unequal1 ()
+   (implies (and (evenp n) (greaterp n 0) (board-statep x)
+		 (all-covered-except-cornerp x n))
+	    (lessp (nwhite x) (nblack x)))
+)
+
+(prove-lemma unequal2 ()
+   (implies (and (oddp n) (board-statep x)
+		 (all-covered-except-cornerp x n))
+	    (lessp (nwhite x) (nblack x)))
+)
+
+
+(prove-lemma unequal3 (rewrite)
+   (implies (and (greaterp n 0) (board-statep x)
+		 (all-covered-except-cornerp x n))
+	    (lessp (nwhite x) (nblack x)))
+   ((use (unequal1) (unequal2)))
+)
+
+
+;\ Now we want to show that the number of covered white squares is equal to
+;\ the number of covered black squares in every state that arises starting
+;\ with an initial state when there are no dominoes on the board.
+;\ This is proved as theorem bcequal1. This in turn uses theorem bw-equal2
+;\ which says that the number of covered black and white squares remain
+;\ equal when a domino is placed on a board legally. 
+
+;\ First we need some more number theory: If the sum of two numbers is 
+;\ even then 
+;\ adding one to one of the
+;\ numbers will make the sum odd and vice versa.
+
+(prove-lemma t10 (rewrite)
+   (equal (plus (plus 1 w) z) (add1 (plus w z)))
+)
+
+(prove-lemma t11 (rewrite)
+   (equal (plus x 1 y) (add1 (plus x y)))
+)
+
+
+;\ A domino covers exactly one white square and one black square.
+
+(prove-lemma domino-white1 (rewrite)
+   (implies (dominop x n)
+	    (equal (nwhite (cons (car x) (cons (cdr x) y)))
+		   (plus 1 (nwhite y))))
+)
+
+(prove-lemma domino-black1 (rewrite)
+   (implies (dominop x n)
+	    (equal (nblack (cons (car x) (cons (cdr x) y)))
+		   (plus 1 (nblack y))))
+)
+
+;\ If a domino is placed on a board then the new
+;\ board state will have the two squares under the domino covered.
+
+(prove-lemma place-dom1 (rewrite)
+   (implies (and (board-statep s) (placep a n)
+		 (board-statep (result a s)))
+	    (equal (result a  s)
+		   (cons (caadr a) (cons (cdadr a) s))))
+)
+
+
+;\ If the number of covered black and white squares in a state are
+;\ equal then they remain the same after a legal domino placement.
+
+(prove-lemma bw-equal2 (rewrite)
+   (implies (and (board-statep s) (equal (nwhite s) (nblack s))
+		 (placep a n) 
+		 (board-statep (result a s))
+		 )
+	    (equal (nwhite (result a s)) (nblack (result a s))))
+  ((disable board-statep result) (use (place-dom1)))
+)
+
+
+;\ The following lemmas are need to show that if
+;\ the number of covered white and black squares are equal in a state 
+;\ then they will
+;\ remain equal after every legal sequence of domino-placement actions.
+
+;\ First we  prove that executing an action sequence in an error state 
+;\ results in the error state.
+
+(prove-lemma failed-state1 (rewrite)
+   (implies (equal (car s) 'failed)
+	    (equal (car (resultlist p s)) 'failed))
+)
+
+(prove-lemma res2 (rewrite)
+   (implies (and (board-statep s) (placep a n)
+		 (not (board-statep (result a s))))
+	    (equal (car (result a s)) 'failed))
+)
+
+
+(prove-lemma s1 (rewrite)
+   (implies (equal (car s) 'failed) (not (board-statep s)))
+)
+
+(prove-lemma res3 (rewrite)
+   (implies (and (board-statep s) (place-planp p n) (listp p)
+		 (board-statep (resultlist p s)))
+	    (board-statep (result (car p) s)))
+   ((disable board-statep result placep))
+)
+
+
+;\ The following function is used to force the prover to choose the correct
+;\ induction scheme for the theorem bcequal1.
+
+(defn foo (s p)
+  (if (nlistp p)
+      nil
+    (foo (result (car p) s) (cdr p))))
+
+;\ If the number of covered white and black squares is equal in a state and
+;\ a sequence of legal domino placement operations is executed then the number
+;\ of covered white and black squares would be equal in the resulting state.
+
+(prove-lemma bcequal1 (rewrite)
+   (implies (and (board-statep s) (equal (nwhite s)(nblack s))
+		 (place-planp p n) 
+		 (board-statep (resultlist p s)))
+	    (equal (nwhite (resultlist p s))
+		   (nblack (resultlist p s))))
+   ((disable place-dom1 board-statep dominop result placep)
+    (use (bw-equal2 (a (car p)))) (induct (foo s p)))
+)
+
+;\ The final theorem:
+;\ Starting with an initial state !t s of an [0..n,0..n] board, !t n 
+;\ greater than 0,
+;\ in which there are no covered squares there
+;\ is no sequence of actions that will result in a state in which 
+;\ all the squares except (0,0) and (n,n) are covered.
+
+(prove-lemma tough-nut ()
+   (implies (and (place-planp p n) (greaterp n 0)
+		 (equal s1 (resultlist p nil))
+		 (board-statep s1))
+	    (not (all-covered-except-cornerp s1 n)))
+   ((disable bcequal1 oddp all-covered-except-cornerp result 
+	     board-statep resultlist)
+    (use (unequal3 (x s1)) (bcequal1 (s nil))))
+)
+
+

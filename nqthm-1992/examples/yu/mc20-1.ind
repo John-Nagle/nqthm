@@ -1,0 +1,684 @@
+\begin{theindex}
+
+  \item a-mapping, 32, 33
+  \item abs, 9, 10
+  \item absolute-long, 29, 31
+  \item absolute-short, 28, 31
+  \item add, 8, 16--19, 23, 25--28, 30, 33--35, 70, 72, 77--80, 85--87, 
+		91, 92, 95--98, 102, 103
+  \item add-addr-modep1, 34
+  \item add-addr-modep2, 34, 35
+  \item add-c, 33, 34
+  \item add-cvznx, 34
+  \item add-effect, 34, 35
+  \item add-group, 37, 101
+  \item add-ins1, 34, 37
+  \item add-ins2, 35, 37
+  \item add-mapping, 35, 87, 98
+  \item add-n, 34
+  \item add-v, 33, 34
+  \item add-z, 34
+  \item adda-addr-modep, 35
+  \item adda-ins, 35, 37
+  \item adder, 8, 36
+  \item addi-addr-modep, 98
+  \item addi-ins, 98
+  \item addi-subgroup, 98, 100
+  \item addq-addr-modep, 86, 87
+  \item addq-ins, 87
+  \item addr-disp, 25, 30, 92
+  \item addr-index, 28, 30
+  \item addr-index-bd, 26, 27
+  \item addr-index-disp, 25, 28
+  \item addr-index1, 28
+  \item addr-index2, 27--29
+  \item addr-index3, 27, 28
+  \item addr-indirect, 24, 30
+  \item addr-modep, 31, 34, 35, 38, 39, 63, 64, 73, 88
+  \item addr-postinc, 24, 30, 90
+  \item addr-predec, 24, 30, 37, 41
+  \item addx-c, 36
+  \item addx-cvznx, 36
+  \item addx-effect, 36, 37
+  \item addx-ins1, 36, 37
+  \item addx-ins2, 37
+  \item addx-n, 36
+  \item addx-v, 36
+  \item addx-z, 36
+  \item alterable-addr-modep, 31, 34, 38, 42, 47, 51, 63, 66--68, 71, 
+		73, 82, 85--87, 89, 93, 94, 96--98
+  \item an-direct, 23, 30
+  \item an-direct-modep, 32, 87
+  \item and-addr-modep1, 42
+  \item and-addr-modep2, 42, 43
+  \item and-cvznx, 42
+  \item and-effect, 42, 43
+  \item and-group, 46, 101
+  \item and-ins1, 42, 46
+  \item and-ins2, 43, 46
+  \item and-mapping, 43, 97
+  \item and-n, 42
+  \item and-z, 42
+  \item andi-addr-modep, 96, 97
+  \item andi-ins, 96, 97
+  \item andi-subgroup, 97, 100
+  \item andi-to-ccr-ins, 97
+  \item app, 8, 9, 17, 18, 49--51, 69, 74, 75, 92
+  \item asl, 9, 25, 57
+  \item asl-c, 56, 57
+  \item asl-cvznx, 57
+  \item asl-effect, 57, 58
+  \item asl-n, 57
+  \item asl-v, 57
+  \item asl-x, 57
+  \item asl-z, 57
+  \item asr, 9, 58
+  \item asr-c, 57, 58
+  \item asr-cvznx, 58
+  \item asr-effect, 58, 59
+  \item asr-n, 58
+  \item asr-x, 58
+  \item asr-z, 58
+
+  \indexspace
+
+  \item b, 3, 15--19, 23, 26, 29, 30, 32, 46, 51, 65, 68, 69, 73, 
+		85, 86, 88, 91--97, 99, 100
+  \item b-and, 5, 7, 33, 36, 38, 40, 84
+  \item b-eor, 6, 7, 89
+  \item b-equal, 6
+  \item b-nand, 5
+  \item b-nor, 5
+  \item b-not, 5, 8, 33, 36, 38, 40, 84, 93--95
+  \item b-or, 5, 7, 36, 38, 40, 46, 84
+  \item b0, 4, 6, 34, 36, 38, 40, 42--44, 46, 48, 49, 51--55, 57, 58, 
+		60, 61, 63, 65, 66, 69, 82, 84, 89, 93
+  \item b0p, 4--6, 8, 13, 14, 25, 27--29, 45, 46, 49--51, 62, 63, 69, 
+		71, 72, 74--79, 81, 83, 85--88, 91, 92, 100, 103
+  \item b1, 4--6, 34, 36, 38, 40, 42--44, 46, 48--50, 52, 54, 55, 
+		57, 58, 60, 63, 65, 66, 69, 73--75, 82, 84, 89, 94
+  \item b1p, 5, 6, 80, 83
+  \item bcar, 6, 7, 51, 71, 92
+  \item bcc-group, 85, 100
+  \item bcc-ra-sr, 85
+  \item bcdr, 6, 7, 59, 71
+  \item bchg-addr-modep, 93
+  \item bchg-effect, 93
+  \item bchg-ins, 93, 95
+  \item bclr-addr-modep, 93, 94
+  \item bclr-effect, 93, 94
+  \item bclr-ins, 94, 95
+  \item bcs, 83, 84
+  \item bd-sz, 27, 28
+  \item beq, 83, 84
+  \item bf-subgroup, 63
+  \item bge, 84
+  \item bgt, 84
+  \item bhi, 84
+  \item Big Endian, 17
+  \item binary tree, 13
+  \item bit-group, 100
+  \item bit-ins, 95
+  \item bitn, 7, 8, 13, 14, 20, 25, 27--29, 45, 46, 50--55, 57, 59, 60, 
+		62, 63, 69, 72, 75--79, 81, 83, 87, 88, 91, 93--95, 
+		100, 103
+  \item bitp, 4
+  \item bits, 7, 18, 19, 25, 27, 66, 75, 76, 95, 100
+  \item ble, 84
+  \item bls, 84
+  \item blt, 84
+  \item bmi, 84
+  \item branch-cc, 84--86
+  \item branch0, 12, 13, 102, 103
+  \item branch1, 12--14, 102, 103
+  \item bs-pc, 29
+  \item bs-register, 28
+  \item bset-addr-modep, 94
+  \item bset-effect, 94
+  \item bset-ins, 94, 95
+  \item bsr-ins, 85
+  \item bsz, 4, 30, 92, 95--98
+  \item btst-addr-modep, 94, 95
+  \item btst-ins, 94, 95
+  \item bvs, 80, 84
+  \item bxxx-num, 92--95
+  \item bxxx-opd, 93--95
+  \item bxxx-oplen, 92--94
+  \item byte-an-direct-modep, 32, 34, 38, 63, 86--88
+  \item byte-read, 17, 92
+  \item byte-readp, 16, 91
+  \item byte-write, 19, 91
+  \item byte-writep, 19, 91
+
+  \indexspace
+
+  \item ccr-c, 20
+  \item ccr-n, 20, 84
+  \item ccr-v, 20, 80, 84
+  \item ccr-x, 20, 36, 41, 42, 44, 46, 48, 49, 52--55, 57, 58, 60, 61, 
+		63, 65, 66, 69, 82, 88, 89
+  \item ccr-z, 20, 36, 41, 84
+  \item clr-addr-modep, 66
+  \item clr-cvznx, 66
+  \item clr-effect, 66
+  \item clr-ins, 66, 67
+  \item clr-subgroup, 67, 83
+  \item cmp-addr-modep, 88
+  \item cmp-cvznx, 88--90, 99
+  \item cmp-group, 90, 101
+  \item cmp-ins, 88, 91
+  \item cmpa-addr-modep, 88, 89
+  \item cmpa-ins, 91
+  \item cmpi-addr-modep, 99
+  \item cmpi-ins, 99
+  \item cmpi-mapping, 99
+  \item cmpi-subgroup, 100
+  \item cmpm-ins, 90, 91
+  \item cmpm-mapping, 90
+  \item cond-field, 18, 85, 86
+  \item cons-key-lst, 102
+  \item control-addr-modep, 31, 65, 68, 71, 77, 81
+  \item current-ins, 101, 102
+  \item cvznx, 20, 34, 36, 38, 40, 42, 44, 46, 48, 49, 52--55, 57, 58, 
+		60, 61, 63, 65, 66, 69, 82, 88, 89
+
+  \indexspace
+
+  \item d-bit-subgroup, 95, 100
+  \item d-mapping, 33, 35, 37, 39, 41, 43, 47, 52, 53, 55--58, 60, 61, 
+		65, 69, 70, 88
+  \item d\_mode, 18, 63--65
+  \item d\_rn, 18, 35, 37, 39--41, 43, 45--47, 50, 51, 63--65, 87--92, 
+		95
+  \item data-addr-modep, 31, 42, 43, 46, 63, 66--68, 73, 82, 85, 89, 
+		93, 94, 96--99
+  \item dbcc-ins, 86, 87
+  \item dbcc-loop, 86
+  \item dh, 76
+  \item div\_l-ins, 75, 77
+  \item div\_w-ins, 50
+  \item divs-cvznx, 48, 49, 74
+  \item divs-n, 48
+  \item divs-v, 48, 49, 74
+  \item divs-z, 48
+  \item divs\_l, 74, 75
+  \item divs\_w-ins, 48, 50
+  \item divsl\_l, 74, 75
+  \item divu-cvznx, 49, 50, 74, 75
+  \item divu-n, 49
+  \item divu-v, 49, 50, 75
+  \item divu-z, 49
+  \item divu\_l, 75
+  \item divu\_w-ins, 50
+  \item divul\_l, 74, 75
+  \item dl, 76
+  \item dn-direct, 23, 30
+  \item dn-direct-modep, 31, 92, 93
+  \item dq, 75
+
+  \indexspace
+
+  \item effec-addr, 30, 32, 64--66, 69, 72, 78, 81, 82
+  \item Endian, 17
+  \item eor-cvznx, 89
+  \item eor-effect, 89, 90
+  \item eor-ins, 90, 91
+  \item eor-mapping, 90, 98
+  \item eor-z, 89
+  \item eor\&eori-addr-modep, 89, 90, 98
+  \item eori-ins, 98, 99
+  \item eori-subgroup, 99, 100
+  \item eori-to-ccr-ins, 98, 99
+  \item evenp, 92, 102
+  \item execute-ins, 100, 102
+  \item exg-arar-ins, 45, 46
+  \item exg-drar-ins, 45, 46
+  \item exg-drdr-ins, 45, 46
+  \item exp, 3, 6--9, 11, 19, 43, 49, 59
+  \item ext, 8, 25, 26, 28, 29, 35, 40, 64, 65, 70, 79, 80, 85, 86, 
+		88, 89
+  \item ext-cvznx, 65
+  \item ext-effect, 65, 69, 70
+  \item ext-ins, 69, 72
+  \item ext-n, 65
+  \item ext-subgroup, 72, 83
+  \item ext-z, 65
+  \item extb-ins, 65, 66
+
+  \indexspace
+
+  \item fix-bit, 5, 7, 20, 59, 60, 80, 84
+  \item fix-int, 9--11
+
+  \indexspace
+
+  \item gcd-example, 104
+  \item get-nth, 15
+
+  \indexspace
+
+  \item halt, 21, 22, 25--30, 32, 33, 35, 37, 39--41, 43, 46, 47, 
+		49, 50, 53, 54, 56, 59, 61--69, 72--83, 85--102
+  \item head, 6--9, 15--19, 26, 29, 43, 48, 49, 51, 59, 63, 68, 69, 74, 
+		76, 88, 93, 96, 97, 99, 100
+
+  \indexspace
+
+  \item i-data, 51, 87
+  \item i-is, 27
+  \item idata-modep, 32, 99
+  \item idifference, 10
+  \item ileq, 10
+  \item ilessp, 10
+  \item immediate, 30, 31, 96--99
+  \item index-register, 25
+  \item index-rn, 25
+  \item ineg, 10
+  \item int-rangep, 11, 44, 48, 57
+  \item int-to-nat, 11, 43, 48
+  \item integerp, 9
+  \item iplus, 10
+  \item iquot, 48, 49, 74
+  \item iquotient, 10, 48
+  \item ir-scaled, 25--27, 29
+  \item irem, 48, 49, 74
+  \item iremainder, 10, 48
+  \item itimes, 10, 43, 44
+  \item izerop, 9, 10
+
+  \indexspace
+
+  \item jmp-addr-modep, 81
+  \item jmp-ins, 81, 83
+  \item jmp-mapping, 81, 82
+  \item jsr-addr-modep, 81
+  \item jsr-ins, 81, 83
+
+  \indexspace
+
+  \item key-field, 102, 103
+
+  \indexspace
+
+  \item l, 3, 16, 22--24, 26--30, 37, 40, 41, 44, 45, 49, 50, 64, 65, 
+		69--72, 74, 75, 77--82, 85--89, 91--93, 96--98, 100, 
+		102
+  \item lea-addr-modep, 65
+  \item lea-ins, 65, 66
+  \item lea-subgroup, 66, 83
+  \item len, 16
+  \item link-mapping, 78, 79
+  \item link\_l-ins, 79, 83
+  \item link\_w-ins, 79
+  \item load-lst-mem, 103, 104
+  \item logand, 7, 42, 97
+  \item logeor, 7, 89, 98
+  \item lognot, 6, 8, 82
+  \item logor, 7, 46, 96
+  \item long-read, 17, 26, 79, 80
+  \item long-readp, 17, 26, 79, 80
+  \item lsl, 8, 54, 55
+  \item lsl-c, 54, 56
+  \item lsl-cvznx, 54, 55
+  \item lsl-effect, 55, 56
+  \item lsl-n, 54
+  \item lsl-x, 54
+  \item lsl-z, 54
+  \item lsr, 9, 55
+  \item lsr-c, 55
+  \item lsr-cvznx, 55
+  \item lsr-effect, 55, 56
+  \item lsr-n, 55
+  \item lsr-x, 55
+  \item lsr-z, 55
+  \item lsz, 4, 17, 18, 28, 29, 69, 79, 80, 82, 85
+
+  \indexspace
+
+  \item m-mapping, 33
+  \item make-bt, 12, 14, 102, 103
+  \item make-map, 102, 103
+  \item map-update, 102, 103
+  \item mapping, 33, 35, 37, 39, 41, 43, 47, 53, 54, 59, 61, 62, 64, 
+		66--68, 73, 82, 86, 90, 93, 94
+  \item mbit, 7, 33, 34, 36, 38, 40, 42, 44, 46, 48, 49, 54, 55, 57, 58, 
+		63, 65, 82, 89
+  \item mc-ccr, 16, 32, 33, 37, 41, 43--45, 47, 49, 50, 52--62, 64--67, 
+		69, 70, 73--76, 80, 82, 85, 86, 88--90, 93--99
+  \item mc-haltp, 16, 34, 35, 39, 40, 42, 43, 45, 47, 50, 53, 54, 56, 
+		58, 59, 61, 62, 64--69, 72, 77, 78, 81, 82, 86, 88--90, 
+		92--99, 102
+  \item mc-instate, 32, 34, 35, 39, 42, 43, 45, 47, 50, 53, 54, 56, 
+		58, 59, 61, 62, 64, 66--68, 73, 77, 82, 86, 88--90, 
+		93--95, 99
+  \item mc-mem, 16, 21, 22, 25, 26, 28--30, 32, 33, 37, 41, 72, 77--80, 
+		85, 86, 90--92, 95--98, 101, 102
+  \item mc-pc, 16, 21, 30--33, 72, 78--80, 82, 85, 86, 92, 95--99, 102, 
+		104
+  \item mc-rfile, 16, 21, 22, 32, 33, 72, 78, 104
+  \item mc-state, 16, 21, 32, 33, 104
+  \item mc-status, 16, 21, 32, 33, 104
+  \item mem-asl-effect, 58, 59
+  \item mem-asl-ins, 58, 62
+  \item mem-asr-effect, 59
+  \item mem-asr-ins, 59, 62
+  \item mem-indirect, 26, 27
+  \item mem-lsl-effect, 56
+  \item mem-lsl-ins, 56, 62
+  \item mem-lsr-effect, 56
+  \item mem-lsr-ins, 56, 62
+  \item mem-postindex, 26, 27
+  \item mem-preindex, 27
+  \item mem-rol-effect, 53
+  \item mem-rol-ins, 53, 62
+  \item mem-ror-effect, 54
+  \item mem-ror-ins, 54, 62
+  \item mem-roxl-effect, 61
+  \item mem-roxl-ins, 61, 62
+  \item mem-roxr-effect, 61, 62
+  \item mem-roxr-ins, 62
+  \item memory, 13
+  \item memory-addr-modep, 31, 34, 38, 42, 47, 51
+  \item memory-shift-rotate, 62, 63
+  \item misc-group, 83, 100
+  \item mode-signal, 4, 35, 39, 40, 43, 46, 47, 50, 53, 54, 56, 59, 
+		61, 62, 64--69, 72, 73, 77, 78, 81, 82, 86--90, 93--99
+  \item move-addr-modep, 63, 64
+  \item move-cvznx, 63, 73
+  \item move-effect, 63, 64, 88
+  \item move-from-ccr-addr-modep, 66
+  \item move-from-ccr-effect, 66, 67
+  \item move-from-ccr-ins, 66, 67
+  \item move-group, 65, 100
+  \item move-ins, 64, 65, 100
+  \item move-mapping, 64
+  \item move-n, 63
+  \item move-to-ccr-addr-modep, 68
+  \item move-to-ccr-ins, 68
+  \item move-z, 63
+  \item movea-addr-modep, 64
+  \item movea-ins, 64, 65
+  \item movem-ea-rn-addr-modep, 77, 78
+  \item movem-ea-rn-ins, 77, 78
+  \item movem-ea-rn-subgroup, 78, 83
+  \item movem-len, 71, 77, 78
+  \item movem-pre-rnlst, 71, 72
+  \item movem-predec, 71, 72
+  \item movem-rn-ea-addr-modep, 71, 72
+  \item movem-rn-ea-ins, 71, 72
+  \item movem-rnlst, 70--72, 78
+  \item movep-ins, 92, 95
+  \item movep-read, 91, 92
+  \item movep-readp, 91, 92
+  \item movep-to-mem, 91, 92
+  \item movep-to-reg, 92
+  \item movep-write, 91
+  \item movep-writep, 91
+  \item moveq-ins, 87, 100
+  \item mul-div\_l-ins, 76, 78
+  \item mul\&div-addr-modep, 43, 45, 50, 76
+  \item mul\_l-ins, 76, 77
+  \item mul\_w-ins, 45, 46
+  \item muls, 43--45, 76
+  \item muls-cvznx, 44, 45, 76
+  \item muls-n, 44
+  \item muls-v, 44
+  \item muls\_l\_dl, 76
+  \item muls\_l\_dldh, 76
+  \item muls\_w-ins, 45, 46
+  \item mulu, 43, 44, 75, 76
+  \item mulu-cvznx, 44, 75
+  \item mulu-n, 44
+  \item mulu-v, 43, 44
+  \item mulu-z, 44
+  \item mulu\_l\_dl, 75, 76
+  \item mulu\_l\_dldh, 75, 76
+  \item mulu\_w-ins, 44, 45
+
+  \indexspace
+
+  \item nat-rangep, 11
+  \item nat-to-int, 11, 43, 44, 48, 49, 57, 75, 86
+  \item nat-to-uint, 11, 50, 75
+  \item neg-addr-modep, 68
+  \item neg-ins, 68
+  \item neg-subgroup, 68, 83
+  \item negp, 9--11
+  \item negx-addr-modep, 67
+  \item negx-ins, 67
+  \item negx-subgroup, 67, 83
+  \item nop-ins, 80, 81
+  \item nop-subgroup, 81, 83
+  \item not-addr-modep, 82
+  \item not-cvznx, 82
+  \item not-effect, 82
+  \item not-ins, 82
+  \item not-subgroup, 82, 83
+  \item not-z, 82
+
+  \indexspace
+
+  \item op-len, 19, 37, 41, 42, 63, 67, 68, 74, 82, 87, 100, 101
+  \item op-sz, 15, 22, 23, 26, 30, 32, 33, 37, 41, 71, 72, 77, 78, 
+		90--92
+  \item opcode-field, 100
+  \item operand, 22, 35, 37, 39--43, 45, 47, 50, 53, 54, 56, 58, 59, 
+		61, 62, 64, 67, 68, 73, 77, 82, 88--90, 93, 99
+  \item opmode-field, 18, 95, 101
+  \item or-addr-modep1, 46, 47
+  \item or-addr-modep2, 47
+  \item or-cvznx, 46
+  \item or-effect, 46, 47
+  \item or-group, 50, 101
+  \item or-ins1, 47, 50
+  \item or-ins2, 47, 50
+  \item or-mapping, 47, 96
+  \item or-n, 46
+  \item or-z, 46
+  \item ori-addr-modep, 95, 96
+  \item ori-ins, 96
+  \item ori-subgroup, 96, 100
+  \item ori-to-ccr-ins, 96
+
+  \indexspace
+
+  \item pc-byte-read, 18, 30, 95--97
+  \item pc-byte-readp, 17
+  \item pc-disp, 29, 31
+  \item pc-index, 30, 31
+  \item pc-index-disp, 29
+  \item pc-index1, 29, 30
+  \item pc-long-read, 18, 28, 29, 79, 85
+  \item pc-long-readp, 17, 28, 29, 79, 85
+  \item pc-odd-signal, 4, 102
+  \item pc-read, 14, 18
+  \item pc-read-mem, 18, 26, 30
+  \item pc-read-memp, 26, 30
+  \item pc-readp, 13, 17
+  \item pc-signal, 4, 25, 26, 28--30, 72, 78--80, 85, 86, 95--98, 102
+  \item pc-word-read, 18, 25, 28--30, 72, 78--80, 85, 86, 101
+  \item pc-word-readp, 17, 25, 28--30, 72, 78--80, 85, 86, 95--98, 102
+  \item pea-addr-modep, 68, 69
+  \item pea-ins, 69
+  \item pea-subgroup, 69, 83
+  \item post-effect, 23, 24
+  \item postinc-modep, 77
+  \item pre-effect, 23, 25, 71
+  \item predec-modep, 32, 72
+  \item protection, 13
+  \item push-sp, 22, 69, 82, 85
+  \item put-nth, 15
+
+  \indexspace
+
+  \item q, 4, 46, 50, 63, 67, 68, 74--76, 82, 87, 91, 96--99
+  \item qsz, 4
+  \item quot, 49, 50, 74, 75
+
+  \indexspace
+
+  \item RAM, 13
+  \item read, 14, 17
+  \item read-an, 21, 22, 24--26, 28, 35, 40, 45, 71, 77, 79, 87, 89
+  \item read-dn, 21, 22, 25, 35, 37, 39, 41, 43, 44, 47, 49--53, 55--58, 
+		60, 61, 65, 69, 70, 74--76, 86, 88, 90, 91, 93, 95
+  \item read-mem, 17, 22, 70
+  \item read-memp, 16, 17, 32, 37, 41, 77, 90
+  \item read-rn, 15, 21, 70
+  \item read-signal, 26, 32, 37, 41, 78--80, 90, 92
+  \item read-sp, 22, 79, 80
+  \item reading memory, 17
+  \item readm-mem, 70, 78
+  \item readm-rn, 70, 72
+  \item readmp, 77, 78
+  \item readp, 13, 16
+  \item register-asl-ins, 57, 62
+  \item register-asr-ins, 58, 62
+  \item register-lsl-ins, 55, 62
+  \item register-lsr-ins, 56, 62
+  \item register-rol-ins, 52, 62
+  \item register-ror-ins, 53, 62
+  \item register-roxl-ins, 60, 62
+  \item register-roxr-ins, 61, 62
+  \item register-shift-rotate, 62, 63
+  \item rem, 49, 50, 74, 75
+  \item replace, 8, 15, 20
+  \item reserved-signal, 4, 27--29, 46, 66, 77, 83, 88, 95--99, 101
+  \item rol, 51, 52, 59
+  \item rol-c, 51, 52
+  \item rol-cvznx, 52
+  \item rol-effect, 52, 53
+  \item rol-n, 52
+  \item rol-z, 52
+  \item ROM, 13
+  \item ror, 53, 59
+  \item ror-c, 52, 53
+  \item ror-cvznx, 53
+  \item ror-effect, 53, 54
+  \item ror-n, 53
+  \item ror-z, 52, 53
+  \item roxl, 59, 60
+  \item roxl-c, 59, 60
+  \item roxl-cvznx, 60
+  \item roxl-effect, 60, 61
+  \item roxl-n, 60
+  \item roxr, 59--61
+  \item roxr-c, 60, 61
+  \item roxr-cvznx, 61
+  \item roxr-n, 60, 61
+  \item roxr-z, 60, 61
+  \item rtd-ins, 80, 81
+  \item rtd-mapping, 80
+  \item rtr-ins, 80, 81
+  \item rts-ins, 80, 81
+
+  \indexspace
+
+  \item s-bit-subgroup, 95, 100
+  \item s\&r-addr-modep, 51, 53, 54, 56, 58, 59, 61, 62
+  \item s\&r-group, 63, 101
+  \item s\_mode, 18, 32, 35, 37--39, 42, 43, 47, 50, 51, 63--69, 71--73, 
+		77, 78, 81, 82, 85, 87--89, 91, 93--99
+  \item s\_rn, 18, 32, 34, 35, 37--39, 41--43, 45--47, 51--53, 55--58, 
+		60, 61, 63, 64, 66--73, 77--79, 81--83, 85, 87--90, 
+		92--94, 97--99
+  \item scc-addr-modep, 85, 86
+  \item scc-effect, 85, 86
+  \item scc-group, 87, 100
+  \item scc-ins, 86, 87
+  \item set-c, 20
+  \item set-cvznx, 20, 21, 32, 33
+  \item set-n, 20
+  \item set-v, 20, 49, 50, 75
+  \item set-x, 20
+  \item set-z, 20, 93--95
+  \item setn, 7, 73, 93, 94
+  \item sp, 22, 23
+  \item sr-cnt, 51--53, 55--58, 60, 61
+  \item stepi, 102
+  \item stepn, 102, 104
+  \item sub, 8, 22, 23, 37, 38, 40, 71, 79, 86, 87
+  \item sub-addr-modep1, 38, 39
+  \item sub-addr-modep2, 38, 39
+  \item sub-c, 37, 38, 88
+  \item sub-cvznx, 38
+  \item sub-effect, 38, 39, 68
+  \item sub-group, 41, 101
+  \item sub-ins1, 39, 41
+  \item sub-ins2, 39, 42
+  \item sub-mapping, 39, 87, 97
+  \item sub-n, 38, 88
+  \item sub-v, 38, 88
+  \item sub-z, 38, 88
+  \item suba-addr-modep, 39
+  \item suba-ins, 39, 41
+  \item subi-addr-modep, 97
+  \item subi-ins, 97, 98
+  \item subi-subgroup, 98, 100
+  \item subq-addr-modep, 87
+  \item subq-ins, 87
+  \item subtracter, 8, 40, 41
+  \item subx-c, 40
+  \item subx-cvznx, 40, 41
+  \item subx-effect, 41, 67
+  \item subx-ins1, 41, 42
+  \item subx-ins2, 41, 42
+  \item subx-n, 40
+  \item subx-v, 40
+  \item subx-z, 40
+  \item swap-cvznx, 69
+  \item swap-effect, 69
+  \item swap-ins, 69
+  \item swap-n, 69
+  \item swap-z, 69
+
+  \indexspace
+
+  \item tail, 6--9, 19, 51, 69, 76, 91
+  \item tas-addr-modep, 73
+  \item tas-effect, 73
+  \item tas-ins, 73, 74
+  \item trapv-ins, 80, 81
+  \item tst-addr-modep, 73
+  \item tst-ins, 73, 74
+  \item tst-subgroup, 74, 83
+
+  \indexspace
+
+  \item uint-rangep, 11
+  \item uint-to-nat, 11
+  \item unavailable, 13
+  \item unlk-ins, 79
+  \item unlk-subgroup, 79, 83
+  \item update-ccr, 21, 44, 45, 49, 50, 68, 73--76, 80, 88--90, 95--99
+  \item update-mem, 21, 22, 72, 79, 91
+  \item update-pc, 21, 25--30, 72, 78--81, 85, 86, 95--98, 102
+  \item update-rfile, 21, 22, 78
+
+  \indexspace
+
+  \item value-field, 12--14
+
+  \indexspace
+
+  \item w, 3, 25, 27--30, 37, 41, 44--46, 49, 50, 53, 54, 56, 58, 59, 
+		61, 62, 66--70, 72, 78--80, 85, 86, 91, 92, 96, 97, 
+		99, 100
+  \item word-read, 17, 80
+  \item word-readp, 16, 80
+  \item write, 14, 19
+  \item write-an, 22, 24, 25, 35, 40, 45, 64, 65, 71, 72, 78, 79, 87
+  \item write-dn, 21, 44, 45, 49, 50, 74--76, 86, 92
+  \item write-mem, 19, 22, 33, 70, 79, 103
+  \item write-memp, 19, 22, 33, 71, 79
+  \item write-rn, 15, 21, 22, 32, 33, 70
+  \item write-signal, 4, 22, 33, 72, 79, 91
+  \item write-sp, 22, 79, 80
+  \item writem-mem, 70, 72
+  \item writem-rn, 70, 78
+  \item writemp, 71, 72
+  \item writep, 14, 19
+  \item wsz, 4, 16--18, 23, 25, 28--30, 72, 78--80, 85, 86, 91, 95--98, 
+		102
+
+\end{theindex}

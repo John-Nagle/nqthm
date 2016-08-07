@@ -1,0 +1,198 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+; William R. Bevier
+
+(BOOT-STRAP NQTHM)
+
+(DEFN DELETE (X L)
+      (IF (LISTP L)
+          (IF (EQUAL X (CAR L))
+              (CDR L)
+              (CONS (CAR L) (DELETE X (CDR L))))
+          L))
+
+(DEFN BAGDIFF (X Y)
+      (IF (LISTP Y)
+          (IF (MEMBER (CAR Y) X)
+              (BAGDIFF (DELETE (CAR Y) X) (CDR Y))
+              (BAGDIFF X (CDR Y)))
+          X))
+
+(DEFN BAGINT (X Y)
+      (IF (LISTP X)
+          (IF (MEMBER (CAR X) Y)
+              (CONS (CAR X)
+                    (BAGINT (CDR X) (DELETE (CAR X) Y)))
+              (BAGINT (CDR X) Y))
+          NIL))
+
+(DEFN OCCURRENCES
+      (X L)
+      (IF (LISTP L)
+          (IF (EQUAL X (CAR L))
+              (ADD1 (OCCURRENCES X (CDR L)))
+              (OCCURRENCES X (CDR L)))
+          0))
+
+(DEFN SUBBAGP (X Y)
+      (IF (LISTP X)
+          (IF (MEMBER (CAR X) Y)
+              (SUBBAGP (CDR X) (DELETE (CAR X) Y))
+              F)
+          T))
+
+(LEMMA LISTP-DELETE (REWRITE)
+       (EQUAL (LISTP (DELETE X L))
+              (IF (LISTP L)
+                  (OR (NOT (EQUAL X (CAR L)))
+                      (LISTP (CDR L)))
+                  F))
+       ((ENABLE DELETE)
+        (INDUCT (DELETE X L))))
+
+(disable listp-delete)
+
+(LEMMA DELETE-NON-MEMBER (REWRITE)
+       (IMPLIES (NOT (MEMBER X Y))
+                (EQUAL (DELETE X Y) Y))
+       ((ENABLE DELETE)))
+
+(LEMMA DELETE-DELETE (REWRITE)
+       (EQUAL (DELETE Y (DELETE X Z))
+              (DELETE X (DELETE Y Z)))
+       ((ENABLE DELETE DELETE-NON-MEMBER)))
+
+(lemma equal-occurrences-zero (rewrite)
+       (equal (equal (occurrences x l) 0)
+              (not (member x l)))
+       ((enable occurrences)))
+
+(LEMMA MEMBER-NON-LIST (REWRITE)
+       (IMPLIES (NOT (LISTP L))
+                (NOT (MEMBER X L))))
+
+(lemma member-delete (rewrite)
+       (equal (member x (delete y l))
+              (if (member x l)
+                  (if (equal x y)
+                      (lessp 1 (occurrences x l))
+                      t)
+                  f))
+       ((enable delete occurrences)))
+
+
+(LEMMA MEMBER-DELETE-IMPLIES-MEMBERSHIP (REWRITE)
+       (IMPLIES (MEMBER X (DELETE Y L))
+                (MEMBER X L))
+       ((ENABLE DELETE)))
+
+(LEMMA OCCURRENCES-DELETE (REWRITE)
+       (EQUAL (OCCURRENCES X (DELETE Y L))
+              (IF (EQUAL X Y)
+                  (IF (MEMBER X L)
+                      (SUB1 (OCCURRENCES X L))
+                      0)
+                  (OCCURRENCES X L)))
+       ((ENABLE OCCURRENCES DELETE EQUAL-OCCURRENCES-ZERO)))
+
+(LEMMA MEMBER-BAGDIFF (REWRITE)
+       (EQUAL (MEMBER X (BAGDIFF A B))
+              (LESSP (OCCURRENCES X B)
+                     (OCCURRENCES X A)))
+       ((ENABLE BAGDIFF OCCURRENCES EQUAL-OCCURRENCES-ZERO
+                OCCURRENCES-DELETE)))
+
+(lemma bagdiff-delete (rewrite)
+       (equal (bagdiff (delete e x) y)
+              (delete e (bagdiff x y)))
+       ((enable BAGDIFF DELETE
+                DELETE-DELETE
+                DELETE-NON-MEMBER
+                MEMBER-BAGDIFF 
+                MEMBER-DELETE
+                OCCURRENCES-DELETE)))
+
+
+(LEMMA SUBBAGP-DELETE (REWRITE)
+       (IMPLIES (SUBBAGP X (DELETE U Y))
+                (SUBBAGP X Y))
+       ((ENABLE DELETE SUBBAGP DELETE-DELETE
+                MEMBER-DELETE-IMPLIES-MEMBERSHIP)))
+
+(LEMMA SUBBAGP-CDR1 (REWRITE)
+       (IMPLIES (SUBBAGP X Y)
+                (SUBBAGP (CDR X) Y))
+       ((ENABLE SUBBAGP SUBBAGP-DELETE)))
+
+(LEMMA SUBBAGP-CDR2 (REWRITE)
+       (IMPLIES (SUBBAGP X (CDR Y))
+                (SUBBAGP X Y))
+       ((ENABLE DELETE SUBBAGP DELETE-NON-MEMBER SUBBAGP-CDR1)))
+
+(LEMMA SUBBAGP-BAGINT1 (REWRITE)
+       (SUBBAGP (BAGINT X Y) X)
+       ((ENABLE DELETE SUBBAGP BAGINT SUBBAGP-CDR2)))
+
+(LEMMA SUBBAGP-BAGINT2 (REWRITE)
+       (SUBBAGP (BAGINT X Y) Y)
+       ((ENABLE SUBBAGP BAGINT SUBBAGP-CDR2)))
+
+(prove-lemma occurrences-bagint
+             (rewrite)
+             (equal (occurrences x (bagint a b))
+                    (if (lessp (occurrences x a)
+                               (occurrences x b))
+                        (occurrences x a)
+                        (occurrences x b)))
+             ((enable occurrences bagint equal-occurrences-zero
+                      occurrences-delete)))
+
+(prove-lemma occurrences-bagdiff
+             (rewrite)
+             (equal (occurrences x (bagdiff a b))
+                    (difference (occurrences x a)
+                                (occurrences x b)))
+             ((enable occurrences bagdiff equal-occurrences-zero
+                      occurrences-delete)))
+
+(prove-lemma member-bagint
+             (rewrite)
+             (equal (member x (bagint a b))
+                    (and (member x a) (member x b)))
+             ((enable bagint member-delete)))
+
+(deftheory bags 
+  (occurrences-bagint
+   bagdiff-delete
+   occurrences-bagdiff 
+   member-bagint 
+   member-bagdiff
+   subbagp-bagint2 
+   subbagp-bagint1 
+   subbagp-cdr2 
+   subbagp-cdr1
+   subbagp-delete))
+
+(MAKE-LIB "bags" T)

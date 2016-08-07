@@ -1,0 +1,252 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED
+ "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING,
+ BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF
+ THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE
+ COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+ PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+ ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+ LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+ BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+ DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.''
+
+|#
+
+(BOOT-STRAP NQTHM)
+(COMPILE-UNCOMPILED-DEFNS "tmp")
+
+;   The floor of the square root. This definition is taken from Goodstein.
+
+(DEFN RT (X)
+  (IF (ZEROP X)
+      0
+      (IF (EQUAL (TIMES (ADD1 (RT (SUB1 X)))
+                        (ADD1 (RT (SUB1 X))))
+                 X)
+          (ADD1 (RT (SUB1 X)))
+          (RT (SUB1 X)))))
+(PROVE-LEMMA TIMES-ADD1 (REWRITE)
+             (EQUAL (TIMES X (ADD1 Y))
+                    (PLUS X (TIMES X Y))))
+(PROVE-LEMMA PLUS-ADD1 (REWRITE)
+             (EQUAL (PLUS X (ADD1 Y))
+                    (ADD1 (PLUS X Y))))
+(PROVE-LEMMA SQUARE-0 (REWRITE)
+             (EQUAL (EQUAL (TIMES X X)
+                           0)
+                    (ZEROP X)))
+(PROVE-LEMMA SQUARE-MONOTONIC NIL
+             (IMPLIES (NOT (LESSP B A))
+                      (NOT (LESSP (TIMES B B)
+                                  (TIMES A A)))))
+(PROVE-LEMMA
+  SPEC-FOR-RT NIL
+  (AND (NOT (LESSP Y (TIMES (RT Y)
+                            (RT Y))))
+       (LESSP Y (ADD1 (PLUS (RT Y)
+                            (PLUS (RT Y)
+                                  (TIMES (RT Y)
+                                         (RT Y))))))))
+(PROVE-LEMMA RT-IS-UNIQUE NIL
+                       (IMPLIES (AND (NUMBERP A)
+                                     (LEQ (TIMES A A)
+                                          Y)
+                                     (LESSP Y (TIMES (ADD1 A)
+                                                     (ADD1 A))))
+                                (EQUAL A (RT Y)))
+                       ((USE (SPEC-FOR-RT)
+                             (SQUARE-MONOTONIC (A (ADD1 A))
+                                               (B (RT Y)))
+                             (SQUARE-MONOTONIC (A (ADD1 (RT Y)))
+                                               (B A)))))
+(PROVE-LEMMA NCONS-LEMMA (REWRITE)
+                       (EQUAL (RT (PLUS U (TIMES (PLUS U V)
+                                                 (PLUS U V))))
+                              (PLUS U V))
+                       ((USE (RT-IS-UNIQUE
+                               (Y (PLUS U (TIMES (PLUS U V)
+                                                 (PLUS U V))))
+                               (A (PLUS U V))))))
+(DEFN NCAR (X)
+  (DIFFERENCE X (TIMES (RT X)
+                       (RT X))))
+(DEFN NCDR (X)
+  (DIFFERENCE (RT X)
+              (NCAR X)))
+(DEFN NCONS (I J)
+  (PLUS I (TIMES (PLUS I J)
+                 (PLUS I J))))
+(PROVE-LEMMA NCAR-NCONS NIL (IMPLIES (NUMBERP I)
+                                     (EQUAL (NCAR (NCONS I J))
+                                            I)))
+(PROVE-LEMMA NCDR-NCONS NIL (IMPLIES (NUMBERP J)
+                                     (EQUAL (NCDR (NCONS I J))
+                                            J)))
+(DEFN NCADR (X)
+  (NCAR (NCDR X)))
+(DEFN NCADDR (X)
+  (NCAR (NCDR (NCDR X))))
+(PROVE-LEMMA RT-LESSP (REWRITE)
+             (IMPLIES (AND (NOT (ZEROP X))
+                           (NOT (EQUAL X 1)))
+                      (LESSP (RT X)
+                             X)))
+
+;   I'm sure the system could prove this without the hint, but it would use
+;   induction and this is the obvious way to do it.
+
+(PROVE-LEMMA RT-LESSEQP (REWRITE)
+                       (NOT (LESSP X (RT X)))
+                       ((USE (RT-LESSP))))
+(PROVE-LEMMA DIFFERENCE-0 (REWRITE)
+             (IMPLIES (LESSP X Y)
+                      (EQUAL (DIFFERENCE X Y)
+                             0)))
+(PROVE-LEMMA LESSP-DIFFERENCE-1 (REWRITE)
+             (EQUAL (LESSP (DIFFERENCE A B)
+                           C)
+                    (IF (LESSP A B)
+                        (LESSP 0 C)
+                        (LESSP A (PLUS B C)))))
+(PROVE-LEMMA NCAR-LESSEQP (REWRITE)
+             (NOT (LESSP X (NCAR X))))
+(PROVE-LEMMA CROCK (REWRITE)
+             (EQUAL (LESSP X (DIFFERENCE (RT X)
+                                         D))
+                    F)
+             NIL
+
+;   This disgusting fact is needed because linear seems to have trouble with
+;   nests of DIFFERENCEs. Try disabling this and proving NCDR-LESSEQP below and
+;   observe that when D is a DIFFERENCE expression we don't prove it.
+
+             )
+(PROVE-LEMMA NCDR-LESSEQP (REWRITE)
+             (NOT (LESSP X (NCDR X))))
+(PROVE-LEMMA NCDR-LESSP (REWRITE)
+             (IMPLIES (AND (NUMBERP FN)
+                           (NOT (EQUAL (NCAR FN)
+                                       0))
+                           (NOT (EQUAL (NCAR FN)
+                                       1)))
+                      (LESSP (NCDR FN)
+                             FN)))
+(DISABLE NCAR)
+(DISABLE NCDR)
+(DEFN
+  PR-APPLY
+  (FN ARG)
+  (IF
+    (NOT (NUMBERP FN))
+    0
+    (IF
+      (EQUAL (NCAR FN)
+             0)
+      0
+      (IF
+        (EQUAL (NCAR FN)
+               1)
+        ARG
+        (IF
+          (EQUAL (NCAR FN)
+                 2)
+          (ADD1 ARG)
+          (IF
+            (EQUAL (NCAR FN)
+                   3)
+            (RT ARG)
+            (IF
+              (EQUAL (NCAR FN)
+                     4)
+              (IF (ZEROP ARG)
+                  0
+                  (PR-APPLY (NCDR FN)
+                            (PR-APPLY FN (SUB1 ARG))))
+              (IF
+                (EQUAL (NCAR FN)
+                       5)
+                (PLUS (PR-APPLY (NCADR FN)
+                                ARG)
+                      (PR-APPLY (NCADDR FN)
+                                ARG))
+                (IF
+                  (EQUAL (NCAR FN)
+                         6)
+                  (DIFFERENCE (PR-APPLY (NCADR FN)
+                                        ARG)
+                              (PR-APPLY (NCADDR FN)
+                                        ARG))
+                  (IF (EQUAL (NCAR FN)
+                             7)
+                      (TIMES (PR-APPLY (NCADR FN)
+                                       ARG)
+                             (PR-APPLY (NCADDR FN)
+                                       ARG))
+                      (IF (EQUAL (NCAR FN)
+                                 8)
+                          (PR-APPLY (NCADR FN)
+                                    (PR-APPLY (NCADDR FN)
+                                              ARG))
+                          0))))))))))
+  ((ORD-LESSP (CONS (ADD1 (COUNT FN))
+                    (COUNT ARG)))))
+(DEFN NON-PR-FN (X)
+  (ADD1 (PR-APPLY X X)))
+(DEFN COUNTER-EXAMPLE-FOR (X)
+  (FIX X))
+(PROVE-LEMMA NON-PR-FUNCTIONS-EXIST NIL
+             (NOT (EQUAL (NON-PR-FN (COUNTER-EXAMPLE-FOR FN))
+                         (PR-APPLY FN
+                                   (COUNTER-EXAMPLE-FOR FN)))))
+(PROVE-LEMMA COUNTER-EXAMPLE-FOR-NUMERIC (REWRITE)
+             (NUMBERP (COUNTER-EXAMPLE-FOR X)))
+(DISABLE PR-APPLY 
+
+;   Not known to be necessary.
+
+         )
+(DEFN MAX2 (FN I)
+  (IF (ZEROP I)
+      (PR-APPLY FN I)
+      (MAX (PR-APPLY FN I)
+           (MAX2 FN (SUB1 I)))))
+(DEFN MAX1 (FN I)
+  (IF (ZEROP FN)
+      (MAX2 FN I)
+      (MAX (MAX2 FN I)
+           (MAX1 (SUB1 FN)
+                 I))))
+(PROVE-LEMMA MAX2-GTE (REWRITE)
+             (NOT (LESSP (MAX2 I J)
+                         (PR-APPLY I J))))
+(DEFN EXCEED (J)
+  (ADD1 (MAX1 J J)))
+(DEFN EXCEED-AT (I)
+  I)
+(PROVE-LEMMA MAX1-GTE1 (REWRITE)
+             (IMPLIES (NUMBERP FN)
+                      (NOT (LESSP (MAX1 (PLUS J FN)
+                                        I)
+                                  (PR-APPLY FN I)))))
+(PROVE-LEMMA MAX1-GTE2 (REWRITE)
+             (IMPLIES (NUMBERP FN)
+                      (NOT (LESSP (MAX1 (PLUS J FN)
+                                        (PLUS J FN))
+                                  (PR-APPLY FN (PLUS J FN))))))
+(PROVE-LEMMA EXCEED-IS-BIGGER NIL
+             (IMPLIES (NUMBERP FN)
+                      (LESSP (PR-APPLY FN
+                                       (PLUS J
+                                             (EXCEED-AT FN)))
+                             (EXCEED (PLUS J (EXCEED-AT FN))))))

@@ -1,0 +1,115 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;   UNBOUND.EVENTS
+;;;
+;;;   For doing proofs of recursive module generators, it is often necessary to
+;;;   know that a signal name is "unbound", i.e., does not appear further in
+;;;   the generated body.  By a "body" we mean an occurrence body, and by
+;;;   "bound" we mean assigned a value in the ALIST created by DUAL-EVAL with
+;;;   flag 1.  This concept is eloquently summed up in the final two lemmas of
+;;;   this file. 
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  UNBOUND-IN-BODY
+
+(defn unbound-in-body (name body)
+  (if (nlistp body)
+      t
+    (let ((occurrence (car body)))
+      (let ((outputs (occ-outputs occurrence)))
+        (and (not (member name outputs))
+             (unbound-in-body name (cdr body)))))))
+
+(disable unbound-in-body)
+
+(prove-lemma unbound-in-body-nlistp (rewrite)
+  (implies
+   (nlistp body)
+   (unbound-in-body name body))
+  ;;Hint
+  ((enable unbound-in-body)))
+
+(prove-lemma unbound-in-body-listp (rewrite)
+  (equal (unbound-in-body name (cons occurrence rest))
+         (let ((outputs (occ-outputs occurrence)))
+           (and (not (member name outputs))
+                (unbound-in-body name rest))))
+  ;;Hint
+  ((enable unbound-in-body)))
+
+;;;   ALL-UNBOUND-IN-BODY
+
+(defn all-unbound-in-body (names body)
+  (if (nlistp body)
+      t
+    (let ((occurrence (car body)))
+      (let ((outputs (occ-outputs occurrence)))
+        (and (disjoint names outputs)
+             (all-unbound-in-body names (cdr body)))))))
+
+(disable all-unbound-in-body)
+
+(prove-lemma all-unbound-in-body-nlistp (rewrite)
+  (implies
+   (nlistp body)
+   (all-unbound-in-body names body))
+  ;;Hint
+  ((enable all-unbound-in-body)))
+
+(prove-lemma all-unbound-in-body-listp (rewrite)
+  (equal (all-unbound-in-body names (cons occurrence rest))
+         (let ((outputs (occ-outputs occurrence)))
+           (and (disjoint names outputs)
+                (all-unbound-in-body names rest))))
+  ;;Hint
+  ((enable all-unbound-in-body)))
+
+(prove-lemma all-unbound-in-body-append (rewrite)
+  (equal (all-unbound-in-body (append names1 names2) body)
+         (and (all-unbound-in-body names1 body)
+              (all-unbound-in-body names2 body)))
+  ;;Hint
+  ((enable all-unbound-in-body append)))
+
+(prove-lemma all-unbound-in-body-cons (rewrite)
+  (equal (all-unbound-in-body (cons name names) body)
+         (and (unbound-in-body name body)
+              (all-unbound-in-body names body)))
+  ;;Hint
+  ((enable all-unbound-in-body unbound-in-body append)))
+
+(prove-lemma all-unbound-in-body-nlistp-names (rewrite)
+  (implies
+   (nlistp names)
+   (all-unbound-in-body names body))
+  ;;Hint
+  ((enable all-unbound-in-body)))
+
+;;;   Lemmas
+
+(prove-lemma unbound-in-body-dual-eval-1 (rewrite)
+  (implies
+   (and (equal flag 1)
+        (unbound-in-body name body))
+   (equal (value name (dual-eval flag body bindings state-bindings netlist))
+          (value name bindings)))
+  ;;Hint
+  ((induct (dual-eval flag body bindings state-bindings netlist))
+   (enable unbound-in-body)))
+
+(prove-lemma all-unbound-in-body-dual-eval-1 (rewrite)
+  (implies
+   (and (equal flag 1)
+        (all-unbound-in-body names body))
+   (equal (collect-value
+           names
+           (dual-eval flag body bindings state-bindings netlist))
+          (collect-value names bindings)))
+  ;;Hint
+  ((induct (dual-eval flag body bindings state-bindings netlist))
+   (enable all-unbound-in-body)))

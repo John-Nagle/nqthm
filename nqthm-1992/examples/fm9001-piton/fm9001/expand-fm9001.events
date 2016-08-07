@@ -1,0 +1,982 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    EXPAND-FM9001.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   RUN-INPUTS-P inputs n
+;;;
+;;;   This predicate recognizes input streams that don't cause the machine to
+;;;   enter the RESET state.
+
+(defn run-inputs-p (inputs n)
+  (if (zerop n)
+      t
+    (and (equal (reset--input (car inputs)) t)
+         (properp (pc-reg-input (car inputs)))
+         (equal (length (pc-reg-input (car inputs))) 4)
+         (run-inputs-p (cdr inputs) (sub1 n)))))
+
+(disable run-inputs-p)
+
+(prove-lemma open-run-inputs-p (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (run-inputs-p inputs n)
+           t))
+   (implies
+    (not (zerop n))
+    (equal (run-inputs-p inputs n)
+           (and (equal (reset--input (car inputs)) t)
+                (properp (pc-reg-input (car inputs)))
+                (equal (length (pc-reg-input (car inputs))) 4)
+                (run-inputs-p (cdr inputs) (sub1 n))))))
+  ;;Hint
+  ((enable run-inputs-p)))
+
+(prove-lemma run-inputs-p-plus (rewrite)
+  (equal (run-inputs-p inputs (plus n m))
+         (and (run-inputs-p inputs n)
+              (run-inputs-p (nthcdr n inputs) m)))
+  ;;Hint
+  ((enable run-inputs-p nthcdr plus)))
+
+(prove-lemma run-inputs-p-1 (rewrite)
+  (implies
+   (and (run-inputs-p inputs n)
+        (not (zerop n)))
+   (run-inputs-p inputs 1))
+  ;;Hint
+  ((enable run-inputs-p)))
+
+(prove-lemma open-run-inputs-p-add1 (rewrite)
+   (equal (run-inputs-p inputs (add1 n))
+          (and (equal (reset--input (car inputs)) t)
+               (properp (pc-reg-input (car inputs)))
+               (equal (length (pc-reg-input (car inputs))) 4)
+               (run-inputs-p (cdr inputs) n)))
+  ;;Hint
+  ((enable run-inputs-p)))
+
+;;;  REGFILE-OKP regs
+;;;
+;;;  This predicate states that the register file RAM, and the address, data,
+;;;  and write-enable latches are Boolean and the proper size.
+
+(defn regfile-okp (regs)
+  (and (equal (length regs) 4)
+       (memory-okp 4 32 (car regs))
+       (all-ramp-mem 4 (car regs))
+       (boolp (cadr regs))
+       (and (bvp (caddr regs)) (equal (length (caddr regs)) 32))
+       (and (bvp (cadddr regs)) (equal (length (cadddr regs)) 4))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    LOW LEVEL EXPANSION
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(prove-lemma rewrite-fm9001-next-state-for-step-lemmas (rewrite)
+  (implies
+   (and (bvp flags)
+        (bvp a-reg)
+        (bvp b-reg)
+        (bvp i-reg)
+        (bvp data-out)
+        (bvp addr-out)
+        (boolp last-reset-)
+        (boolp last-dtack-)
+        (boolp last-hold-)
+        (bvp last-pc-reg)
+        (bvp cntl-state))
+  (equal
+   (fm9001-next-state
+    (list (list regs
+                flags
+                a-reg b-reg i-reg
+                data-out addr-out
+                last-reset- last-dtack- last-hold-
+                last-pc-reg cntl-state)
+          mem-state)
+    external-inputs)
+   (let
+     ((reset-    (reset--input external-inputs))
+      (hold-     (hold--input  external-inputs))
+      (pc-reg-in (pc-reg-input external-inputs))
+
+     (state            (state            cntl-state))
+     (rw-              (rw-              cntl-state))
+     (strobe-          (strobe-          cntl-state))
+     (hdack-           (hdack-           cntl-state))
+     (we-regs          (we-regs          cntl-state))
+     (we-flags         (we-flags         cntl-state))
+     (we-a-reg         (we-a-reg         cntl-state))
+     (we-b-reg         (we-b-reg         cntl-state))
+     (we-i-reg         (we-i-reg         cntl-state))
+     (we-data-out      (we-data-out      cntl-state))
+     (we-addr-out      (we-addr-out      cntl-state))
+     (we-hold-         (we-hold-         cntl-state))
+     (we-pc-reg        (we-pc-reg        cntl-state))
+     (data-in-select   (data-in-select   cntl-state))
+     (dec-addr-out     (dec-addr-out     cntl-state))
+     (select-immediate (select-immediate cntl-state))
+     (regs-address     (regs-address     cntl-state))
+     (alu-c            (alu-c            cntl-state))
+     (alu-op           (alu-op           cntl-state))
+     (alu-zero         (alu-zero         cntl-state))
+     (alu-mpg          (alu-mpg          cntl-state)))
+   (let
+     ((ext-addr-out
+       (v-pullup (vft-buf (f-buf hdack-)
+                          addr-out)))
+      (ext-rw-
+       (f-pullup (ft-buf (f-buf hdack-) (f-buf  rw-))))
+      (ext-strobe-
+       (f-pullup (ft-buf (f-buf hdack-) strobe-)))
+      (ext-data-out
+       (vft-buf (f-not (f-buf rw-)) data-out)))
+     (let
+       ((mem-response
+         (memory-value mem-state ext-strobe- ext-rw-
+                       ext-addr-out
+                       (make-list 32 (x)))))
+       (let
+         ((reg-bus (f$extend-immediate
+                    select-immediate
+                    (a-immediate i-reg)
+                    (f$read-regs regs-address regs)))
+          (alu-bus (f$core-alu alu-c
+                               a-reg
+                               b-reg
+                               alu-zero alu-mpg alu-op
+                               (make-tree 32)))
+          (dtack- (car mem-response))
+          (data-in (v-threefix
+                    (v-wire (v-pullup
+                             (v-wire ext-data-out
+                                     (cdr mem-response)))
+                            ext-data-out))))
+         (let
+           ((addr-out-bus (f$dec-pass dec-addr-out reg-bus))
+            (abi-bus
+             (fv-if (f-nand data-in-select
+                            (f-not last-dtack-))
+                    reg-bus
+                    data-in)))
+           (list
+            (list
+             (f$write-regs we-regs regs-address regs (bv alu-bus))
+             (f$update-flags flags we-flags alu-bus)
+             (fv-if we-a-reg abi-bus a-reg)
+             (fv-if we-b-reg abi-bus b-reg)
+             (fv-if we-i-reg abi-bus i-reg)
+             (fv-if we-data-out (bv alu-bus) data-out)
+             (fv-if we-addr-out addr-out-bus addr-out)
+             (f-buf reset-)
+             (f-or strobe- (f-buf dtack-))
+             (f-if we-hold- (f-buf hold-) last-hold-)
+             (fv-if we-pc-reg pc-reg-in last-pc-reg)
+             (v-threefix (f$next-cntl-state
+                          last-reset-
+                          last-dtack-
+                          last-hold-
+                          rw-
+                          state
+                          i-reg
+                          flags
+                          last-pc-reg
+                          regs-address)))
+            (next-memory-state
+             mem-state ext-strobe- ext-rw-
+             ext-addr-out
+             (v-pullup
+              (v-wire ext-data-out
+                      (cdr mem-response))))))))))))
+  ;;Hint
+  ((enable fm9001-next-state boolp-b-gates open-nth)
+   (enable-theory fm9001-hardware-state-accessors)
+   (disable *1*make-list)
+   (disable-theory f-gates)))
+  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    SINGLE STEP SIMULATIONS
+;;;
+;;;  The STEP-FM9001 macro creates a lemma that describes the new state
+;;;  computed by a single step of the low-level machine from a given initial
+;;;  state.  This procedure is complicated by the fact that the next state
+;;;  depends on the state of the memory.  Rather than produce a single lemma
+;;;  that captures the behavior for all possible memory states, we create
+;;;  separate lemmas only for those processor-state/memory-state configurations
+;;;  that are possible during normal instruction execution.  This is important
+;;;  because if the memory protocol is not followed, then unknown values may be
+;;;  loaded into the processor registers.  What we are doing here is creating
+;;;  a state-by-state, almost-Boolean specification of the low-level machine. 
+;;;  So we obviously we want to insure that the processor state remains
+;;;  Boolean. 
+;;;
+;;;  STEP-FM9001 is defined in "expand-fm9001.lisp".
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  Page numbers refer to the page numbers of the state diagram drawings,
+;;;  e.g., Page 0 is the figure with caption ``States Figure 0'' in
+;;;  Technical Report 86.
+
+;;;  Page 0
+
+(step-fm9001 fetch0 :suffix 0)
+(step-fm9001 fetch0 :suffix 1 :mem-state 1)
+(step-fm9001 fetch0 :suffix 2 :mem-state 2 
+             :addr-stable t :data-stable t :last-rw- f
+             :hyps (zerop mem-count))
+
+(step-fm9001 fetch1 :hyps (boolp last-rw-) :last-rw- last-rw-)
+(step-fm9001 fetch2 :addr-stable t :split-term (zerop (car clock)))
+
+(step-fm9001 fetch3 :suffix 0
+             :addr-stable t :dtack- f :mem-state 1 :mem-dtack t
+             :hyps (zerop mem-count))
+(step-fm9001 fetch3 :suffix 1 :addr-stable t :dtack- t :mem-state 1
+             :mem-dtack f :split-term (zerop mem-count))
+
+(step-fm9001 decode :mem-state 1)
+
+;;;  Page 1
+
+(step-fm9001 rega)
+(step-fm9001 regb)
+(step-fm9001 update :mem-state mem-state
+               :hyps (or (equal mem-state 0) (equal mem-state 1)))
+  
+;;;  Page 2
+
+(step-fm9001 reada0)
+(step-fm9001 reada1)
+(step-fm9001 reada2 :addr-stable t :split-term (zerop (car clock)))
+
+(step-fm9001 reada3 :suffix 0
+               :addr-stable t :dtack- f :mem-state 1 :mem-dtack t
+               :hyps (zerop mem-count))
+(step-fm9001 reada3 :suffix 1 :addr-stable t :dtack- t :mem-state 1
+             :mem-dtack f :split-term (zerop mem-count))
+  
+;;;  Page 3
+
+(step-fm9001 readb0 :mem-state mem-state
+               :hyps (or (equal mem-state 0) (equal mem-state 1)))
+(step-fm9001 readb1)
+(step-fm9001 readb2 :addr-stable t :split-term (zerop (car clock)))
+
+(step-fm9001 readb3 :suffix 0
+               :addr-stable t :dtack- f :mem-state 1 :mem-dtack t
+               :hyps (zerop mem-count))
+(step-fm9001 readb3 :suffix 1 :addr-stable t :dtack- t :mem-state 1
+             :mem-dtack f :split-term (zerop mem-count))
+  
+;;;  Page 4
+
+(step-fm9001 write0 :mem-state mem-state
+               :hyps (or (equal mem-state 0) (equal mem-state 1)))
+(step-fm9001 write1)
+(step-fm9001 write2 :last-rw- f :addr-stable t :data-stable t
+             :split-term (zerop (car clock)))
+
+(step-fm9001 write3 :suffix 0
+               :addr-stable t :data-stable t :dtack- f :mem-state 2
+               :mem-dtack t :last-rw- f
+               :hyps (zerop mem-count))
+(step-fm9001 write3 :suffix 1 :addr-stable t :data-stable t :dtack- t
+             :mem-state 2 :mem-dtack f :last-rw- f
+             :split-term (zerop mem-count))
+
+;;;  Page 5
+
+(step-fm9001 sefa0)
+(step-fm9001 sefa1)
+(step-fm9001 sefb0)
+(step-fm9001 sefb1)
+
+
+(deftheory fm9001-step-theory
+  (sefb1$step sefb0$step sefa1$step sefa0$step write3$step1 write3$step0 
+              write2$step write1$step write0$step readb3$step1 readb3$step0 
+              readb2$step readb1$step readb0$step reada3$step1 reada3$step0 
+              reada2$step reada1$step reada0$step update$step regb$step
+              rega$step decode$step fetch3$step1 fetch3$step0 fetch2$step
+              fetch1$step fetch0$step2 fetch0$step1 fetch0$step0))
+
+
+#|
+;;;   Page 6
+
+It was never necessary to expand these states.
+
+(step-fm9001 hold0)
+(step-fm9001 hold1)
+
+(step-fm9001 reset0)
+(step-fm9001 reset1)
+(step-fm9001 reset2)
+
+|#
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Inductive progress proofs
+;;;
+;;;   For each of the states that wait for memory, we must prove that the
+;;;   processor will eventually move on.  The lemmas below tell how long the
+;;;   processor will remain in a given state, before the internal registers are
+;;;   in such a condition that the machine will leave that state on the next
+;;;   clock cycle. 
+;;;   
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;    READ-FN reg clock n
+;;;
+;;;    READ-FN gives the value produced by the ABI-MUX as we wait for DTACK.
+
+(defn read-fn (reg0 reg1 n)
+  (if (zerop n)
+      reg0
+    (read-fn reg1 reg1 (sub1 n))))
+
+(disable read-fn)
+
+(prove-lemma open-read-fn (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (read-fn reg0 reg1 n)
+           reg0))
+   (implies
+    (not (zerop n))
+    (equal (read-fn reg0 reg1 n)
+           (read-fn reg1 reg1 (sub1 n)))))
+  ;;Hint
+  ((enable read-fn)))
+
+(prove-lemma length-read-fn (rewrite)
+  (implies
+   (and (equal (length reg0) 32)
+        (equal (length reg1) 32))
+   (equal (length (read-fn reg0 reg1 n)) 32))
+  ;;Hint
+  ((enable read-fn)))
+
+(prove-lemma properp-read-fn (rewrite)
+  (implies
+   (and (properp reg0)
+        (properp reg1))
+   (properp (read-fn reg0 reg1 n)))
+  ;;Hint
+  ((enable read-fn)))
+
+(prove-lemma bvp-read-fn (rewrite)
+  (implies
+   (and (bvp reg0)
+        (bvp reg1))
+   (bvp (read-fn reg0 reg1 n)))
+  ;;Hint
+  ((enable read-fn)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    FETCH3
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn fetch3$induction
+  (n clock count inputs
+     regs a-reg b-reg 
+     rw- regs-address i-reg flags pc-reg
+     last-rw- last-regs-address last-i-reg last-flags
+     last-data)
+
+  (if (zerop n)
+      t
+    (fetch3$induction
+     (sub1 n) clock (sub1 count) (cdr inputs)
+     (write-regs f 0 regs 0) a-reg b-reg
+     t regs-address (read-regs pc-reg regs) flags pc-reg
+     rw- pc-reg i-reg flags
+     (v-threefix last-data))))
+
+(prove-lemma fetch3$progress-help ()
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs (add1 n))
+        (leq n count))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_fetch3 t last-regs-address last-i-reg
+                       last-flags pc-reg))
+      (list mem 1 clock count f t addr-out last-data))
+     inputs
+     (add1 n))
+    (list
+     (list (write-regs f 0 regs 0) flags
+           a-reg b-reg (read-fn i-reg (read-regs pc-reg regs) (add1 n))
+           data-out addr-out
+           t (not (leq count n)) hold- 
+           pc-reg
+           (cv_fetch3 t pc-reg
+                      (read-fn i-reg (read-regs pc-reg regs) n) flags pc-reg))
+     (list mem 1 clock (difference count (add1 n))
+            (leq count n) t addr-out (v-threefix last-data)))))
+  ;;hint
+  ((induct (fetch3$induction
+            n clock count inputs
+            regs a-reg b-reg
+            rw- regs-address i-reg flags pc-reg
+            last-rw- last-regs-address last-i-reg last-flags
+            last-data))
+   (enable plus nthcdr difference open-read-fn write-regs-ok)))
+
+(prove-lemma fetch3$progress (rewrite)
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs count)
+        (not (zerop count)))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_fetch3 t last-regs-address last-i-reg last-flags pc-reg))
+      (list mem 1 clock (sub1 count) f t addr-out last-data))
+     inputs
+     count)
+    (list
+     (list (write-regs f 0 regs 0) flags
+           a-reg b-reg (read-fn i-reg (read-regs pc-reg regs) count)
+           data-out addr-out
+           t f hold-
+           pc-reg
+           (cv_fetch3 t pc-reg
+                      (read-fn i-reg (read-regs pc-reg regs) (sub1 count))
+                      flags
+                      pc-reg))
+     (list mem 1 clock 0 t t addr-out (v-threefix last-data)))))
+  ;;hint
+  ((use (fetch3$progress-help (count (sub1 count)) (n (sub1 count))))
+   (disable plus-add1 open-run-inputs-p)
+   (enable open-read-fn)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    READA3
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn reada3$induction (n clock count inputs
+                          regs a-reg b-reg
+                          rw- regs-address i-reg flags pc-reg
+                          last-rw- last-regs-address last-i-reg last-flags
+                          last-data)
+
+  (if (zerop n)
+      t
+    (reada3$induction
+     (sub1 n) clock (sub1 count) (cdr inputs)
+     (write-regs f 0 regs 0) (read-regs pc-reg regs) b-reg
+     t regs-address i-reg flags pc-reg
+     rw- pc-reg i-reg flags
+     (v-threefix last-data))))
+
+
+(prove-lemma reada3$progress-help ()
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs (add1 n))
+        (leq n count))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_reada3 t last-regs-address last-i-reg
+                       last-flags pc-reg))
+      (list mem 1 clock count f t addr-out last-data))
+     inputs
+     (add1 n))
+    (list
+     (list (write-regs f 0 regs 0) flags
+           (read-fn a-reg (read-regs pc-reg regs) (add1 n)) b-reg i-reg
+           data-out addr-out
+           t (not (leq count n)) hold-
+           pc-reg
+           (cv_reada3 t pc-reg i-reg flags pc-reg))
+     (list mem 1 clock (difference count (add1 n))
+           (leq count n) t addr-out (v-threefix last-data)))))
+  ;;hint
+  ((induct (reada3$induction
+            n clock count inputs
+            regs a-reg b-reg
+            rw- regs-address i-reg flags pc-reg
+            last-rw- last-regs-address last-i-reg last-flags
+            last-data))
+   (enable plus nthcdr difference open-read-fn run-inputs-p
+           write-regs-ok)
+   (disable open-run-inputs-p)))
+
+(prove-lemma reada3$progress (rewrite)
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs count)
+        (not (zerop count)))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_reada3 t last-regs-address last-i-reg last-flags pc-reg))
+      (list mem 1 clock (sub1 count) f t addr-out last-data))
+     inputs
+     count)
+    (list
+     (list (write-regs f 0 regs 0) flags
+           (read-fn a-reg (read-regs pc-reg regs) count) b-reg i-reg
+           data-out addr-out
+           t f hold-
+           pc-reg
+           (cv_reada3 t pc-reg i-reg flags pc-reg))
+     (list mem 1 clock 0 t t addr-out (v-threefix last-data)))))
+  ;;hint
+  ((use (reada3$progress-help (count (sub1 count)) (n (sub1 count))))
+   (disable plus-add1 open-run-inputs-p)
+   (enable open-read-fn)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    READB3
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn readb3$induction (n clock count inputs
+                          regs a-reg b-reg
+                          rw- regs-address i-reg flags pc-reg
+                          last-rw- last-regs-address last-i-reg last-flags
+                          last-data)
+
+  (if (zerop n)
+      t
+    (readb3$induction
+     (sub1 n) clock (sub1 count) (cdr inputs)
+     (write-regs f 0 regs 0) a-reg (read-regs pc-reg regs)
+     t regs-address i-reg flags pc-reg
+     rw- pc-reg i-reg flags
+     (v-threefix last-data))))
+
+
+(prove-lemma readb3$progress-help ()
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs (add1 n))
+        (leq n count))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_readb3 t last-regs-address last-i-reg
+                       last-flags pc-reg))
+      (list mem 1 clock count f t addr-out last-data))
+     inputs
+     (add1 n))
+    (list
+     (list (write-regs f 0 regs 0) flags
+           a-reg (read-fn b-reg (read-regs pc-reg regs) (add1 n)) i-reg
+           data-out addr-out
+           t (not (leq count n)) hold-
+           pc-reg
+           (cv_readb3 t pc-reg i-reg flags pc-reg))
+     (list mem 1 clock (difference count (add1 n))
+           (leq count n) t addr-out (v-threefix last-data)))))
+  ;;hint
+  ((induct (readb3$induction
+            n clock count inputs
+            regs a-reg b-reg
+            rw- regs-address i-reg flags pc-reg
+            last-rw- last-regs-address last-i-reg last-flags
+            last-data))
+   (enable plus nthcdr difference open-read-fn run-inputs-p
+           write-regs-ok)
+   (disable open-run-inputs-p)))
+
+(prove-lemma readb3$progress (rewrite)
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs count)
+        (not (zerop count)))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_readb3 t last-regs-address last-i-reg last-flags pc-reg))
+      (list mem 1 clock (sub1 count) f t addr-out last-data))
+     inputs
+     count)
+    (list
+     (list (write-regs f 0 regs 0) flags
+           a-reg (read-fn b-reg (read-regs pc-reg regs) count) i-reg
+           data-out addr-out
+           t f hold-
+           pc-reg
+           (cv_readb3 t pc-reg i-reg flags pc-reg))
+     (list mem 1 clock 0 t t addr-out (v-threefix last-data)))))
+  ;;hint
+  ((use (readb3$progress-help (count (sub1 count)) (n (sub1 count))))
+   (disable plus-add1 open-run-inputs-p)
+   (enable open-read-fn)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    WRITE3
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn write3$induction
+  (n clock count inputs
+     regs a-reg b-reg 
+     rw- regs-address i-reg flags pc-reg
+     last-rw- last-regs-address last-i-reg last-flags
+     last-data)
+
+  (if (zerop n)
+      t
+    (write3$induction
+     (sub1 n) clock (sub1 count) (cdr inputs)
+     (write-regs f 0 regs 0) a-reg b-reg
+     f regs-address i-reg flags pc-reg
+     rw- pc-reg i-reg flags
+     (v-threefix last-data))))
+
+(prove-lemma write3$progress-help ()
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs (add1 n))
+        (leq n count))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_write3 f last-regs-address last-i-reg
+                       last-flags pc-reg))
+      (list mem 2 clock count f f addr-out data-out))
+     inputs
+     (add1 n))
+    (list
+     (list (write-regs f 0 regs 0) flags
+           a-reg b-reg i-reg
+           data-out addr-out
+           t (not (leq count n)) hold-
+           pc-reg
+           (cv_write3 f pc-reg i-reg flags pc-reg))
+     (list mem 2 clock (difference count (add1 n))
+           (leq count n) f addr-out data-out))))
+  ;;hint
+  ((induct (write3$induction
+            n clock count inputs
+            regs a-reg b-reg
+            rw- regs-address i-reg flags pc-reg
+            last-rw- last-regs-address last-i-reg last-flags
+            last-data))
+   (enable plus nthcdr difference open-read-fn run-inputs-p
+           write-regs-ok)
+   (disable open-run-inputs-p)))
+
+(prove-lemma write3$progress (rewrite)
+  (implies
+   (and (cv-hyps t last-regs-address last-i-reg last-flags pc-reg)
+        (cv-hyps t last-regs-address i-reg flags pc-reg)
+        (memory-okp 32 32 mem)
+        (regfile-okp regs)
+        (bvp a-reg)
+        (equal (length a-reg) 32)
+        (bvp b-reg)
+        (equal (length b-reg) 32)
+        (bvp addr-out)
+        (equal (length addr-out) 32)
+        (bvp data-out)
+        (equal (length data-out) 32)
+        (boolp hold-)
+        (run-inputs-p inputs count)
+        (not (zerop count)))
+   (equal
+    (run-fm9001
+     (list
+      (list regs flags
+            a-reg b-reg i-reg
+            data-out addr-out
+            t t hold-
+            pc-reg
+            (cv_write3 f last-regs-address last-i-reg
+                       last-flags pc-reg))
+      (list mem 2 clock (sub1 count) f f addr-out data-out))
+     inputs
+     count)
+    (list
+     (list (write-regs f 0 regs 0) flags
+           a-reg b-reg i-reg
+           data-out addr-out
+           t f hold-
+           pc-reg
+           (cv_write3 f pc-reg i-reg flags pc-reg))
+     (list mem 2 clock 0 t f addr-out data-out))))
+  ;;hint
+  ((use (write3$progress-help (count (sub1 count)) (n (sub1 count))))
+   (disable plus-add1 open-run-inputs-p)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Chunk Simulations
+;;;
+;;;  SIM-FM9001 is a macro that creates lemmas that describe the operation of
+;;;  the machine for multiple clock cycles.  We create a multi-state simulation
+;;;  for each non-branching segment of the state diagrams.  For this purpose,
+;;;  we consider the states that wait for memory as "non-branching".  Notice
+;;;  that some of the "multi-state" lemmas only include a single state.
+;;;  
+;;;  SIM-FM9001 is defined in "expand-fm9001.lisp"
+;;;  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  ZEROP-NOT-ZEROP-CASES is a bogus recursive function used to force the
+;;;  prover to do these multi-step simulations by cases.
+
+(defn zerop-not-zerop-cases (n)
+  (if (zerop n)
+      t
+    (if (not (zerop n))
+        t
+      (zerop-not-zerop-cases n)))
+  ;;Hint
+  ((lessp (count n))))
+                                
+(sim-fm9001 fetch0 fetch0 :suffix 0)
+(sim-fm9001 fetch0 fetch0 :suffix 1 :mem-state 1)
+(sim-fm9001 fetch0 fetch0 :suffix 2 :mem-state 2 
+            :hyps (zerop mem-count)
+            :addr-stable t :data-stable t :last-rw- f)
+
+(sim-fm9001 fetch1 decode :hyps (and (equal hold- t) (boolp last-rw-))
+            :last-rw- last-rw-
+            :dtack-wait #.(w_fetch1->decode) :disable (fetch3$step1))
+
+(sim-fm9001 rega rega)
+
+(sim-fm9001 regb update)
+
+(sim-fm9001 update update :mem-state mem-state
+            :hyps (or (equal mem-state 0) (equal mem-state 1)))
+
+(sim-fm9001 reada0 reada3 :dtack-wait #.(w_reada0->reada3)
+            :disable (reada3$step1))
+
+(sim-fm9001 readb0 readb3
+            :mem-state mem-state
+            :hyps (or (equal mem-state 0) (equal mem-state 1))
+            :dtack-wait #.(w_readb0->readb3)
+            :disable (readb3$step1))
+
+(sim-fm9001 write0 write3
+            :mem-state mem-state
+            :hyps (or (equal mem-state 0) (equal mem-state 1))
+            :dtack-wait #.(w_write0->write3)
+            :disable (write3$step1))
+
+(sim-fm9001 sefa0 sefa1)
+
+(sim-fm9001 sefb0 sefb1)
+
+(sim-fm9001 sefb1 sefb1)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Execution time functions.
+;;;
+;;;  For each of the "chunks" above we define a function that states exactly
+;;;  how many clock cycles are necessary to complete the instruction execution
+;;;  cycle from the given starting state.  In these functions, CLOCK is the
+;;;  memory delay oracle, and I-REG and FLAGS are the corresponding processor
+;;;  registers.  The functions below are defined in terms of Common Lisp
+;;;  functions appearing in "expand-fm9001.lisp".  The Common Lisp function
+;;;  T_initial-state->final-state is an expression for the amount of time
+;;;  necessary to execute the indicated section of of the state diagram.
+;;;  The Common Lisp function CT_initial-state->final-state is an expression
+;;;  for the memory delay oracle at the end of the sequence.  The Common Lisp
+;;;  function TIMING-IF-TREE creates an "IF" tree of calls to timing functions
+;;;  based on the branching decisions that appear in the state diagrams.
+;;;  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn t_fetch0 (clock i-reg flags)
+  #.(t_fetch0->fetch0))
+
+(defn t_sefb1 (clock i-reg flags)
+  (let ((time #.(t_sefb1->sefb1)))
+    (let ((clock #.(ct_sefb1->sefb1)))
+      (plus time #.(timing-if-tree 'sefb1)))))
+
+(defn t_sefb0 (clock i-reg flags)
+  (let ((time #.(t_sefb0->sefb1)))
+    (let ((clock #.(ct_sefb0->sefb1)))
+      (plus time #.(timing-if-tree 'sefb1)))))
+
+(defn t_sefa0 (clock i-reg flags)
+  (let ((time #.(t_sefa0->sefa1)))
+    (let ((clock #.(ct_sefa0->sefa1)))
+      (plus time #.(timing-if-tree 'sefa1)))))
+
+(defn t_write0 (clock i-reg flags)
+  (let ((time #.(t_write0->write3)))
+    (let ((clock  #.(ct_write0->write3)))
+      (plus time #.(timing-if-tree 'write3)))))
+
+(defn t_update (clock i-reg flags)
+  (let ((time #.(t_update->update)))
+    (let ((clock  #.(ct_update->update)))
+      (plus time #.(timing-if-tree 'update)))))
+
+(defn t_readb0 (clock i-reg flags)
+  (let ((time #.(t_readb0->readb3)))
+    (let ((clock  #.(ct_readb0->readb3)))
+      (plus time #.(timing-if-tree 'readb3)))))
+
+(defn t_reada0 (clock i-reg flags)
+  (let ((time #.(t_reada0->reada3)))
+    (let ((clock  #.(ct_reada0->reada3)))
+      (plus time #.(timing-if-tree 'reada3)))))
+
+(defn t_regb (clock i-reg flags)
+  (let ((time #.(t_regb->update)))
+    (let ((clock #.(ct_regb->update)))
+      (plus time #.(timing-if-tree 'update)))))
+
+(defn t_rega (clock i-reg flags)
+  (let ((time #.(t_rega->rega)))
+    (let ((clock #.(ct_rega->rega)))
+      (plus time #.(timing-if-tree 'rega)))))
+
+(defn t_fetch1 (clock i-reg flags)
+  (let ((time #.(t_fetch1->decode)))
+    (let ((clock #.(ct_fetch1->decode)))
+      (plus time #.(timing-if-tree 'decode)))))

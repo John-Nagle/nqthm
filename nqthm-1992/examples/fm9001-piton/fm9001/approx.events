@@ -1,0 +1,1826 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    APPROX.EVENTS
+;;;
+;;;    By Matt Kaufmann
+;;;    
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;; Table of Contents:
+;;; 
+;;; 1. INITIALIZATION
+;;; 2. APPROXIMATION NOTIONS
+;;; 3. notion of MONOTONICITY-PROPERTY for a module
+;;; 4. MONOTONICITY LEMMAS FOR BOOLEAN FUNCTIONS
+;;; 5. MONOTONICITY LEMMAS FOR PRIMITIVE HARDWARE COMPONENTS
+;;;    except the RAM
+;;; 6. MONOTONICITY LEMMA for the RAM
+;;; 7. MONOTONICITY FOR ALL PRIMITIVES
+;;; 8. MONOTONICITY OF DUAL-EVAL
+;;; 9. MONOTONICITY FOR SIMULATION
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;                  INITIALIZATION                  ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;  Note: This file requires macros defined in "monotonicity-macros.lisp",
+;;;  which is loaded by "sysdef.lisp".
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;               APPROXIMATION NOTIONS              ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Here we define (b-approx a1 a2), which holds when a1 and a2 are
+;; equal unless a1 is (X) (or anything other than T, F, or (Z),
+;; actually).  Then we extend this "bit approximation" notion to
+;; bit vectors (V-APPROX V1 V2) and states [including RAM states]
+;; (S-APPROX S1 S2).
+
+(defn b-knownp (x)
+  (or (equal x t)
+      (equal x f)
+      (equal x (z))))
+
+(prove-lemma b-knownp-compound-recognizer (rewrite)
+  (equal (b-knownp x)
+         (or (truep x)
+             (falsep x)
+             (zp x))))
+
+(disable b-knownp)
+(disable *1*b-knownp)
+
+(defn b-approx (a1 a2)
+  (if (b-knownp a1)
+      (equal a1 a2)
+    t))
+
+(defn v-approx (v1 v2)
+  ;; implies that v1 and v2 have the same length
+  (if (listp v1)
+      (and (listp v2)
+           (b-approx (car v1) (car v2))
+           (v-approx (cdr v1) (cdr v2)))
+    ;; need the following so that approximation by a known
+    ;; value implies equality
+    (equal v1 v2)))
+
+(defn v-knownp (x)
+  (if (listp x)
+      (and (b-knownp (car x))
+           (v-knownp (cdr x)))
+    t))
+
+(prove-lemma v-knownp-implies-v-approx-is-equal (rewrite)
+  ;; stated in the contrapositive for rewrite rule purposes
+  (implies (and (not (equal x y))
+                (v-knownp x))
+           (not (v-approx x y))))
+
+;; necessary so that s-approx doesn't blow its stack! -- or
+;; at least, was at one point
+(disable plus-add1)
+
+;; We now consider approximation for states.  We demand that they have
+;; the same type, in order that PAIRLIST acts the same "kind of way"
+;; on each.  This appears to be important, or so I thought at one
+;; time, in proving monotonicity in bizarre cases where we call
+;; PAIRLIST on non-lists.
+
+;; I want to be able to prove (s-approx x x), so that I can instantiate
+;; lemmas roughly of the form
+;; (implies (s-approx x y) (equal (foo x y) (bar x y)))
+;; to obtain, say,
+;; (equal (foo x x) (bar x x)).
+
+(defn mem-width () 32)
+
+(defn s-approx (s1 s2)
+  (cond
+   ((or (listp s1) (listp s2))
+    (if (listp s1)
+        (if (listp s2)
+            (and (s-approx (car s1) (car s2))
+                 (s-approx (cdr s1) (cdr s2)))
+          f)
+      f))
+   ;; the empty list (aes 31-Mar-92)
+   ((or (equal s1 nil) (equal s2 nil))
+    (equal s1 s2))
+   ((or (ramp s1) (ramp s2))
+    (if (ramp s1)
+        (if (ramp s2)
+            (v-approx (ram-guts s1) (ram-guts s2))
+          f)
+      f))
+   ((or (romp s1) (romp s2))
+    (if (romp s1)
+        (if (romp s2)
+            (v-approx (rom-guts s1) (rom-guts s2))
+          f)
+      f))
+   ((or (stubp s1) (stubp s2))
+    (if (stubp s1)
+        (if (stubp s2)
+            (v-approx (stub-guts s1) (stub-guts s2))
+          f)
+      f))
+   ;; In the final case, we view s1 and s2 as values in four-valued logic,
+   ;; where any "wrong" value is simply viewed as X
+   (t (b-approx s1 s2))))
+
+(prove-lemma s-approx-x-x (rewrite)
+  (s-approx x x))
+
+(defn good-s (s)
+  (cond
+   ((listp s)
+    (and (good-s (car s))
+         (good-s (cdr s))))
+   ((ramp s)
+    (and (equal (length (ram-guts s)) (mem-width))
+         (properp (ram-guts s))))
+   ((romp s)
+    (and (equal (length (rom-guts s)) (mem-width))
+         (properp (rom-guts s))))
+   ((stubp s)
+    (and (equal (length (stub-guts s)) (mem-width))
+         (properp (stub-guts s))))
+   (t t)))
+
+(defn s-knownp (s)
+  (cond
+   ((listp s)
+    (and (s-knownp (car s))
+         (s-knownp (cdr s))))
+   ;; the empty list (aes 31-Mar-92)
+   ((equal s nil)
+    T)
+   ((ramp s)
+    (v-knownp (ram-guts s)))
+   ((romp s)
+    (v-knownp (rom-guts s)))
+   ((stubp s)
+    (v-knownp (stub-guts s)))
+   ;; In the final case, we view s as a value in four-valued logic,
+   ;; where any "wrong" value is simply viewed as X.
+   (t (b-knownp s))))
+
+(prove-lemma s-knownp-implies-s-approx-is-equal (rewrite)
+  (implies (and (s-knownp x)
+                (not (equal x y)))
+           (not (s-approx x y))))
+
+;; It seems OK to enable this again:
+(enable plus-add1)
+
+(defn v-approx-alist (alist1 alist2)
+  ;; Checks that both alists have the same "strip-cars", and that
+  ;; v-approx holds of the strip-cdrs (if that were defined).
+  (if (listp alist1)
+      (and (listp alist2)
+           (equal (caar alist1) (caar alist2))
+           (b-approx (cdar alist1) (cdar alist2))
+           (v-approx-alist (cdr alist1) (cdr alist2)))
+    (nlistp alist2)))
+
+(defn s-approx-alist (alist1 alist2)
+  ;; Checks that both alists have the same "strip-cars", and that
+  ;; s-approx holds of the strip-cdrs (if that were defined).
+  ;;    This is different from v-approx-alist, in that the strip-cdrs
+  ;; is a list of states rather than a single vector (i.e. rather than
+  ;; a list of bits).
+  (if (listp alist1)
+      (and (listp alist2)
+           (equal (caar alist1) (caar alist2))
+           (s-approx (cdar alist1) (cdar alist2))
+           (s-approx-alist (cdr alist1) (cdr alist2)))
+    (nlistp alist2)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;   notion of MONOTONICITY-PROPERTY for a module   ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn monotonicity-property (flag fn netlist a1 a2 s1 s2)
+  ;; The flag is analogous to the flag in DUAL-EVAL.
+  (case flag
+        (0 (implies (and (v-approx a1 a2)
+                         (s-approx s1 s2))
+                    (v-approx (dual-eval 0 fn a1 s1 netlist)
+                              (dual-eval 0 fn a2 s2 netlist))))
+        (1 (implies (and (v-approx-alist a1 a2)
+                         (alistp a1)
+                         (alistp a2)
+                         (s-approx-alist s1 s2)
+                         (alistp s1)
+                         (alistp s2))
+                    (v-approx-alist (dual-eval 1 fn a1 s1 netlist)
+                                    (dual-eval 1 fn a2 s2 netlist))))
+        (2 (implies (and (v-approx a1 a2)
+                         (s-approx s1 s2))
+                    (s-approx (dual-eval 2 fn a1 s1 netlist)
+                              (dual-eval 2 fn a2 s2 netlist))))
+        (3 (implies (and (v-approx-alist a1 a2) 
+                         (alistp a1)
+                         (alistp a2)
+                         (s-approx-alist s1 s2)
+                         (alistp s1)
+                         (alistp s2))
+                    (s-approx-alist (dual-eval 3 fn a1 s1 netlist)
+                                    (dual-eval 3 fn a2 s2 netlist))))
+        (otherwise t)))
+
+(disable monotonicity-property)
+
+;; Now we prove a bunch of trivial lemmas in order to help
+;; us to control the proof later.
+
+(prove-lemma monotonicity-property-consequence-0 (rewrite)
+  (implies (and (monotonicity-property 0 fn netlist a1 a2 s1 s2)
+                (v-approx a1 a2)
+                (s-approx s1 s2))
+           (v-approx (dual-eval 0 fn a1 s1 netlist)
+                     (dual-eval 0 fn a2 s2 netlist)))
+  ((use (monotonicity-property (flag 0)))))
+
+(prove-lemma monotonicity-property-consequence-1 (rewrite)
+  (implies (and (monotonicity-property 1 fn netlist a1 a2 s1 s2)
+                (v-approx-alist a1 a2)
+                (alistp a1)
+                (alistp a2)
+                (s-approx-alist s1 s2)
+                (alistp s1)
+                (alistp s2))
+           (v-approx-alist (dual-eval 1 fn a1 s1 netlist)
+                           (dual-eval 1 fn a2 s2 netlist)))
+  ((use (monotonicity-property (flag 1)))))
+
+(prove-lemma monotonicity-property-consequence-2 (rewrite)
+  (implies (and (monotonicity-property 2 fn netlist a1 a2 s1 s2)
+                (v-approx a1 a2)
+                (s-approx s1 s2))
+           (s-approx (dual-eval 2 fn a1 s1 netlist)
+                     (dual-eval 2 fn a2 s2 netlist)))
+  ((use (monotonicity-property (flag 2)))))
+
+(prove-lemma monotonicity-property-consequence-3 (rewrite)
+  (implies (and (monotonicity-property 3 fn netlist a1 a2 s1 s2)
+                (v-approx-alist a1 a2) 
+                (alistp a1)
+                (alistp a2)
+                (s-approx-alist s1 s2)
+                (alistp s1)
+                (alistp s2))
+           (s-approx-alist (dual-eval 3 fn a1 s1 netlist)
+                           (dual-eval 3 fn a2 s2 netlist)))
+  ((use (monotonicity-property (flag 3)))))
+
+(prove-lemma monotonicity-property-opener-0 (rewrite)
+  ;; need iff below rather than equal in order for the proof to go through
+  (iff (monotonicity-property 0 fn netlist a1 a2 s1 s2)
+       (implies (and (v-approx a1 a2)
+                     (s-approx s1 s2))
+                (v-approx (dual-eval 0 fn a1 s1 netlist)
+                          (dual-eval 0 fn a2 s2 netlist))))
+  ((enable monotonicity-property)))
+
+(prove-lemma monotonicity-property-opener-1 (rewrite)
+  ;; need iff below rather than equal in order for the proof to go through
+  (iff (monotonicity-property 1 fn netlist a1 a2 s1 s2)
+       (implies (and (v-approx-alist a1 a2)
+                     (alistp a1)
+                     (alistp a2)
+                     (s-approx-alist s1 s2)
+                     (alistp s1)
+                     (alistp s2))
+                (v-approx-alist (dual-eval 1 fn a1 s1 netlist)
+                                (dual-eval 1 fn a2 s2 netlist))))
+  ((enable monotonicity-property)))
+
+(prove-lemma monotonicity-property-opener-2 (rewrite)
+  ;; need iff below rather than equal in order for the proof to go through
+  (iff (monotonicity-property 2 fn netlist a1 a2 s1 s2)
+       (implies (and (v-approx a1 a2)
+                     (s-approx s1 s2))
+                (s-approx (dual-eval 2 fn a1 s1 netlist)
+                          (dual-eval 2 fn a2 s2 netlist))))
+  ((enable monotonicity-property)))
+
+(prove-lemma monotonicity-property-opener-3 (rewrite)
+  ;; need iff below rather than equal in order for the proof to go through
+  (iff (monotonicity-property 3 fn netlist a1 a2 s1 s2)
+       (implies (and (v-approx-alist a1 a2)
+                     (alistp a1)
+                     (alistp a2)
+                     (s-approx-alist s1 s2)
+                     (alistp s1)
+                     (alistp s2))
+                (s-approx-alist (dual-eval 3 fn a1 s1 netlist)
+                                (dual-eval 3 fn a2 s2 netlist))))
+  ((enable monotonicity-property)))
+
+(disable monotonicity-property-opener-0)
+(disable monotonicity-property-opener-1)
+(disable monotonicity-property-opener-2)
+(disable monotonicity-property-opener-3)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;    MONOTONICITY LEMMAS FOR BOOLEAN FUNCTIONS     ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; See the file monotonicity-macros.lisp for the definition
+;; and a sample expansion of the macro MONOTONICITY-LEMMAS.
+;; The idea is to show that basic boolean functions are monotone
+;; with respect to the partial order defined by B-APPROX, i.e.
+;; (roughly stated) that changing an input from (X) can only
+;; change the output if it was formerly (X).
+
+(monotonicity-lemmas
+ (f-buf f-and))
+
+(monotonicity-lemmas
+ (f-and3 f-and4)
+ ((disable f-and b-approx)))
+
+(monotonicity-lemmas (f-not) ((enable boolp)))
+
+(monotonicity-lemmas
+ (f-nand f-nand3 f-nand4 f-nand5 f-nand6 f-nand8)
+ ((disable f-and f-not b-approx)))
+
+(monotonicity-lemmas (f-or))
+
+(monotonicity-lemmas
+ (f-or3 f-or4 f-nor f-nor3 f-nor4 f-nor5 f-nor6 f-nor8)
+ ((disable f-or f-not b-approx)))
+
+(monotonicity-lemmas (f-xor f-equv) ((enable boolp)))
+
+(monotonicity-lemmas
+ (f-xor3 f-equv3)
+ ((disable f-xor f-equv b-approx)))
+
+(monotonicity-lemmas (f-if ft-buf ft-wire f-pullup))
+
+(disable-all
+ f-buf f-and f-and3 f-and4 f-not f-nand f-nand3
+ f-nand4 f-nand5 f-nand6 f-nand8 f-or f-or3 f-or4
+ f-nor f-nor3 f-nor4 f-nor5 f-nor6 f-nor8
+ f-xor f-xor3 f-equv f-equv3 f-if ft-buf ft-wire f-pullup)
+
+;; Do not remove the following -- although MONOTONICITY-LEMMAS does
+;; not occur explicitly below, it does get used by the macro
+;; PROVE-PRIMITIVE-MONOTONICITY.
+(deftheory monotonicity-lemmas
+  (f-buf-monotone f-and-monotone f-and3-monotone f-and4-monotone
+         f-not-monotone
+         f-nand-monotone f-nand3-monotone
+         f-nand4-monotone f-nand5-monotone f-nand6-monotone
+         f-nand8-monotone f-or-monotone f-or3-monotone f-or4-monotone
+         f-nor-monotone f-nor3-monotone f-nor4-monotone
+         f-nor5-monotone f-nor6-monotone f-nor8-monotone
+         f-xor-monotone f-xor3-monotone f-equv-monotone f-equv3-monotone
+         f-if-monotone ft-buf-monotone ft-wire-monotone f-pullup-monotone))
+
+(disable b-approx)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;             MONOTONICITY LEMMAS FOR              ;;;;;
+;;;;;          PRIMITIVE HARDWARE COMPONENTS           ;;;;;
+;;;;;                except the RAM                    ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Next, let's prove that some primitive hardware components are
+;; monotone, in the sense that when an input or "leaf" of the state is
+;; changed from (X), they change their values or states only by
+;; "filling in" for (X)s.
+
+;; [Obscure comment that I no longer understand exactly:]  I'll adopt
+;; an approach similar to Bishop/Warren's, except that I need to
+;; consider arbitrary input argument lists rather than those of
+;; exactly the right length (e.g.  4 for AO2$VALUE).  Actually, I
+;; didn't realize that such lemmas already existed until starting to
+;; define my versions.
+
+;; First, a couple of lemmas.
+
+(prove-lemma dual-eval-0-primp (rewrite)
+  (implies (primp name)
+           (equal (dual-eval 0 name args state netlist)
+                  (dual-apply-value name args state)))
+  ((enable dual-eval)))
+
+(prove-lemma dual-eval-2-primp (rewrite)
+  (implies (primp name)
+           (equal (dual-eval 2 name args state netlist)
+                  (dual-apply-state name args state)))
+  ((enable dual-eval)))
+
+(prove-lemma s-approx-implies-b-approx (rewrite)
+  ;; geez, total functions are something
+  (implies (s-approx x y)
+           (b-approx x y))
+  ((enable b-approx)))
+
+(prove-lemma f-buf-type-set (rewrite)
+  (or (truep (f-buf x))
+      (falsep (f-buf x))
+      (xp (f-buf x)))
+  ((enable f-buf boolp)))
+
+(prove-lemma fourp-f-buf (rewrite)
+  (fourp (f-buf x)))
+
+(prove-lemma fourp-f-if (rewrite)
+  (fourp (f-if x y z))
+  ((enable f-if)
+   ;; @@##
+   (disable f-if-rewrite)))
+
+(prove-lemma fourp-implies-s-approx-is-b-approx (rewrite)
+  (implies (and (fourp x)
+                (fourp y)
+                (b-approx x y))
+           (equal (s-approx x y)
+                  t)))
+
+;;;   >(mapcar 'car common-lisp-primp-database)
+;;;   (AO2 AO4 AO6 AO7 B-AND B-AND3 B-AND4 B-EQUV B-EQUV3 B-IF B-NAND
+;;;                ; B1I deleted from primp-database (aes)
+;;;        B-NAND3 B-NAND4 B-NAND5 B-NAND6 B-NAND8 B-NBUF B-NOR B-NOR3 B-NOR4
+;;;        B-NOR5 B-NOR6 B-NOR8 B-NOT B-NOT-B4IP B-NOT-IVAP B-OR B-OR3 B-OR4
+;;;        B-XOR B-XOR3 DEL2 DEL4 DEL10 PROCMON DP-RAM-16X32 FD1 FD1S FD1SP
+;;;        FD1SLP ID LS-NAND3 LS-BUF10 MEM-32X32 T-BUF T-WIRE PULLUP
+;;;        TTL-BIDIRECT TTL-CLK-INPUT TTL-INPUT TTL-OUTPUT
+;;;        TTL-OUTPUT-PARAMETRIC TTL-OUTPUT-FAST TTL-TRI-OUTPUT
+;;;        TTL-TRI-OUTPUT-FAST VDD VDD-PARAMETRIC VSS)
+;;;   
+;;;   >
+
+
+;; B1I was deleted from the following because it is no longer in the
+;; primp-database. (aes)
+(prove-primitive-monotonicity
+ (AO2 AO4 AO6 AO7 B-AND B-AND3 B-AND4 B-EQUV B-EQUV3 B-IF B-NAND 
+      B-NAND3 B-NAND4 B-NAND5 B-NAND6 B-NAND8 B-NBUF B-NOR B-NOR3 B-NOR4
+      B-NOR5 B-NOR6 B-NOR8 B-NOT B-NOT-B4IP B-NOT-IVAP B-OR B-OR3 B-OR4
+      B-XOR B-XOR3 DEL2 DEL4 DEL10 PROCMON
+
+      FD1 FD1S FD1SP
+      FD1SLP ID
+      ;; @@## LS-NAND3 LS-BUF10
+
+      RAM-ENABLE-CIRCUIT T-BUF T-WIRE PULLUP
+      TTL-BIDIRECT TTL-CLK-INPUT TTL-INPUT TTL-OUTPUT
+      TTL-OUTPUT-PARAMETRIC TTL-OUTPUT-FAST TTL-TRI-OUTPUT
+      TTL-TRI-OUTPUT-FAST VDD VDD-PARAMETRIC VSS))
+
+; Notice that we do NOT have above:
+; (prove-primitive-monotonicity (DP-RAM-16X32))
+; (prove-primitive-monotonicity mem-32x32)
+
+
+;; B1I-monotone was deleted from the following because B1I is no longer
+;; in the primp-database. (aes)
+(deftheory primitives-monotone
+  (AO2-monotone
+   AO4-monotone AO6-monotone AO7-monotone B-AND-monotone
+   B-AND3-monotone B-AND4-monotone B-EQUV-monotone B-EQUV3-monotone
+   B-IF-monotone B-NAND-monotone
+   B-NAND3-monotone B-NAND4-monotone B-NAND5-monotone
+   B-NAND6-monotone B-NAND8-monotone B-NBUF-monotone B-NOR-monotone
+   B-NOR3-monotone B-NOR4-monotone
+   B-NOR5-monotone B-NOR6-monotone B-NOR8-monotone B-NOT-monotone
+   B-NOT-B4IP-monotone B-NOT-IVAP-monotone B-OR-monotone
+   B-OR3-monotone B-OR4-monotone
+   B-XOR-monotone B-XOR3-monotone DEL2-monotone
+   DEL4-monotone DEL10-monotone PROCMON-monotone
+   FD1-monotone FD1S-monotone FD1SP-monotone
+   FD1SLP-monotone ID-monotone
+   ;;; @@##  LS-NAND3-monotone LS-BUF10-monotone
+   RAM-ENABLE-CIRCUIT-monotone
+   T-BUF-monotone T-WIRE-monotone PULLUP-monotone
+   TTL-BIDIRECT-monotone TTL-CLK-INPUT-monotone
+   TTL-INPUT-monotone TTL-OUTPUT-monotone
+   TTL-OUTPUT-PARAMETRIC-monotone TTL-OUTPUT-FAST-monotone
+   TTL-TRI-OUTPUT-monotone
+   TTL-TRI-OUTPUT-FAST-monotone VDD-monotone
+   VDD-PARAMETRIC-monotone VSS-monotone))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;         MONOTONICITY LEMMA for the RAM           ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; This part of the proof seemed to take close to a couple of weeks!
+;; All the rest put together was only about 3 days.  The goal is
+;; to prove the equivalent of (prove-primitive-monotonicity (DP-RAM-16X32)).
+
+(prove-lemma bvp-rev1 (rewrite)
+  (implies (and (bvp x) (bvp acc))
+           (bvp (rev1 x acc)))
+  ((enable bvp rev1)))
+
+(prove-lemma bvp-reverse (rewrite)
+  (implies (bvp x)
+           (bvp (reverse x)))
+  ((enable reverse)))
+
+(prove-lemma v-approx-bvp (rewrite)
+  (implies (bvp x)
+           (equal (v-approx x y)
+                  (equal x y)))
+  ((enable b-knownp b-approx)))
+
+(defn read-mem1-monotone-induction (v-addr mem1 mem2)
+  (cond ((or (stubp mem1) (stubp mem2) (nlistp v-addr)
+             (nlistp mem1) (nlistp mem2))
+         t)
+        ((car v-addr)
+         (read-mem1-monotone-induction (cdr v-addr) (cdr mem1) (cdr mem2)))
+        (t (read-mem1-monotone-induction (cdr v-addr) (car mem1) (car mem2)))))
+
+(prove-lemma read-mem1-monotone (rewrite)
+  (implies (and (bvp v-addr)
+                (s-approx mem1 mem2))
+           (v-approx (read-mem1 v-addr mem1)
+                     (read-mem1 v-addr mem2)))
+  ((enable read-mem1)
+   (induct (read-mem1-monotone-induction v-addr mem1 mem2))))
+
+(prove-lemma bvp-implies-v-knownp (rewrite)
+  (implies (bvp x)
+           (v-knownp x))
+  ((enable bvp v-knownp boolp)))
+
+(prove-lemma v-approx-x-x (rewrite)
+             (v-approx x x)
+             ((enable b-approx)))
+
+(prove-lemma v-approx-implies-b-approx-nth (rewrite)
+  (implies (and (equal (nth n x) c)
+                (not (equal (nth n y) c))
+                (b-knownp c))
+           (not (v-approx x y)))
+  ((enable b-approx b-knownp nth)))
+
+(enable *1*b-knownp)
+
+(prove-lemma v-approx-implies-subranges-equal (rewrite)
+  (implies (and (v-approx x y)
+                (bvp (subrange x i j)))
+           (equal (subrange x i j)
+                  (subrange y i j)))
+  ((enable subrange bvp boolp b-approx b-knownp)))
+
+(prove-lemma v-approx-bvp-subrange (rewrite)
+  (implies (and (v-approx a1 a2)
+                (bvp (subrange a1 i j)))
+           (bvp (subrange a2 i j)))
+  ((enable subrange bvp boolp b-approx b-knownp)))
+
+(prove-lemma v-approx-make-list-x (rewrite)
+  (implies (and (equal (length y) bits)
+                (properp y))
+           (v-approx (make-list bits (x))
+                     y))
+  ((enable make-list b-approx b-knownp)
+   (induct (nth bits y))))
+
+(prove-lemma read-mem-monotone (rewrite)
+  (implies (and (bvp v-addr)
+                (s-approx mem1 mem2))
+           (v-approx (read-mem v-addr mem1)
+                     (read-mem v-addr mem2)))
+  ((enable read-mem)))
+
+(prove-lemma equal-length-read-mem1 (rewrite)
+  (implies (s-approx s1 s2)
+           (equal (equal (length (read-mem1 a s2))
+                         (length (read-mem1 a s1)))
+                  t))
+  ((enable read-mem1)))
+
+(prove-lemma equal-length-read-mem (rewrite)
+  (implies (s-approx s1 s2)
+           (equal (equal (length (read-mem a s2))
+                         (length (read-mem a s1)))
+                  t))
+  ((enable read-mem)))
+
+(prove-lemma s-approx-implies-properp-read-mem1 (rewrite)
+  (implies (and (s-approx s1 s2)
+                (properp (read-mem1 a s1)))
+           (properp (read-mem1 a s2)))
+  ((enable read-mem1)))
+
+(prove-lemma s-approx-implies-properp-read-mem (rewrite)
+  (implies (and (s-approx s1 s2)
+                (properp (read-mem a s1)))
+           (properp (read-mem a s2)))
+  ((enable read-mem)))
+
+(prove-lemma dual-port-ram-value-monotone (rewrite)
+  (implies
+   (and (numberp address-lines)         ; just to get rid of the need to show 
+        (s-approx s1 s2)                ; subrange is same on all zerops.
+        (v-approx a1 a2))
+   (v-approx (dual-port-ram-value bits address-lines a1 s1)
+             (dual-port-ram-value bits address-lines a2 s2))))
+
+(prove-lemma eval$-append (rewrite)
+  (implies (and (litatom x)
+                (member x lst))
+           (equal (eval$ t x (append (pairlist lst y) z))
+                  (eval$ t x (pairlist lst y))))
+  ((induct (pairlist lst y))))
+
+(prove-lemma eval$-pairlist-cons (rewrite)
+  (implies (litatom x)
+           (equal (eval$ t x (pairlist (cons c lst) y))
+                  (if (equal x c)
+                      (car y)
+                    (eval$ t x (pairlist lst (cdr y)))))))
+
+(prove-lemma eval$-append-2 (rewrite)
+  (implies (and (litatom x)
+                (not (member x lst)))
+           (equal (eval$ t x (append (pairlist lst y) z))
+                  (eval$ t x z)))
+  ((induct (pairlist lst y))))
+
+(prove-lemma dual-apply-value-dp-ram-16x32-lemma-1 (rewrite)
+  (equal (dual-apply-value 'dp-ram-16x32 a s)
+         (eval$ t
+                (cdr (lookup-module 'results
+                                    (cdr (primp 'dp-ram-16x32))))
+                (append (pairlist (cdr (lookup-module
+                                        'inputs
+                                        (cdr (primp 'dp-ram-16x32))))
+                                  a)
+                        (pairstates (cdr (lookup-module
+                                          'states
+                                          (cdr (primp 'dp-ram-16x32))))
+                                    s))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable dual-apply-value primp2 primp-lookup)))
+
+;; Note:  ground-zero is NOT enabled in the following "opening up" lemma
+;; (see monotonicity-macros.lisp for its statement), but IS enabled in the
+;; lemma after that.  My recollection is that they couldn't be combined without
+;; things blowing up.
+(prove-dual-apply-value-or-state-dp-ram-16x32-lemma-2 value)
+
+(prove-lemma dual-apply-value-dp-ram-16x32-lemma-3 (rewrite)
+  (equal (dual-apply-value 'dp-ram-16x32 a s)
+         (dual-port-ram-value
+          32 4
+          (list (car a)
+                (cadr a)
+                (caddr a)
+                (cadddr a)
+                (caddddr a)
+                (cadddddr a)
+                (caddddddr a)
+                (cadddddddr a)
+                (caddddddddr a)
+                (cadddddddddr a)
+                (caddddddddddr a)
+                (cadddddddddddr a)
+                (caddddddddddddr a)
+                (cadddddddddddddr a)
+                (caddddddddddddddr a)
+                (cadddddddddddddddr a)
+                (caddddddddddddddddr a)
+                (cadddddddddddddddddr a)
+                (caddddddddddddddddddr a)
+                (cadddddddddddddddddddr a)
+                (caddddddddddddddddddddr a)
+                (cadddddddddddddddddddddr a)
+                (caddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddddddddr a))
+          s))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable eval$-append eval$-append-2 eval$-pairlist-cons
+           pairstates dual-apply-value-dp-ram-16x32-lemma-2)
+   (disable pairlist append)))
+
+(defn dual-port-ram-value-body (bits a-address b-address wen state)
+  (if (or (not (bvp a-address))
+          (and (not (equal wen t))
+               (or (not (bvp b-address))
+                   (equal a-address b-address))))
+      (make-list bits (x))
+    (let ((val (read-mem a-address state)))
+      (if (and (properp val)
+               (equal (length val) bits))
+          val
+        (make-list bits (x))))))
+
+(prove-lemma dual-port-ram-value-is-dual-port-ram-value-body (rewrite)
+  (let ((a-address (subrange args 0 (sub1 address-lines)))
+        (b-address (subrange args address-lines
+                             (sub1 (times 2 address-lines))))
+        (wen (nth (times 2 address-lines) args)))
+    (equal (dual-port-ram-value bits address-lines args state)
+           (dual-port-ram-value-body bits a-address b-address wen state)))
+  ((disable-theory t)
+   (enable dual-port-ram-value dual-port-ram-value-body)))
+
+(prove-lemma dual-apply-value-dp-ram-16x32 (rewrite)
+  (equal (dual-apply-value 'dp-ram-16x32 a s)
+         (dual-port-ram-value 32 4 a s))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable dual-apply-value-dp-ram-16x32-lemma-3
+           dual-port-ram-value-is-dual-port-ram-value-body
+           open-subrange open-nth)))
+
+(prove-lemma dp-ram-16x32-monotone-value (rewrite)
+             (monotonicity-property 0 'dp-ram-16x32 netlist a1 a2 s1 s2)
+             ((disable-theory t)
+              (enable-theory ground-zero)
+              (enable *1*primp monotonicity-property
+                      monotonicity-property-opener-0
+                      dual-eval-0-primp dual-port-ram-value-monotone
+                      dual-apply-value-dp-ram-16x32)))
+
+;; This concludes the ``value'' half of the RAM's monotonicity lemma.
+;; We move on to the ``state'' half.
+
+(disable v-knownp)
+(disable s-knownp-implies-s-approx-is-equal)
+(disable bvp)
+(disable fourp-implies-s-approx-is-b-approx)
+(disable v-approx)
+(disable s-knownp)
+
+
+(prove-lemma s-approx-opener (rewrite)
+  (and (implies (or (listp s1) (listp s2))
+                (equal (s-approx s1 s2)
+                       (if (listp s1)
+                           (if (listp s2)
+                               (and (s-approx (car s1) (car s2))
+                                    (s-approx (cdr s1) (cdr s2)))
+                             f)
+                         f)))
+       ;; add case for empty list (aes 31-Mar-92)
+       (implies (or (equal s1 nil) (equal s2 nil))
+                (equal (s-approx s1 s2)
+                       (equal s1 s2)))
+       (implies (or (ramp s1) (ramp s2))
+                (equal (s-approx s1 s2)
+                       (if (ramp s1)
+                           (if (ramp s2)
+                               (v-approx (ram-guts s1) (ram-guts s2))
+                             f)
+                         f)))
+       (implies (or (romp s1) (romp s2))
+                (equal (s-approx s1 s2)
+                       (if (romp s1)
+                           (if (romp s2)
+                               (v-approx (rom-guts s1) (rom-guts s2))
+                             f)
+                         f)))
+       (implies (or (stubp s1) (stubp s2))
+                (equal (s-approx s1 s2)
+                       (if (stubp s1)
+                           (if (stubp s2)
+                               (v-approx (stub-guts s1) (stub-guts s2))
+                             f)
+                         f)))
+       (implies (not (or (listp s1) (listp s2)
+                         ;; add case for empty list (aes 31-Mar-92)
+                         (equal s1 nil) (equal s2 nil)
+                         (ramp s1) (ramp s2)
+                         (romp s1) (romp s2)
+                         (stubp s1) (stubp s2)))
+                ;; In the final case, we view s1 and s2 as values in
+                ;; four-valued logic, where any "wrong" value is simply viewed
+                ;; as (X).
+                (equal (s-approx s1 s2)
+                       (b-approx s1 s2))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (expand (s-approx s1 s2)
+           (s-approx nil s2)
+           (s-approx nil nil)
+           (s-approx s1 nil))))
+
+(disable s-approx)
+
+(disable *1*mem-width)
+(disable mem-width)
+
+(prove-lemma v-approx-implies-nth-does-not-go-from-f-to-t (rewrite)
+  (implies (and (not (nth n a1))
+                (nth n a2))
+           (not (v-approx a1 a2)))
+  ((enable nth v-approx b-approx)))
+
+(prove-lemma write-mem1-opener (rewrite)
+  (and (implies (stubp mem)
+                (equal (write-mem1 v-addr mem value) mem))
+       (implies (nlistp v-addr)
+                (equal (write-mem1 v-addr mem value)
+                       (if (ramp mem) (ram value) mem)))
+       (implies (and (listp v-addr) (nlistp mem))
+                (equal (write-mem1 v-addr mem value)
+                       mem))
+       (implies (and (listp mem) (listp v-addr) (car v-addr))
+                (equal (write-mem1 v-addr mem value)
+                       (cons (car mem)
+                             (write-mem1 (cdr v-addr)
+                                         (cdr mem)
+                                         value))))
+       (implies (and (listp mem) (listp v-addr) (not (car v-addr)))
+                (equal (write-mem1 v-addr mem value)
+                       (cons (write-mem1 (cdr v-addr)
+                                         (car mem)
+                                         value)
+                             (cdr mem)))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (expand (write-mem1 v-addr mem value))))
+
+(defn write-mem1-monotone-induction (v-addr mem1 mem2)
+  (cond ((or (stubp mem1) (stubp mem2))
+         t)
+        ((nlistp v-addr)
+         t)
+        ((or (nlistp mem1) (nlistp mem2))
+         t)
+        ((car v-addr)
+         (write-mem1-monotone-induction
+          (cdr v-addr) (cdr mem1) (cdr mem2)))
+        (t (write-mem1-monotone-induction
+            (cdr v-addr) (car mem1) (car mem2)))))
+
+(prove-lemma write-mem1-monotone (rewrite)
+  (implies (and (s-approx mem1 mem2)
+                (v-approx data1 data2)
+                (properp data1)
+                (properp data2)
+                (equal (length data1) (mem-width))
+                (equal (length data2) (mem-width)))
+           (s-approx (write-mem1 v-addr mem1 data1)
+                     (write-mem1 v-addr mem2 data2)))
+  ((induct (write-mem1-monotone-induction v-addr mem1 mem2))
+   (expand (s-approx mem1 mem2))))
+
+(prove-lemma write-mem-monotone (rewrite)
+  (implies (and (s-approx mem1 mem2)
+                (v-approx data1 data2)
+                (properp data1)
+                (properp data2)
+                (equal (length data1) (mem-width))
+                (equal (length data2) (mem-width)))
+           (s-approx (write-mem v-addr mem1 data1)
+                     (write-mem v-addr mem2 data2)))
+  ((enable write-mem)))
+
+(prove-lemma v-approx-length (rewrite)
+  (implies (v-approx v1 v2)
+           (not (lessp (length v1) (length v2))))
+  ((enable v-approx length b-approx)))
+
+(defn write-mem1-double-induction (v-addr mem1 mem2)
+  (if (or (stubp mem1) (stubp mem2))
+      t
+    (if (nlistp v-addr)
+        t
+      (if (or (nlistp mem1) (nlistp mem2))
+          t
+        (if (car v-addr)
+            (write-mem1-double-induction
+             (cdr v-addr) (cdr mem1) (cdr mem2))
+          (write-mem1-double-induction
+           (cdr v-addr) (car mem1) (car mem2)))))))
+
+(prove-lemma s-approx-write-mem1-id (rewrite)
+  (implies (and (s-approx s1 s2)
+                ;(good-s s1)
+                (good-s s2)
+                )
+           (s-approx (write-mem1 v-addr
+                                s1
+                                (make-list (mem-width) (x)))
+                     s2))
+  ((induct (write-mem1-double-induction v-addr s1 s2))
+   (expand (s-approx s1 s2))))
+
+(prove-lemma s-approx-write-mem-id (rewrite)
+  (implies (and (good-s s2)
+                (s-approx s1 s2))
+           (s-approx (write-mem v-addr
+                                s1
+                                (make-list (mem-width) (x)))
+                     s2))
+  ((enable write-mem)))
+
+(prove-lemma s-approx-constant-ram-x-id (rewrite)
+  (implies (and (good-s s2)
+                (s-approx s1 s2))
+           (s-approx (constant-ram s1
+                                   (make-list (mem-width) (x)))
+                     s2))
+  ((enable constant-ram)
+   (induct (s-approx s1 s2))))
+
+(prove-lemma s-approx-constant-ram-x-constant-ram-x (rewrite)
+  (implies (s-approx s1 s2)
+           (s-approx (constant-ram s1
+                                   (make-list (mem-width) (x)))
+                     (constant-ram s2
+                                   (make-list (mem-width) (x)))))
+  ((enable constant-ram)
+   (induct (s-approx s1 s2))))
+
+(prove-lemma v-approx-preserves-length (rewrite)
+  (implies (v-approx a1 a2)
+           (equal (length a1) (length a2)))
+  ((enable v-approx length)))
+
+(prove-lemma v-approx-subrange (rewrite)
+  (implies (v-approx a1 a2)
+           (v-approx (subrange a1 i j)
+                     (subrange a2 i j)))
+  ((enable v-approx b-approx subrange)))
+
+(prove-lemma mem-width-non-zero (rewrite)
+  (not (equal (mem-width) 0))
+  ((enable *1*mem-width)))
+
+;; The following wouldn't be necessary if we could just enable
+;; things at the goal level -- I only want to enable these two
+;; (in the hint below) for case 3.
+
+(prove-lemma s-approx-constant-ram-x-write-mem1-case-3 (rewrite)
+  (implies (and (not (stubp s1))
+                (not (stubp s2))
+                (listp v-addr)
+                (not (listp s1))
+                (s-approx s1 s2)
+                (properp v)
+                (equal (length v) (mem-width))
+                (not (ramp s1)))
+           (s-approx s1
+                     (write-mem1 v-addr s2 v)))
+  ((enable write-mem1 s-approx)))
+
+(prove-lemma s-approx-constant-ram-x-write-mem1 (rewrite)
+  (implies (and (s-approx s1 s2)
+                (properp v)
+                (equal (length v) (mem-width))
+                (good-s s2))
+           (s-approx (constant-ram s1
+                                   (make-list (mem-width) (x)))
+                     (write-mem1 v-addr s2 v)))
+  ((enable constant-ram)
+   (induct (write-mem1-double-induction v-addr s1 s2))))
+
+(prove-lemma s-approx-constant-ram-x-write-mem (rewrite)
+  (implies (and (s-approx s1 s2)
+                (properp v)
+                (equal (length v) (mem-width))
+                (good-s s2))
+           (s-approx (constant-ram s1
+                                   (make-list (mem-width) (x)))
+                     (write-mem v-addr s2 v)))
+  ((enable write-mem)))
+
+(prove-lemma v-approx-preserves-properp (rewrite)
+  (implies (not (iff (properp v1) (properp v2)))
+           (not (v-approx v1 v2)))
+  ((enable properp v-approx)))
+
+;; Here's something silly, needed because mem-width is disabled below.
+(prove-lemma mem-width-linear-facts (rewrite)
+  (and (lessp 31 (mem-width))
+       (lessp (mem-width) 33))
+  ((enable *1*mem-width)))
+
+;; A main goal!
+
+(prove-lemma dual-port-ram-state-monotone nil
+  (implies
+   (and (s-approx s1 s2)
+        (good-s s2)
+        (v-approx a1 a2))
+   (s-approx (dual-port-ram-state (mem-width) 4 a1 s1)
+             (dual-port-ram-state (mem-width) 4 a2 s2))))
+
+(prove-lemma dual-port-ram-state-monotone-rewrite (rewrite)
+  (implies
+   (and (s-approx s1 s2)
+        (good-s s2)
+        (v-approx a1 a2))
+   (s-approx (dual-port-ram-state 32 4 a1 s1)
+             (dual-port-ram-state 32 4 a2 s2)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable *1*mem-width)
+   (use (dual-port-ram-state-monotone))))
+
+;; The lemmas now leading up to DUAL-APPLY-STATE-DP-RAM-16X32 are patterned
+;; (without much thought) after the corresponding ones for the value case.
+;; Sort of, anyhow.
+
+(prove-lemma dual-apply-state-dp-ram-16x32-lemma-1 (rewrite)
+  (equal (dual-apply-state 'dp-ram-16x32 a s)
+         (eval$ t
+                (cdr (lookup-module 'new-states
+                                    (cdr (primp 'dp-ram-16x32))))
+                (append (pairlist (cdr (lookup-module
+                                        'inputs
+                                        (cdr (primp 'dp-ram-16x32))))
+                                  a)
+                        (pairstates (cdr (lookup-module
+                                          'states
+                                          (cdr (primp 'dp-ram-16x32))))
+                                    s))))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable dual-apply-state primp2 primp-lookup)))
+
+;; Note:  ground-zero is NOT enabled in the following "opening up" lemma
+;; (see monotonicity-macros.lisp for its statement), but IS enabled in the
+;; lemma after that.  My recollection is that they couldn't be combined without
+;; things blowing up.
+(prove-dual-apply-value-or-state-dp-ram-16x32-lemma-2 state)
+
+(prove-lemma dual-apply-state-dp-ram-16x32-lemma-3 (rewrite)
+  (equal (dual-apply-state 'dp-ram-16x32 a s)
+         (dual-port-ram-state
+          32 4
+          (list (car a)
+                (cadr a)
+                (caddr a)
+                (cadddr a)
+                (caddddr a)
+                (cadddddr a)
+                (caddddddr a)
+                (cadddddddr a)
+                (caddddddddr a)
+                (cadddddddddr a)
+                (caddddddddddr a)
+                (cadddddddddddr a)
+                (caddddddddddddr a)
+                (cadddddddddddddr a)
+                (caddddddddddddddr a)
+                (cadddddddddddddddr a)
+                (caddddddddddddddddr a)
+                (cadddddddddddddddddr a)
+                (caddddddddddddddddddr a)
+                (cadddddddddddddddddddr a)
+                (caddddddddddddddddddddr a)
+                (cadddddddddddddddddddddr a)
+                (caddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddddddr a)
+                (cadddddddddddddddddddddddddddddddddddddddr a)
+                (caddddddddddddddddddddddddddddddddddddddddr a))
+          s))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable eval$-append eval$-append-2 eval$-pairlist-cons
+           pairstates dual-apply-state-dp-ram-16x32-lemma-2)
+   (disable pairlist append)))
+
+(defn dual-port-ram-state-body (bits b-address wen data state)
+  (if (equal wen t)
+      state
+    ;;  There is a potential write.  If the address is unknown, wipe out the
+    ;;  state.
+    (if (not (bvp b-address))
+        ;; omitting the things about the length and properness of args here
+        (constant-ram state (make-list bits (x)))
+      ;;  If WEN is solidly low, update the state with data, otherwise X out
+      ;;  the addressed entry.
+      (if (equal wen f)
+          (write-mem b-address state data)
+        (write-mem b-address state (make-list bits (x)))))))
+
+(prove-lemma dual-port-ram-state-is-dual-port-ram-state-body (rewrite)
+  (let ((b-address (subrange args address-lines
+                             (sub1 (times 2 address-lines))))
+        (wen (nth (times 2 address-lines) args))
+        (data (subrange args
+                        (add1 (times 2 address-lines))
+                        (plus (times 2 address-lines) bits))))
+    (equal (dual-port-ram-state bits address-lines args state)
+           (dual-port-ram-state-body bits b-address wen data state)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable dual-port-ram-state dual-port-ram-state-body)))
+
+(prove-lemma dual-apply-state-dp-ram-16x32 (rewrite)
+  (equal (dual-apply-state 'dp-ram-16x32 a s)
+         (dual-port-ram-state 32 4 a s))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (enable dual-apply-state-dp-ram-16x32-lemma-3
+           dual-port-ram-state-is-dual-port-ram-state-body
+           open-subrange open-nth)))
+
+;;; Here's the state half of the RAM's monotonicity
+(prove-lemma dp-ram-16x32-monotone-state (rewrite)
+  (implies (good-s s2)
+           (monotonicity-property 2 'dp-ram-16x32 netlist a1 a2 s1 s2))
+  ((disable-theory t)
+   (enable dual-port-ram-state-monotone-rewrite
+           dual-apply-state-dp-ram-16x32
+           dual-eval-2-primp
+           monotonicity-property-opener-2
+           and implies *1*primp)))
+
+(prove-lemma dp-ram-16x32-monotone (rewrite)
+  (and (monotonicity-property 0 'dp-ram-16x32 netlist a1 a2 s1 s2)
+       (implies (good-s s2)
+                (monotonicity-property 2 'dp-ram-16x32 netlist a1 a2 s1 s2))))
+
+;; Originally the monotonicity lemma just above was an ADD-AXIOM from
+;; which the rest of the proof followed.  So, we put the enabled/disabled
+;; state back to where it was (at least approximately) before all these events.
+
+(revert-state bvp-rev1)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;         MONOTONICITY FOR ALL PRIMITIVES          ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Here we recognize circuits that do not contain mem-32x32 (or
+;; whatever EXCEPTIONS may be -- i.e. we'll apply it to '(mem-32x32)),
+;; with the recognizer OK-NETLISTP.  Then we prove monotonicity for
+;; all primitives except mem-32x32, which will be important in the
+;; base step of our proof of monotonicty for all cases satisfying
+;; OK-NETLISTP in the next section "MONOTONICITY OF DUAL-EVAL".
+
+(defn ok-netlistp (flag fn netlist exceptions)
+  ;; Here exceptions is a list of "bad" primitive names
+  ;; that we are not allowed to use.  The flag is like
+  ;; in dual-eval: if 0 or 2, then fn is a single module name, else
+  ;; fn is a list of module occurrences.  Actually 0 and 2 behave the
+  ;; same, as do 1 and 3 (see OK-NETLISTP-REDUCTION-REWRITE somewhat
+  ;; below), but it seemed that the proofs were more likely to go
+  ;; through easily if I used the same recursion structure here as is
+  ;; used for dual-eval.
+  (case flag
+        (0 (if (primp fn)
+               (not (member fn exceptions)) 
+             (let ((module (lookup-module fn netlist)))
+               (if (listp module)
+                   (ok-netlistp 1
+                                (module-occurrences module)
+                                (delete-module fn netlist)
+                                exceptions)
+                 f))))
+        (1 (let ((body fn))
+             (if (listp body)
+                 (let ((occurrence (car body)))
+                   (let ((fn (occ-function occurrence)))
+                     (and (ok-netlistp 0 fn netlist exceptions)
+                          (ok-netlistp 1 (cdr body) netlist exceptions))))
+               t)))
+        (2 (if (primp fn)
+               (not (member fn exceptions)) 
+             (let ((module (lookup-module fn netlist)))
+               (if (listp module)
+                   (ok-netlistp 3
+                                (module-occurrences module)
+                                (delete-module fn netlist)
+                                exceptions)
+                 f))))
+        (3 (let ((body fn))
+             (if (listp body)
+                 (let ((occurrence (car body)))
+                   (let ((fn (occ-function occurrence)))
+                     (and (ok-netlistp 2 fn netlist exceptions)
+                          (ok-netlistp 3 (cdr body) netlist exceptions))))
+               t)))
+        (otherwise f))
+
+  ((ord-lessp (cons (add1 (count netlist)) (count fn)))))
+
+(prove-lemma primp-monotone (rewrite)
+  (implies
+   (and (primp fn)
+        (or (equal flag 0)
+            (and (equal flag 2)
+                 (implies (equal fn 'dp-ram-16x32)
+                          (good-s s2))))
+        (not (equal fn 'mem-32x32)))
+   (and (monotonicity-property flag fn netlist a1 a2 s1 s2)
+        (monotonicity-property flag fn netlist a1 a2 s1 s2)))
+  ((disable-theory t)
+   (enable-theory ground-zero primitives-monotone)
+   (enable primp lookup-module *1*primp-database
+           dp-ram-16x32-monotone)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;            MONOTONICITY OF DUAL-EVAL             ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn dual-eval-monotone-induction (flag fn netlist a1 a2 s1 s2)
+  ;; straightforward adaptation of the scheme in dual-eval for
+  ;; pairs of inputs and pairs of states
+  (case flag
+    (0 (if (primp fn)
+           t 
+         (let ((module (lookup-module fn netlist)))
+           (if (listp module)
+               (let ((inputs  (module-inputs module))
+                     (outputs (module-outputs module))
+                     (occurrences (module-occurrences module))
+                     (statenames (module-statenames module)))
+                 (dual-eval-monotone-induction
+                  1
+                  occurrences
+                  (delete-module fn netlist)
+                  (pairlist inputs a1)
+                  (pairlist inputs a2)
+                  (pairstates statenames s1)
+                  (pairstates statenames s2)))
+             t))))
+    (1 (let ((body fn)
+             (occurrence (car fn)))
+         (if (listp body) 
+             (let ((occ-name (occ-name occurrence))
+                   (outputs (occ-outputs occurrence))
+                   (fn (occ-function occurrence))
+                   (inputs (occ-inputs occurrence)))
+               (and
+                (dual-eval-monotone-induction 0
+                                              fn
+                                              netlist
+                                              (collect-value inputs a1)
+                                              (collect-value inputs a2)
+                                              (value occ-name s1)
+                                              (value occ-name s2)) 
+                (dual-eval-monotone-induction
+                 1
+                 (cdr body)
+                 netlist
+                 (append
+                  (pairlist outputs
+                            (dual-eval 0
+                                       fn
+                                       (collect-value inputs a1)
+                                       (value occ-name s1)
+                                       netlist))
+                  a1)
+                 (append
+                  (pairlist outputs
+                            (dual-eval 0
+                                       fn
+                                       (collect-value inputs a2)
+                                       (value occ-name s2)
+                                       netlist))
+                  a2)
+                 s1 s2)))
+           t)))
+    (2 (if (primp fn)
+           t
+         (let ((module (lookup-module fn netlist)))
+           (if (listp module)
+               (let ((inputs  (module-inputs module))
+                     (outputs (module-outputs module))
+                     (occurrences (module-occurrences module))
+                     (statenames (module-statenames module)))
+                 (and (dual-eval-monotone-induction
+                       1
+                       occurrences
+                       (delete-module fn netlist)
+                       (pairlist inputs a1)
+                       (pairlist inputs a2)
+                       (pairstates statenames s1)
+                       (pairstates statenames s2))
+                      (dual-eval-monotone-induction
+                       3
+                       occurrences
+                       (delete-module fn netlist)
+                       (dual-eval 1
+                                  occurrences
+                                  (pairlist inputs a1)
+                                  (pairstates statenames s1)
+                                  (delete-module fn netlist))
+                       (dual-eval 1
+                                  occurrences
+                                  (pairlist inputs a2)
+                                  (pairstates statenames s2)
+                                  (delete-module fn netlist))
+                       (pairstates statenames s1)
+                       (pairstates statenames s2))))
+             t))))
+    (3 (let ((body fn))
+         (if (listp body)
+             (let ((occurrence (car body)))
+               (let ((occ-name (occ-name occurrence))
+                     (outputs (occ-outputs occurrence))
+                     (fn (occ-function occurrence))
+                     (inputs (occ-inputs occurrence)))
+                 (and (dual-eval-monotone-induction
+                       2
+                       fn
+                       netlist
+                       (collect-value inputs a1)
+                       (collect-value inputs a2)
+                       (value occ-name s1)
+                       (value occ-name s2))
+                      (dual-eval-monotone-induction
+                       3
+                       (cdr body)
+                       netlist
+                       a1 a2 s1 s2))))
+           t))) 
+    (otherwise t))
+  ((ord-lessp (cons (add1 (count netlist)) (count fn)))))
+
+(enable v-approx-x-x)
+
+(prove-lemma v-approx-alist-implies-b-approx-value (rewrite)
+  (implies (and (alistp alist1)
+                (alistp alist2)
+                (v-approx-alist alist1 alist2))
+           (b-approx (value x alist1)
+                     (value x alist2)))
+  ((enable value alistp)))
+
+(prove-lemma alistp-pairlist (rewrite)
+  (alistp (pairlist x y))
+  ((enable alistp pairlist)))
+
+(prove-lemma alistp-append (rewrite)
+  (implies (alistp x)
+           (equal (alistp (append x y))
+                  (alistp y)))
+  ((enable alistp)))
+
+(prove-lemma alistp-dual-eval-1 (rewrite)
+  (implies (and (alistp bindings)
+                ;; Silly statement is for induction heuristics,
+                ;; though maybe that approach isn't necessary.
+                (equal flag 1))
+           (alistp (dual-eval flag
+                              occurrences
+                              bindings
+                              state-bindints
+                              netlist)))
+  ((induct (dual-eval flag
+                      occurrences
+                      bindings
+                      state-bindints
+                      netlist))))
+
+(prove-lemma v-approx-alist-implies-v-approx-collect-value (rewrite)
+  (implies (and (alistp alist1)
+                (alistp alist2)
+                (v-approx-alist alist1 alist2))
+           (v-approx (collect-value x alist1)
+                     (collect-value x alist2)))
+  ((enable collect-value)))
+
+(defn s-approx-list (x y)
+  (if (listp x)
+      (and (listp y)
+           (s-approx (car x) (car y))
+           (s-approx-list (cdr x) (cdr y)))
+    (nlistp y)))
+
+(prove-lemma s-approx-list-implies-s-approx-alist (rewrite)
+  (implies (s-approx-list s1 s2)
+           (s-approx-alist (pairlist x s1)
+                           (pairlist x s2)))
+  ((enable pairlist)))
+
+(prove-lemma v-approx-implies-v-approx-alist (rewrite)
+  (implies (v-approx v1 v2)
+           (v-approx-alist (pairlist x v1)
+                           (pairlist x v2)))
+  ((enable pairlist)))
+
+(prove-lemma alistp-opener (rewrite)
+  (equal (alistp (cons a z))
+         (and (listp a)
+              (alistp z)))
+  ((enable alistp)))
+
+(prove-lemma s-approx-alist-implies-s-approx-value (rewrite)
+  (implies (and (s-approx-alist s1 s2)
+                (alistp s1)
+                (alistp s2))
+           (s-approx (value w s1)
+                     (value w s2)))
+  ((enable value alistp)))
+
+(prove-lemma v-approx-alist-append (rewrite)
+  (implies (and (v-approx-alist a c)
+                (v-approx-alist b d))
+           (v-approx-alist (append a b) (append c d))))
+
+(defn double-cdr-induction (x y)
+  (if (and (listp x) (listp y))
+      (double-cdr-induction (cdr x) (cdr y))
+    t))
+
+(prove-lemma s-approx-alist-implies-s-approx-list-collect-value (rewrite)
+  (implies (and (s-approx-alist x y)
+                (alistp x)
+                (alistp y))
+           (s-approx-list (collect-value a x) (collect-value a y)))
+  ((enable collect-value value)))
+
+(prove-lemma alistp-dual-eval-3 (rewrite)
+  (implies (and (alistp state-bindings)
+                ;; Silly statement is for induction heuristics,
+                ;; though maybe that approach isn't necessary.
+                (equal flag 3))
+           (alistp (dual-eval flag
+                              occurrences
+                              bindings
+                              state-bindings
+                              netlist)))
+  ((induct (dual-eval flag
+                      occurrences
+                      bindings
+                      state-bindings
+                      netlist))))
+
+(prove-lemma s-approx-implies-s-approx-alist (rewrite)
+  (implies (s-approx s1 s2)
+           (s-approx-alist (pairlist x s1)
+                           (pairlist x s2)))
+  ((enable pairlist)))
+
+;; The lemma above and the one below may either supersede,
+;; subsume, or be subsumed by, corresponding lemmas about
+;; s-approx-list -- or so I thought at some point.
+
+(prove-lemma s-approx-alist-implies-s-approx-collect-value (rewrite)
+  (implies (and (s-approx-alist x y)
+                (alistp x)
+                (alistp y))
+           (s-approx (collect-value a x) (collect-value a y)))
+  ((enable collect-value value)))
+
+(prove-lemma ok-netlistp-reduction ()
+  ;; The next lemma OK-NETLISTP-REDUCTION-REWRITE is the one
+  ;; we actually want, but it's stated this way first for
+  ;; the purpose of convenient proof by induction.
+  (implies (or (equal flag 2) (equal flag 3))
+           (equal (ok-netlistp flag fn netlist exceptions)
+                  (if (equal flag 2)
+                      (ok-netlistp 0 fn netlist exceptions)
+                    (ok-netlistp 1 fn netlist exceptions)))))
+
+(prove-lemma ok-netlistp-reduction-rewrite (rewrite)
+  (and (equal (ok-netlistp 2 fn netlist exceptions)
+              (ok-netlistp 0 fn netlist exceptions))
+       (equal (ok-netlistp 3 fn netlist exceptions)
+              (ok-netlistp 1 fn netlist exceptions)))
+  ((disable-theory t)
+   (enable-theory ground-zero)
+   (use (ok-netlistp-reduction (flag 2))
+        (ok-netlistp-reduction (flag 3)))))
+
+(prove-lemma dual-eval-monotone-no-ram (rewrite)
+  (implies (ok-netlistp flag fn netlist '(mem-32x32 dp-ram-16x32))
+           (monotonicity-property flag fn netlist a1 a2 s1 s2))
+  ((induct (dual-eval-monotone-induction flag fn netlist a1 a2 s1 s2))
+   (enable monotonicity-property)
+   ;;; @@##
+   (disable MEMBER-NON-LIST DUAL-EVAL-0-PRIMP)))
+
+(defn good-s-alist (x)
+  (if (listp x)
+      (and (listp (car x))
+           (good-s (cdar x))
+           (good-s-alist (cdr x)))
+    (equal x nil)))
+
+(prove-lemma good-s-alist-pairlist (rewrite)
+  (implies (good-s s)
+           (good-s-alist (pairlist x s)))
+  ((enable pairlist)))
+
+(prove-lemma good-s-value (rewrite)
+  (implies (good-s-alist x)
+           (good-s (value w x)))
+  ((enable value)))
+
+(prove-lemma dual-eval-monotone (rewrite)
+  (implies (ok-netlistp flag fn netlist '(mem-32x32))
+           (implies (if (or (equal flag 0) (equal flag 2))
+                        (good-s s2)
+                      (good-s-alist s2))
+                    (monotonicity-property flag fn netlist a1 a2 s1 s2)))
+  ((induct (dual-eval-monotone-induction flag fn netlist a1 a2 s1 s2))
+   (enable monotonicity-property)
+   ;;; @@##
+   (disable MEMBER-NON-LIST DUAL-EVAL-0-PRIMP)))
+
+(prove-lemma good-s-collect-value (rewrite)
+  (implies (good-s-alist s)
+           (good-s (collect-value keys s)))
+  ((enable collect-value value)))
+
+(prove-lemma f-buf-preserves-good-s (rewrite)
+  (good-s (f-buf x))
+  ((enable f-buf boolp)))
+
+(prove-lemma f-if-preserves-good-s (rewrite)
+  (good-s (f-if x y z))
+  ((enable f-if boolp)))
+
+(prove-lemma good-s-0 (rewrite)
+  (good-s 0)
+  ((enable *1*good-s)))
+
+(prove-primitive-preserves-good-s
+ (AO2 AO4 AO6 AO7 B-AND B-AND3 B-AND4 B-EQUV B-EQUV3 B-IF B-NAND 
+      B-NAND3 B-NAND4 B-NAND5 B-NAND6 B-NAND8 B-NBUF B-NOR B-NOR3 B-NOR4
+      B-NOR5 B-NOR6 B-NOR8 B-NOT B-NOT-B4IP B-NOT-IVAP B-OR B-OR3 B-OR4
+      B-XOR B-XOR3 DEL2 DEL4 DEL10 PROCMON
+
+      FD1 FD1S FD1SP
+      FD1SLP ID
+      ;; @@## LS-NAND3 LS-BUF10
+
+      RAM-ENABLE-CIRCUIT T-BUF T-WIRE PULLUP
+      TTL-BIDIRECT TTL-CLK-INPUT TTL-INPUT TTL-OUTPUT
+      TTL-OUTPUT-PARAMETRIC TTL-OUTPUT-FAST TTL-TRI-OUTPUT
+      TTL-TRI-OUTPUT-FAST VDD VDD-PARAMETRIC VSS))
+
+(prove-lemma good-s-constant-ram (rewrite)
+  (implies (good-s s)
+           (good-s (constant-ram s (make-list 32 (x)))))
+  ((enable constant-ram)))
+
+(prove-lemma good-s-write-mem-1 (rewrite)
+  (implies (and (good-s s)
+                (properp value)
+                (equal (length value) 32))
+           (good-s (write-mem1 v-addr s value)))
+  ((enable write-mem1)))
+
+(prove-lemma good-s-write-mem (rewrite)
+  (implies (and (good-s s)
+                (properp value)
+                (equal (length value) 32))
+           (good-s (write-mem v-addr s value)))
+  ((enable write-mem)))
+
+(PROVE-LEMMA DP-RAM-16X32-PRESERVES-GOOD-S
+             (REWRITE)
+             (IMPLIES (GOOD-S S)
+                      (GOOD-S (DUAL-APPLY-STATE 'DP-RAM-16X32
+                                                ARGS S)))
+             ((DISABLE-THEORY T)
+              (ENABLE-THEORY GROUND-ZERO)
+              (ENABLE *1*B-APPROX *1*V-APPROX *1*S-APPROX V-APPROX
+                      good-s-constant-ram good-s-write-mem
+                      length-subrange properp-subrange properp-make-list
+                      length-make-list
+                      DUAL-APPLY-STATE *1*PRIMP2 F-BUF-PRESERVES-GOOD-S
+                      F-IF-PRESERVES-GOOD-S GOOD-S-0
+                      dual-apply-state-dp-ram-16x32
+                      DUAL-PORT-RAM-STATE
+                      )))
+
+(deftheory good-s-primitives-theory
+  (AO2-preserves-good-s
+   AO4-preserves-good-s AO6-preserves-good-s AO7-preserves-good-s
+   B-AND-preserves-good-s
+   B-AND3-preserves-good-s B-AND4-preserves-good-s B-EQUV-preserves-good-s
+   B-EQUV3-preserves-good-s
+   B-IF-preserves-good-s B-NAND-preserves-good-s
+   B-NAND3-preserves-good-s B-NAND4-preserves-good-s B-NAND5-preserves-good-s
+   B-NAND6-preserves-good-s B-NAND8-preserves-good-s B-NBUF-preserves-good-s
+   B-NOR-preserves-good-s
+   B-NOR3-preserves-good-s B-NOR4-preserves-good-s
+   B-NOR5-preserves-good-s B-NOR6-preserves-good-s B-NOR8-preserves-good-s
+   B-NOT-preserves-good-s
+   B-NOT-B4IP-preserves-good-s B-NOT-IVAP-preserves-good-s
+   B-OR-preserves-good-s
+   B-OR3-preserves-good-s B-OR4-preserves-good-s
+   B-XOR-preserves-good-s B-XOR3-preserves-good-s DEL2-preserves-good-s
+   DEL4-preserves-good-s DEL10-preserves-good-s PROCMON-preserves-good-s
+   FD1-preserves-good-s FD1S-preserves-good-s FD1SP-preserves-good-s
+   FD1SLP-preserves-good-s ID-preserves-good-s
+   ;;; @@##  LS-NAND3-preserves-good-s LS-BUF10-preserves-good-s
+   RAM-ENABLE-CIRCUIT-preserves-good-s
+   T-BUF-preserves-good-s T-WIRE-preserves-good-s PULLUP-preserves-good-s
+   TTL-BIDIRECT-preserves-good-s TTL-CLK-INPUT-preserves-good-s
+   TTL-INPUT-preserves-good-s TTL-OUTPUT-preserves-good-s
+   TTL-OUTPUT-PARAMETRIC-preserves-good-s TTL-OUTPUT-FAST-preserves-good-s
+   TTL-TRI-OUTPUT-preserves-good-s
+   TTL-TRI-OUTPUT-FAST-preserves-good-s VDD-preserves-good-s
+   VDD-PARAMETRIC-preserves-good-s VSS-preserves-good-s
+   DP-RAM-16X32-PRESERVES-GOOD-S))
+
+(prove-lemma primp-preserves-good-s (rewrite)
+  (implies (and (good-s s)
+                (primp fn)
+                (not (equal fn 'mem-32x32)))
+           (good-s (dual-apply-state fn args s)))
+  ((disable-theory t)
+   (enable-theory ground-zero good-s-primitives-theory)
+   (enable primp lookup-module *1*primp-database)))
+
+(prove-lemma good-s-preserved (rewrite)
+  (implies (ok-netlistp flag fn netlist '(mem-32x32))
+           (and (implies
+                 (and (equal flag 2)
+                      (good-s s))
+                 (good-s (dual-eval flag fn a s netlist)))
+                (implies
+                 (and (equal flag 3)
+                      (good-s-alist s))
+                 (good-s-alist (dual-eval flag fn a s netlist)))))
+  ((expand (dual-eval 2 fn a s netlist)
+           (dual-eval 3 fn a s netlist))
+   (induct (dual-eval flag fn a s netlist))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;           MONOTONICITY FOR SIMULATION            ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn v-approx-list (x y)
+  ;; This is only to be used for the simulation lemma, so I imagine
+  ;; that I don't care about the final cdrs.
+  (if (listp x)
+      (and (listp y)
+           (v-approx (car x) (car y))
+           (v-approx-list (cdr x) (cdr y)))
+    (nlistp y)))
+
+(defn v-s-approx-list (x y)
+  ;; assumes x and y are lists of doublets
+  (if (listp x)
+      (and (listp y)
+           (v-approx (caar x) (caar y))
+           (s-approx (cadar x) (cadar y))
+           (v-s-approx-list (cdr x) (cdr y)))
+    t))
+
+(defn nat-lst-lst-induction (n x y)
+  (if (or (zerop n) (nlistp x) (nlistp y))
+      t
+    (nat-lst-lst-induction (sub1 n) (cdr x) (cdr y))))
+
+(enable open-nth)
+
+(prove-lemma v-approx-car-nth (rewrite)
+  (implies (and (v-s-approx-list final-1 final-2)
+                (lessp n (length final-1)))
+           (v-approx (car (nth n final-1))
+                     (car (nth n final-2))))
+  ;; enabling nth wasn't enough to get the right induction
+  ((induct (nat-lst-lst-induction n final-1 final-2))))
+
+(prove-lemma s-approx-cadr-nth (rewrite)
+  (implies (and (v-s-approx-list final-1 final-2)
+                (lessp n (length final-1)))
+           (s-approx (cadr (nth n final-1))
+                     (cadr (nth n final-2))))
+  ((induct (nat-lst-lst-induction n final-1 final-2))))
+
+;; In the following lemma, I'd probably be happy if inputs-1
+;; actually equals inputs-2.
+
+(defn simulate-monotone-induction (fn inputs-1 state-1 netlist inputs-2
+                                      state-2)
+  (if (listp inputs-1)
+      (simulate-monotone-induction
+       fn
+       (cdr inputs-1)
+       (dual-eval 2 fn
+                  (car inputs-1)
+                  state-1 netlist)
+       netlist
+       (cdr inputs-2)
+       (dual-eval 2 fn
+                  (car inputs-2)
+                  state-2 netlist))
+    t))
+
+(prove-lemma simulate-monotone (rewrite)
+  (implies (and (v-approx-list inputs-1 inputs-2)
+                (s-approx state-1 state-2)
+                (good-s state-2)
+                (ok-netlistp 0 fn netlist '(mem-32x32))
+                (ok-netlistp 2 fn netlist '(mem-32x32)))
+           (v-s-approx-list
+            (simulate fn inputs-1 state-1 netlist)
+            (simulate fn inputs-2 state-2 netlist)))
+  ((induct
+    (simulate-monotone-induction fn inputs-1 state-1 netlist inputs-2 state-2))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable simulate s-approx v-s-approx-list good-s-preserved
+           monotonicity-property-consequence-0
+           monotonicity-property-consequence-2 dual-eval-monotone
+           v-approx-list)))
+
+(prove-lemma v-approx-list-x-x (rewrite)
+  (v-approx-list x x))
+
+(defn doublet-p (x)
+  (equal x (list (car x) (cadr x))))
+
+(defn doublet-n-simulate-induction (fn inputs state netlist n)
+  (if (zerop n)
+      t
+    (let ((new-state (dual-eval 2 fn (car inputs) state netlist)))
+      (doublet-n-simulate-induction
+       fn (cdr inputs) new-state netlist (sub1 n)))))
+
+(prove-lemma doublet-n-simulate (rewrite)
+  (implies (lessp n (length inputs))
+           (doublet-p (nth n (simulate fn inputs state netlist))))
+  ((induct (doublet-n-simulate-induction fn inputs state netlist n))
+   (expand (simulate fn inputs state netlist))))
+
+(prove-lemma doublet-p-equal-approx nil
+  (implies (and (doublet-p x)
+                (doublet-p y)
+                (v-knownp (car x))
+                (s-knownp (cadr x))
+                (v-approx (car x) (car y))
+                (s-approx (cadr x) (cadr y)))
+           (equal x y)))
+
+(disable doublet-p)
+
+(prove-lemma length-simulate (rewrite)
+  (equal (length (simulate fn inputs state netlist))
+         (length inputs)))
+
+(prove-lemma xs-suffice-for-reset-lemma-verbose nil
+  (let ((final-1 (nth n (simulate fn inputs state-1 netlist)))
+        (final-2 (nth n (simulate fn inputs state-2 netlist))))
+    (implies (and (lessp n (length inputs))
+                  (s-approx state-1 state-2)
+                  (v-knownp (car final-1))
+                  (s-knownp (cadr final-1))
+                  (good-s state-2)
+                  (ok-netlistp 0 fn netlist '(mem-32x32))
+                  (ok-netlistp 2 fn netlist '(mem-32x32)))
+             (equal final-1 final-2)))
+  ((use (doublet-p-equal-approx
+         (x (nth n (simulate fn inputs state-1 netlist)))
+         (y (nth n (simulate fn inputs state-2 netlist)))))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable v-approx-car-nth s-approx-cadr-nth simulate-monotone
+           v-approx-list-x-x doublet-n-simulate doublet-p-equal-approx
+           length-simulate)))
+
+(prove-lemma xs-suffice-for-reset-lemma nil
+  (let ((final-1 (nth n (simulate fn inputs state-1 netlist)))
+        (final-2 (nth n (simulate fn inputs state-2 netlist))))
+    (implies (and (lessp n (length inputs))
+                  (s-approx state-1 state-2)
+                  (v-knownp (car final-1))
+                  (s-knownp (cadr final-1))
+                  (good-s state-2)
+                  (ok-netlistp 0 fn netlist '(mem-32x32)))
+             (equal final-1 final-2)))
+  ((use (xs-suffice-for-reset-lemma-verbose))))

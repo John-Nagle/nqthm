@@ -1,0 +1,185 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    TV-IF.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  TV-IF is a vector multiplexor which buffers the control line according
+;;;  to the TREE argument.  Buffers are inserted whenever a tree has
+;;;  ((TREE-HEIGHT tree) modulo 3) = 0.
+;;;
+;;;  This generator creates modules which are to be used as in this sample
+;;;  module occurence, where n = (tree-size tree):
+;;;    
+;;;  (LIST <occurence-name>
+;;;        <output list (n elements)>
+;;;        (INDEX 'TV-IF (TREE-NUMBER tree))
+;;;        (CONS <control signal>
+;;;              <A input bus (n elements)>
+;;;              <B input bus (n elements)>))
+;;;
+;;;  The predicate is (TV-IF& tree), and the netlist is (TV-IF$NETLIST tree).
+;;;
+;;;  For a balanced tree of n leaves, use tree = (MAKE-TREE n).
+
+(defn tv-if-body (tree)
+  (let ((a-names (indices 'a 0 (tree-size tree)))
+        (b-names (indices 'b 0 (tree-size tree)))
+        (out-names (indices 'out 0 (tree-size tree))))
+    (let ((left-a-names (tfirstn a-names tree))
+          (right-a-names (trestn a-names tree))
+          (left-b-names (tfirstn b-names tree))
+          (right-b-names (trestn b-names tree))
+          (left-out-names (tfirstn out-names tree))
+          (right-out-names (trestn out-names tree)))
+      (if (nlistp tree)
+          (list
+           (list 'leaf
+                 (list (index 'out 0))
+                 'b-if
+                 (list 'c (index 'a 0) (index 'b 0))))
+        ;;  The control line is heuristically buffered.
+        (let ((buffer? (zerop (remainder (tree-height tree) 3))))
+          (let ((c-name (if buffer? 'c-buf 'c)))
+            (append
+             ;;  The buffer.
+             (if buffer? 
+                 '((c-buf (c-buf) b-buf (c)))
+               nil)
+             (list
+              ;;  The LHS tree.
+              (list 'left
+                    left-out-names
+                    (index 'tv-if (tree-number (car tree)))
+                    (cons c-name (append left-a-names left-b-names)))
+              ;;  The RHS tree.
+              (list 'right
+                    right-out-names
+                    (index 'tv-if (tree-number (cdr tree)))
+                    (cons c-name (append right-a-names right-b-names)))))))))))
+
+(defn tv-if* (tree)
+  (let ((a-names (indices 'a 0 (tree-size tree)))
+        (b-names (indices 'b 0 (tree-size tree)))
+        (out-names (indices 'out 0 (tree-size tree))))
+    (list
+     ;;  Name
+     (index 'tv-if (tree-number tree))
+     ;;  Inputs
+     (cons 'c (append a-names b-names))
+     ;;  Outputs
+     out-names
+     ;;  Occurrences
+     (tv-if-body tree)
+     ;;  States
+     nil)))
+
+(destructuring-lemma tv-if*)
+
+;;;  Note that both the netlist generator and the netlist predicate are
+;;;  recursive. 
+
+(defn tv-if& (netlist tree)
+  (if (nlistp tree)
+      (and (equal (lookup-module (index 'tv-if (tree-number tree)) netlist)
+                  (tv-if* tree))
+           (b-if& (delete-module (index 'tv-if (tree-number tree)) netlist)))
+    (and (equal (lookup-module (index 'tv-if (tree-number tree)) netlist)
+                (tv-if* tree))
+         (b-buf& (delete-module (index 'tv-if (tree-number tree)) netlist))
+         (tv-if& (delete-module (index 'tv-if (tree-number tree)) netlist)
+                 (car tree))
+         (tv-if& (delete-module (index 'tv-if (tree-number tree)) netlist)
+                 (cdr tree)))))
+
+(disable tv-if&)
+
+(defn tv-if$netlist (tree)
+  (if (nlistp tree)
+      (cons (tv-if* tree) (b-if$netlist))
+    (cons (tv-if* tree)
+          (union (tv-if$netlist (car tree))
+                 (union (tv-if$netlist (cdr tree))
+                        (b-buf$netlist))))))
+
+;;;  The proofs require this special induction scheme.
+
+(defn tv-if-induction (tree c a b state netlist)
+  (if (nlistp tree)
+      t
+    (and
+     (tv-if-induction
+      (car tree)
+      c
+      (tfirstn a tree)
+      (tfirstn b tree)
+      0
+      (delete-module (index 'tv-if (tree-number tree)) netlist))
+     (tv-if-induction
+      (car tree)
+      (x)
+      (tfirstn a tree)
+      (tfirstn b tree)
+      0
+      (delete-module (index 'tv-if (tree-number tree)) netlist))
+     (tv-if-induction
+      (cdr tree)
+      c
+      (trestn a tree)
+      (trestn b tree)
+      0
+      (delete-module (index 'tv-if (tree-number tree)) netlist))
+     (tv-if-induction
+      (cdr tree)
+      (x)
+      (trestn a tree)
+      (trestn b tree)
+      0
+      (delete-module (index 'tv-if (tree-number tree)) netlist)))))
+
+;;;  This lemma is necessary to force consideration of the output vector as an
+;;;  APPEND of two sublists, based on the tree specification. 
+;;;  Expressions such as this would normally be rewritten the other way.
+
+(prove-lemma tv-if-lemma-crock (rewrite)
+  (implies
+   (tv-if& (delete-module (index 'tv-if (tree-number tree)) netlist)
+           (car tree))
+   (equal (collect-value (indices 'out 0 n)
+                             alist)
+          (append (collect-value (firstn (tree-size (car tree))
+                                             (indices 'out 0 n))
+                                     alist)
+                  (collect-value (restn (tree-size (car tree))
+                                            (indices 'out 0 n))
+                                     alist))))
+  ;;Hint
+  ((use (collect-value-splitting-crock
+         (l (indices 'out 0 n))
+         (n (tree-size (car tree)))))))
+
+(disable tv-if-lemma-crock)
+
+(prove-lemma tv-if$value (rewrite)
+  (implies
+   (and (tv-if& netlist tree)
+        (properp a) (properp b)
+        (equal (length a) (tree-size tree))
+        (equal (length b) (tree-size tree)))
+   (equal (dual-eval 0 (index 'tv-if (tree-number tree))
+                     (cons c (append a b)) state netlist)
+          (fv-if c a b)))
+  ;;Hint
+  ((induct (tv-if-induction tree c a b state netlist))
+   (enable tv-if& tv-if-lemma-crock tv-if*$destructure
+           b-buf$value b-if$value fv-if-rewrite
+           tree-size)
+   (disable open-indices)
+   (expand (tv-if& netlist tree)
+           (fv-if c a b))))
+
+(disable tv-if$value)

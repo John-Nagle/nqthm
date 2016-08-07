@@ -1,0 +1,1349 @@
+#|
+ Copyright (C) 1994 by David Russinoff.  All Rights Reserved.
+
+ You may copy and distribute verbatim copies of this Nqthm-1992 event script as
+ you receive it, in any medium, including embedding it verbatim in derivative
+ works, provided that you conspicuously and appropriately publish on each copy
+ a valid copyright notice "Copyright (C) 1994 by David Russinoff.  All Rights
+ Reserved."
+
+ NO WARRANTY
+
+ David Russinoff PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS
+ PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL David Russinoff BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+; Work of David Russinoff.
+
+(NOTE-LIB "wilson" T)
+(COMPILE-UNCOMPILED-DEFNS "tmp")
+(DEFN SQUARES
+      (N P)
+  (IF (ZEROP N)
+      (LIST 0)
+      (CONS (REMAINDER (TIMES N N) P) (SQUARES (SUB1 N) P))))
+(DEFN RESIDUE
+      (A P)
+  (AND (NOT (DIVIDES P A))
+       (MEMBER (REMAINDER A P) (SQUARES P P))))
+(PROVE-LEMMA ALL-SQUARES-1
+             NIL
+             (IMPLIES (AND (NOT (ZEROP P))
+                           (LEQ M N))
+                      (MEMBER (REMAINDER (TIMES M M) P)
+                              (SQUARES N P))))
+(PROVE-LEMMA ALL-SQUARES-2
+                       NIL
+                       (EQUAL (REMAINDER (TIMES Y Y) P)
+                              (REMAINDER (TIMES (REMAINDER Y P)
+                                                (REMAINDER Y P))
+                                         P))
+                       ((USE (TIMES-MOD-1 (X Y) (N P))
+                             (TIMES-MOD-3 (B (REMAINDER Y P)) (A Y) (N P)))
+                        (DISABLE TIMES-MOD-1 TIMES-MOD-3)))
+(PROVE-LEMMA ALL-SQUARES
+                       (REWRITE)
+                       (IMPLIES (AND (NOT (ZEROP P))
+                                     (NOT (MEMBER X (SQUARES P P))))
+                                (NOT (EQUAL X (REMAINDER (TIMES Y Y) P))))
+                       ((USE (ALL-SQUARES-1 (N P) (M (REMAINDER Y P)))
+                             (ALL-SQUARES-2))
+                        (DISABLE TIMES-MOD-1 TIMES-MOD-3)))
+(PROVE-LEMMA EULER-1-1
+             NIL
+             (IMPLIES (NOT (DIVIDES 2 P))
+                      (EQUAL (TIMES 2 (QUOTIENT P 2)) (SUB1 P))))
+(PROVE-LEMMA
+  EULER-1-2
+  NIL
+  (IMPLIES (NOT (DIVIDES 2 P))
+           (EQUAL (EXP (TIMES I I) (QUOTIENT P 2)) (EXP I (SUB1 P))))
+  ((USE (EXP-EXP (J 2) (K (QUOTIENT P 2))) (EULER-1-1))
+   (DISABLE EXP-EXP)))
+(PROVE-LEMMA EULER-1-3
+                       NIL
+                       (IMPLIES (EQUAL (REMAINDER A P) (REMAINDER B P))
+                                (EQUAL (REMAINDER (EXP A C) P)
+                                       (REMAINDER (EXP B C) P)))
+                       ((USE (REMAINDER-EXP (I C) (N P))
+                             (REMAINDER-EXP (A B) (I C) (N P)))
+                        (DISABLE REMAINDER-EXP)))
+(PROVE-LEMMA EULER-1-4
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (NOT (DIVIDES P I)))
+                                (EQUAL (REMAINDER (EXP (TIMES I I)
+                                                       (QUOTIENT P 2))
+                                                  P)
+                                       1))
+                       ((USE (EULER-1-2)) (DISABLE LESSP-REMAINDER-DIVISOR
+                                                   PRIME)))
+(PROVE-LEMMA
+  EULER-1-5
+  NIL
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES P A))
+                (EQUAL (REMAINDER A P) (REMAINDER (TIMES I I) P)))
+           (NOT (DIVIDES P I)))
+  ((USE (PRIME-KEY-REWRITE (A I) (B I))) (DISABLE PRIME-KEY-REWRITE
+                                                  PRIME)))
+(PROVE-LEMMA EULER-1-6
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (NOT (DIVIDES P A))
+                                     (EQUAL (REMAINDER A P)
+                                            (REMAINDER (TIMES I I) P)))
+                                (EQUAL (REMAINDER (EXP A (QUOTIENT P 2)) P)
+                                       1))
+                       ((USE (EULER-1-4)
+                             (EULER-1-5)
+                             (EULER-1-3 (B (TIMES I I)) (C (QUOTIENT P 2))))
+                        (DISABLE PRIME
+                                 LESSP-REMAINDER-DIVISOR
+                                 B-I-LEMMA2
+                                 LESSP
+                                 SUB1-NNUMBERP
+                                 REMAINDER-0-CROCK
+                                 REMAINDER)))
+(PROVE-LEMMA EULER-1-7
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (NOT (DIVIDES P A))
+                                     (MEMBER (REMAINDER A P) (SQUARES I P)))
+                                (EQUAL (REMAINDER (EXP A (QUOTIENT P 2)) P)
+                                       1))
+                       ((USE (EULER-1-6)) (INDUCT (SQUARES I P))
+                        (DISABLE PRIME
+                                 REMAINDER
+                                 LESSP-REMAINDER-DIVISOR)))
+(PROVE-LEMMA EULER-1
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (RESIDUE A P))
+                                (EQUAL (REMAINDER (EXP A (QUOTIENT P 2)) P)
+                                       1))
+                       ((DISABLE PRIME)))
+(DEFN COMPLEMENT (J A P) (REMAINDER (TIMES (INVERSE J P) A) P))
+(TOGGLE G0219 INVERSE T)
+(PROVE-LEMMA COMPLEMENT-WORKS
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P J)))
+                                (EQUAL (REMAINDER
+                                        (TIMES J
+                                               (COMPLEMENT J A P))
+                                        P)
+                                       (REMAINDER A P)))
+                       ((USE (INVERSE-INVERTS)
+                             (TIMES-MOD-3 (A (TIMES J (INVERSE J P)))
+                                          (B A)
+                                          (N P)))
+                        (DISABLE INVERSE-INVERTS TIMES-MOD-3 PRIME)))
+(PROVE-LEMMA BOUNDED-COMPLEMENT
+             (REWRITE)
+             (IMPLIES (NOT (ZEROP P)) (LESSP (COMPLEMENT J A P) P)))
+(TOGGLE COMPLEMENT-OFF COMPLEMENT T)
+(PROVE-LEMMA NON-ZEROP-COMPLEMENT
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P J))
+                                     (NOT (DIVIDES P A)))
+                                (NOT (ZEROP (COMPLEMENT J A P))))
+                       ((USE (COMPLEMENT-WORKS)) (DISABLE COMPLEMENT-WORKS
+                                                          PRIME)))
+(PROVE-LEMMA
+  COMPLEMENT-IS-UNIQUE
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES P A))
+                (EQUAL (REMAINDER (TIMES J X) P) (REMAINDER A P)))
+           (EQUAL (COMPLEMENT J A P) (REMAINDER X P)))
+  ((USE (COMPLEMENT-WORKS)
+        (THM-55-SPECIALIZED-TO-PRIMES (M J) (Y (COMPLEMENT J A P))))
+   (DISABLE COMPLEMENT-WORKS THM-55-SPECIALIZED-TO-PRIMES PRIME)))
+(TOGGLE SQUARES-OFF SQUARES T)
+(PROVE-LEMMA NO-SELF-COMPLEMENT
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P J))
+                                     (NOT (DIVIDES P A))
+                                     (NOT (RESIDUE A P)))
+                                (NOT (EQUAL J (COMPLEMENT J A P))))
+                       ((USE (COMPLEMENT-WORKS)
+                             (ALL-SQUARES (X (REMAINDER A P)) (Y J)))
+                        (DISABLE COMPLEMENT-WORKS ALL-SQUARES PRIME1)))
+(PROVE-LEMMA COMPLEMENT-OF-COMPLEMENT
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P J))
+                                     (NOT (DIVIDES P A)))
+                                (EQUAL (COMPLEMENT (COMPLEMENT J A P) A P)
+                                       (REMAINDER J P)))
+                       ((USE (COMPLEMENT-WORKS)
+                             (COMPLEMENT-IS-UNIQUE (J (COMPLEMENT J A P))
+                                                   (X J)))
+                        (DISABLE COMPLEMENT-WORKS COMPLEMENT-IS-UNIQUE)))
+(DEFN COMP-LIST
+      (I A P)
+  (IF (ZEROP I)
+      NIL
+      (IF (MEMBER I (COMP-LIST (SUB1 I) A P))
+          (COMP-LIST (SUB1 I) A P)
+          (CONS I
+                (CONS (COMPLEMENT I A P)
+                      (COMP-LIST (SUB1 I) A P))))))
+(PROVE-LEMMA
+  ALL-NON-ZEROP-COMP-LIST
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (LESSP I P)
+                (NOT (DIVIDES P A)))
+           (ALL-NON-ZEROP (COMP-LIST I A P)))
+  ((USE (NON-ZEROP-COMPLEMENT (J I))) (INDUCT (COMP-LIST I A P))))
+(PROVE-LEMMA
+  BOUNDED-COMP-LIST
+  (REWRITE)
+  (IMPLIES (LESSP I P) (ALL-LESSEQP (COMP-LIST I A P) (SUB1 P)))
+  ((USE (BOUNDED-COMPLEMENT (J I))) (INDUCT (COMP-LIST I A P))))
+(PROVE-LEMMA SUBSETP-POSITIVES-COMP-LIST
+             (REWRITE)
+             (SUBSETP (POSITIVES N) (COMP-LIST N A P)))
+(PROVE-LEMMA
+  COMP-LIST-CLOSED-1
+  NIL
+  (IMPLIES (AND (PRIME P)
+                (NOT (ZEROP I))
+                (LESSP I P)
+                (NOT (DIVIDES P A))
+                (MEMBER J (COMP-LIST I A P)))
+           (MEMBER (COMPLEMENT J A P) (COMP-LIST I A P)))
+  ((USE (COMPLEMENT-OF-COMPLEMENT (J I)))
+   (INDUCT (COMP-LIST I A P))
+   (DISABLE COMPLEMENT-OF-COMPLEMENT)))
+(PROVE-LEMMA COMP-LIST-CLOSED-2
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (ZEROP I))
+                                     (NOT (ZEROP J))
+                                     (LESSP I P)
+                                     (LESSP J P)
+                                     (NOT (DIVIDES P A))
+                                     (MEMBER (COMPLEMENT J A P)
+                                             (COMP-LIST I A P)))
+                                (MEMBER J (COMP-LIST I A P)))
+                       ((USE (COMPLEMENT-OF-COMPLEMENT)
+                             (COMP-LIST-CLOSED-1 (J (COMPLEMENT J A P))))
+                        (DISABLE COMPLEMENT-OF-COMPLEMENT COMP-LIST)))
+(PROVE-LEMMA ALL-DISTINCT-COMP-LIST-1
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (LESSP I P)
+                                     (NOT (DIVIDES P A))
+                                     (NOT (RESIDUE A P))
+                                     (ALL-DISTINCT
+                                       (COMP-LIST (SUB1 I) A P)))
+                                (ALL-DISTINCT (COMP-LIST I A P)))
+                       ((USE (COMP-LIST-CLOSED-2 (J I) (I (SUB1 I)))
+                             (NO-SELF-COMPLEMENT (J I)))
+                        (DISABLE PRIME)))
+(PROVE-LEMMA
+  ALL-DISTINCT-COMP-LIST
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (LESSP I P)
+                (NOT (DIVIDES P A))
+                (NOT (RESIDUE A P)))
+           (ALL-DISTINCT (COMP-LIST I A P)))
+  ((USE (ALL-DISTINCT-COMP-LIST-1)) (INDUCT (POSITIVES I))
+   (DISABLE PRIME)))
+(PROVE-LEMMA PERM-POSITIVES-COMP-LIST
+             (REWRITE)
+             (IMPLIES (AND (PRIME P)
+                           (NOT (DIVIDES P A))
+                           (NOT (RESIDUE A P)))
+                      (PERM (POSITIVES (SUB1 P))
+                            (COMP-LIST (SUB1 P) A P))))
+(PROVE-LEMMA COMP-LIST-FACT
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P A))
+                                     (NOT (RESIDUE A P)))
+                                (EQUAL (TIMES-LIST (COMP-LIST (SUB1 P) A P))
+                                       (FACT (SUB1 P))))
+                       ((USE (TIMES-LIST-EQUAL-FACT (N (SUB1 P))
+                                                    (L (COMP-LIST (SUB1 P)
+                                                                  A
+                                                                  P))))
+                        (DISABLE TIMES-LIST-EQUAL-FACT COMP-LIST)))
+(PROVE-LEMMA
+  TIMES-MOD-4
+  NIL
+  (IMPLIES (EQUAL (REMAINDER (TIMES I J) P) (REMAINDER A P))
+           (EQUAL (REMAINDER (TIMES I (TIMES J K)) P)
+                  (REMAINDER (TIMES A (REMAINDER K P)) P)))
+  ((USE (TIMES-MOD-3 (A (TIMES I J)) (B K) (N P)))
+   (DISABLE TIMES-MOD-3)))
+(PROVE-LEMMA
+  TIMES-COMP-LIST-1
+  NIL
+  (IMPLIES
+    (AND (EQUAL (REMAINDER (TIMES I (COMPLEMENT I A P)) P)
+                (REMAINDER A P))
+         (NOT (ZEROP I))
+         (NOT (MEMBER I (COMP-LIST (SUB1 I) A P))))
+    (EQUAL
+      (REMAINDER (TIMES-LIST (COMP-LIST I A P)) P)
+      (REMAINDER (TIMES A
+                        (REMAINDER (TIMES-LIST (COMP-LIST (SUB1 I)
+                                                          A
+                                                          P))
+                                   P))
+                 P)))
+  ((USE (TIMES-MOD-4 (J (COMPLEMENT I A P))
+                     (K (TIMES-LIST (COMP-LIST (SUB1 I) A P)))))
+   (DISABLE COMPLEMENT-WORKS)))
+(PROVE-LEMMA
+  TIMES-COMP-LIST-2
+  NIL
+  (IMPLIES
+    (AND (PRIME P)
+         (NOT (DIVIDES P I))
+         (NOT (MEMBER I (COMP-LIST (SUB1 I) A P))))
+    (EQUAL
+      (REMAINDER (TIMES-LIST (COMP-LIST I A P)) P)
+      (REMAINDER (TIMES A
+                        (REMAINDER (TIMES-LIST (COMP-LIST (SUB1 I)
+                                                          A
+                                                          P))
+                                   P))
+                 P)))
+  ((USE (TIMES-COMP-LIST-1) (COMPLEMENT-WORKS (J I)))
+   (DISABLE COMPLEMENT-WORKS COMP-LIST TIMES-LIST PRIME)))
+(PROVE-LEMMA QUOTIENT-PLUS-1
+             NIL
+             (IMPLIES (AND (NOT (ZEROP N))
+                           (NUMBERP X)
+                           (EQUAL Y (PLUS X N)))
+                      (EQUAL (QUOTIENT Y N) (ADD1 (QUOTIENT X N)))))
+(PROVE-LEMMA
+  TIMES-COMP-LIST-3
+  NIL
+  (IMPLIES (AND (NOT (ZEROP I))
+                (NOT (MEMBER I (COMP-LIST (SUB1 I) A P))))
+           (EQUAL (QUOTIENT (LENGTH (COMP-LIST I A P)) 2)
+                  (ADD1 (QUOTIENT (LENGTH (COMP-LIST (SUB1 I)
+                                                     A
+                                                     P))
+                                  2))))
+  ((USE (QUOTIENT-PLUS-1 (X (LENGTH (COMP-LIST (SUB1 I) A P)))
+                         (Y (LENGTH (COMP-LIST I A P)))
+                         (N 2)))))
+(PROVE-LEMMA
+  TIMES-COMP-LIST-4
+  NIL
+  (IMPLIES
+    (AND
+      (PRIME P)
+      (NOT (ZEROP I))
+      (LESSP I P)
+      (EQUAL (REMAINDER (TIMES-LIST (COMP-LIST (SUB1 I) A P)) P)
+             (REMAINDER (EXP A
+                             (QUOTIENT (LENGTH (COMP-LIST (SUB1 I)
+                                                          A
+                                                          P))
+                                       2))
+                        P)))
+    (EQUAL (REMAINDER (TIMES-LIST (COMP-LIST I A P)) P)
+           (REMAINDER (EXP A
+                           (QUOTIENT (LENGTH (COMP-LIST I A P)) 2))
+                      P)))
+  ((USE
+     (TIMES-COMP-LIST-2)
+     (TIMES-COMP-LIST-3)
+     (TIMES-MOD-1 (X A)
+                  (Y (EXP A
+                          (QUOTIENT (LENGTH (COMP-LIST (SUB1 I)
+                                                       A
+                                                       P))
+                                    2)))
+                  (N P)))
+   (DISABLE PRIME TIMES-MOD-1 TIMES-LIST)))
+(PROVE-LEMMA
+  TIMES-COMP-LIST-5
+  NIL
+  (IMPLIES (ZEROP I)
+           (EQUAL (REMAINDER (TIMES-LIST (COMP-LIST I A P)) P)
+                  (REMAINDER (EXP A
+                                  (QUOTIENT (LENGTH (COMP-LIST I
+                                                               A
+                                                               P))
+                                            2))
+                             P))))
+(PROVE-LEMMA
+  TIMES-COMP-LIST
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (LESSP I P))
+           (EQUAL (REMAINDER (TIMES-LIST (COMP-LIST I A P)) P)
+                  (REMAINDER (EXP A
+                                  (QUOTIENT (LENGTH (COMP-LIST I
+                                                               A
+                                                               P))
+                                            2))
+                             P)))
+  ((USE (TIMES-COMP-LIST-4) (TIMES-COMP-LIST-5))
+   (INDUCT (POSITIVES I))
+   (DISABLE PRIME REMAINDER TIMES-LIST COMP-LIST QUOTIENT LENGTH)))
+(PROVE-LEMMA SUB1-LENGTH-DELETE
+             (REWRITE)
+             (IMPLIES (MEMBER X B)
+                      (EQUAL (LENGTH (DELETE X B))
+                             (SUB1 (LENGTH B)))))
+(PROVE-LEMMA EQUAL-LENGTH-PERM
+                       NIL
+                       (IMPLIES (PERM A B) (EQUAL (LENGTH A) (LENGTH B)))
+                       ((INDUCT (PERM A B))))
+(PROVE-LEMMA LENGTH-POSITIVES
+                       (REWRITE)
+                       (EQUAL (LENGTH (POSITIVES N)) (FIX N))
+                       ((INDUCT (POSITIVES N))))
+(PROVE-LEMMA
+  EULER-2-1
+  NIL
+  (IMPLIES
+    (AND (PRIME P)
+         (NOT (DIVIDES P A))
+         (NOT (RESIDUE A P)))
+    (EQUAL (REMAINDER (EXP A
+                           (QUOTIENT (LENGTH (COMP-LIST (SUB1 P)
+                                                        A
+                                                        P))
+                                     2))
+                      P)
+           (SUB1 P)))
+  ((USE (TIMES-COMP-LIST (I (SUB1 P)))
+        (COMP-LIST-FACT)
+        (WILSON-THM))
+   (DISABLE TIMES-COMP-LIST COMP-LIST-FACT)))
+(PROVE-LEMMA EULER-2-2
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P A))
+                                     (NOT (RESIDUE A P)))
+                                (EQUAL (LENGTH (COMP-LIST (SUB1 P) A P))
+                                       (SUB1 P)))
+                       ((USE (EQUAL-LENGTH-PERM (A (POSITIVES (SUB1 P)))
+                                                (B (COMP-LIST
+                                                     (SUB1 P) A P)))
+                             (PERM-POSITIVES-COMP-LIST))
+                        (DISABLE EQUAL-LENGTH-PERM
+                                 PERM-POSITIVES-COMP-LIST)))
+(PROVE-LEMMA EULER-2-3
+                       NIL
+                       (IMPLIES (NOT (ZEROP P))
+                                (EQUAL (DIVIDES 2 P)
+                                       (NOT (DIVIDES 2 (SUB1 P)))))
+                       ((INDUCT (ODD P))))
+(PROVE-LEMMA EULER-2-4
+                       (REWRITE)
+                       (IMPLIES (NOT (DIVIDES 2 P))
+                                (EQUAL (QUOTIENT (SUB1 P) 2)
+                                       (QUOTIENT P 2)))
+                       ((USE (EULER-2-3)
+                             (REMAINDER-QUOTIENT (X P) (Y 2))
+                             (REMAINDER-QUOTIENT (X (SUB1 P)) (Y 2)))
+                        (DISABLE REMAINDER-QUOTIENT)))
+(PROVE-LEMMA EULER-2
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (NOT (DIVIDES P A))
+                                     (NOT (RESIDUE A P)))
+                                (EQUAL (REMAINDER (EXP A (QUOTIENT P 2)) P)
+                                       (SUB1 P)))
+                       ((USE (EULER-2-1)) (DISABLE EULER-2-1
+                                                   PRIME
+                                                   DIVIDES
+                                                   RESIDUE
+                                                   EXP
+                                                   QUOTIENT
+                                                   LENGTH
+                                                   COMP-LIST)))
+(DEFN RES1
+      (N A P)
+  (IF (ZEROP N)
+      T
+      (IF (LESSP (QUOTIENT P 2) (REMAINDER (TIMES A N) P))
+          (NOT (RES1 (SUB1 N) A P))
+          (RES1 (SUB1 N) A P))))
+(DEFN REFLECT (X P) (DIFFERENCE P X))
+(DEFN REFLECT-LIST
+      (N A P)
+  (IF (ZEROP N)
+      NIL
+      (IF (LESSP (QUOTIENT P 2) (REMAINDER (TIMES A N) P))
+          (CONS (REFLECT (REMAINDER (TIMES A N) P) P)
+                (REFLECT-LIST (SUB1 N) A P))
+          (CONS (REMAINDER (TIMES A N) P)
+                (REFLECT-LIST (SUB1 N) A P)))))
+(PROVE-LEMMA DIFF-MOD-1
+                       (REWRITE)
+                       (IMPLIES (LEQ B A)
+                                (EQUAL (REMAINDER (DIFFERENCE A
+                                                              (REMAINDER B
+                                                                         P))
+                                                  P)
+                                       (REMAINDER (DIFFERENCE A B) P)))
+                       ((USE (REMAINDER-QUOTIENT (X B) (Y P))
+                             (REMAINDER-PLUS-TIMES-1 (X (DIFFERENCE A B))
+                                                     (I (QUOTIENT B P))
+                                                     (J P)))
+                        (DISABLE REMAINDER-QUOTIENT
+                                 REMAINDER-PLUS-TIMES-1
+                                 REMAINDER-PLUS-TIMES-2)))
+(PROVE-LEMMA REM-DIFF-TIMES
+                       (REWRITE)
+                       (IMPLIES (AND (LESSP X P)
+                                     (NOT (ZEROP X))
+                                     (NOT (ZEROP B)))
+                                (EQUAL (REMAINDER (DIFFERENCE (TIMES B P) X)
+                                                  P)
+                                       (DIFFERENCE P X)))
+                       ((USE (REMAINDER-PLUS-TIMES-1 (X (DIFFERENCE P X))
+                                                     (I (SUB1 B))
+                                                     (J P)))
+                        (DISABLE REMAINDER-PLUS-TIMES-1
+                                 REMAINDER-PLUS-TIMES-2)))
+(PROVE-LEMMA
+  REFLECT-COMMUTES-WITH-TIMES-1
+  (REWRITE)
+  (IMPLIES (LEQ Y P)
+           (EQUAL (REMAINDER (TIMES (REFLECT Y P) X) P)
+                  (REMAINDER (REFLECT (REMAINDER (TIMES Y X) P) P)
+                             P)))
+  ((USE (DIFF-MOD-1 (A (TIMES P X)) (B (TIMES Y X)))
+        (LESSP-TIMES-CANCELLATION (Z X) (X Y) (Y P))
+        (REM-DIFF-TIMES (B X) (X (REMAINDER (TIMES Y X) P))))
+   (DISABLE LESSP-TIMES-CANCELLATION REM-DIFF-TIMES DIFF-MOD-1)))
+(PROVE-LEMMA
+  REFLECT-COMMUTES-WITH-TIMES-2
+  (REWRITE)
+  (IMPLIES (LEQ Y P)
+           (EQUAL (REMAINDER (TIMES X (REFLECT Y P)) P)
+                  (REMAINDER (REFLECT (REMAINDER (TIMES X Y) P) P)
+                             P)))
+  ((USE (REFLECT-COMMUTES-WITH-TIMES-1))
+   (DISABLE REFLECT-COMMUTES-WITH-TIMES-1 REFLECT)))
+(PROVE-LEMMA
+  TIMES-EXP-FACT
+  (REWRITE)
+  (IMPLIES (NOT (ZEROP N))
+           (EQUAL (REMAINDER (TIMES (TIMES A N)
+                                    (TIMES (EXP A (SUB1 N))
+                                           (FACT (SUB1 N))))
+                             P)
+                  (REMAINDER (TIMES (EXP A N) (FACT N)) P))))
+(PROVE-LEMMA
+  REM-REFLECT-LIST-1
+  (REWRITE)
+  (IMPLIES
+    (AND (NOT (ZEROP P))
+         (NOT (ZEROP N))
+         (NOT (LESSP (QUOTIENT P 2) (REMAINDER (TIMES A N) P)))
+         (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST (SUB1 N) A P))
+                           P)
+                (REMAINDER (TIMES (EXP A (SUB1 N)) (FACT (SUB1 N)))
+                           P)))
+    (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST N A P)) P)
+           (REMAINDER (TIMES (EXP A N) (FACT N)) P)))
+  ((USE
+     (REMAINDER-EXP-LEMMA (A P)
+                          (X (TIMES A N))
+                          (Y (TIMES-LIST (REFLECT-LIST (SUB1 N)
+                                                       A
+                                                       P)))
+                          (Z (TIMES (EXP A (SUB1 N))
+                                    (FACT (SUB1 N))))))
+   (HANDS-OFF TIMES DIFFERENCE QUOTIENT EXP FACT)
+   (DISABLE REMAINDER-EXP-LEMMA REFLECT)))
+(PROVE-LEMMA
+  REM-REFLECT-LIST-2
+  (REWRITE)
+  (IMPLIES
+    (AND (NOT (ZEROP P))
+         (NOT (ZEROP N))
+         (LESSP (QUOTIENT P 2) (REMAINDER (TIMES A N) P))
+         (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST (SUB1 N) A P))
+                           P)
+                (REMAINDER (TIMES (EXP A (SUB1 N)) (FACT (SUB1 N)))
+                           P)))
+    (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST N A P)) P)
+           (REMAINDER (REFLECT (REMAINDER (TIMES (EXP A N) (FACT N))
+                                          P)
+                               P)
+                      P)))
+  ((USE
+     (REMAINDER-EXP-LEMMA (A P)
+                          (X (TIMES A N))
+                          (Y (TIMES-LIST (REFLECT-LIST (SUB1 N)
+                                                       A
+                                                       P)))
+                          (Z (TIMES (EXP A (SUB1 N))
+                                    (FACT (SUB1 N))))))
+   (HANDS-OFF TIMES DIFFERENCE QUOTIENT EXP FACT)
+   (DISABLE REMAINDER-EXP-LEMMA REFLECT)))
+(PROVE-LEMMA
+  REM-REFLECT-LIST-3
+  (REWRITE)
+  (IMPLIES
+    (AND
+      (NOT (ZEROP P))
+      (NOT (ZEROP N))
+      (NOT (LESSP (QUOTIENT P 2) (REMAINDER (TIMES A N) P)))
+      (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST (SUB1 N) A P)) P)
+             (REMAINDER (REFLECT (REMAINDER (TIMES (EXP A (SUB1 N))
+                                                   (FACT (SUB1 N)))
+                                            P)
+                                 P)
+                        P)))
+    (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST N A P)) P)
+           (REMAINDER (REFLECT (REMAINDER (TIMES (EXP A N) (FACT N))
+                                          P)
+                               P)
+                      P)))
+  ((USE
+     (REMAINDER-EXP-LEMMA
+       (A P)
+       (X (TIMES A N))
+       (Y (TIMES-LIST (REFLECT-LIST (SUB1 N) A P)))
+       (Z (REFLECT (REMAINDER (TIMES (EXP A (SUB1 N))
+                                     (FACT (SUB1 N)))
+                              P)
+                   P))))
+   (HANDS-OFF TIMES DIFFERENCE QUOTIENT EXP FACT)
+   (DISABLE REMAINDER-EXP-LEMMA REFLECT)))
+(PROVE-LEMMA
+  DOUBLE-REFLECT
+  (REWRITE)
+  (IMPLIES (LEQ A P)
+           (EQUAL (REMAINDER (REFLECT (REMAINDER (REFLECT A P) P) P)
+                             P)
+                  (REMAINDER A P))))
+(PROVE-LEMMA
+  REM-REFLECT-LIST-4
+  (REWRITE)
+  (IMPLIES
+    (AND
+      (NOT (ZEROP P))
+      (NOT (ZEROP N))
+      (LESSP (QUOTIENT P 2) (REMAINDER (TIMES A N) P))
+      (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST (SUB1 N) A P)) P)
+             (REMAINDER (REFLECT (REMAINDER (TIMES (EXP A (SUB1 N))
+                                                   (FACT (SUB1 N)))
+                                            P)
+                                 P)
+                        P)))
+    (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST N A P)) P)
+           (REMAINDER (TIMES (EXP A N) (FACT N)) P)))
+  ((USE
+     (REMAINDER-EXP-LEMMA
+       (A P)
+       (X (TIMES A N))
+       (Y (TIMES-LIST (REFLECT-LIST (SUB1 N) A P)))
+       (Z (REFLECT (REMAINDER (TIMES (EXP A (SUB1 N))
+                                     (FACT (SUB1 N)))
+                              P)
+                   P))))
+   (HANDS-OFF TIMES DIFFERENCE QUOTIENT EXP FACT)
+   (DISABLE REMAINDER-EXP-LEMMA REFLECT)))
+(PROVE-LEMMA
+  REM-REFLECT-LIST-BASE-CASE
+  (REWRITE)
+  (IMPLIES (ZEROP N)
+           (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST N A P)) P)
+                  (REMAINDER (TIMES (EXP A N) (FACT N)) P))))
+(PROVE-LEMMA
+  REM-REFLECT-LIST
+  NIL
+  (IMPLIES
+    (NOT (ZEROP P))
+    (EQUAL (REMAINDER (TIMES-LIST (REFLECT-LIST N A P)) P)
+           (IF (RES1 N A P)
+               (REMAINDER (TIMES (EXP A N) (FACT N)) P)
+               (REMAINDER (REFLECT (REMAINDER (TIMES (EXP A N)
+                                                     (FACT N))
+                                              P)
+                                   P)
+                          P))))
+  ((HANDS-OFF TIMES-LIST REFLECT-LIST QUOTIENT EXP FACT TIMES)
+   (DISABLE REFLECT)))
+(PROVE-LEMMA LENGTH-REFLECT-LIST
+                       (REWRITE)
+                       (EQUAL (LENGTH (REFLECT-LIST N A P)) (FIX N))
+                       ((INDUCT (POSITIVES N))))
+(PROVE-LEMMA ALL-LESSEQP-REFLECT-LIST-1
+             (REWRITE)
+             (IMPLIES (LESSP (QUOTIENT P 2) X)
+                      (NOT (LESSP (QUOTIENT P 2) (REFLECT X P)))))
+(PROVE-LEMMA ALL-LESSEQP-REFLECT-LIST
+                       (REWRITE)
+                       (ALL-LESSEQP (REFLECT-LIST N A P) (QUOTIENT P 2))
+                       ((DISABLE REFLECT)))
+(PROVE-LEMMA ALL-NON-ZEROP-REFLECT-LIST
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P A))
+                                     (LESSP B P))
+                                (ALL-NON-ZEROP (REFLECT-LIST B A P)))
+                       ((INDUCT (REFLECT-LIST B A P)) (DISABLE PRIME1)))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST-1
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (LESSP J I)
+                                     (LESSP I P)
+                                     (NOT (DIVIDES P A)))
+                                (NOT (EQUAL (REMAINDER (TIMES A I) P)
+                                            (REMAINDER (TIMES A J) P))))
+                       ((DISABLE PRIME)))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST-2
+             (REWRITE)
+             (IMPLIES (AND (NUMBERP X)
+                           (NUMBERP Y)
+                           (LESSP X P)
+                           (LESSP Y P))
+                      (EQUAL (EQUAL (DIFFERENCE P X)
+                                    (DIFFERENCE P Y))
+                             (EQUAL X Y))))
+(PROVE-LEMMA NUMBERP-REMAINDER
+             (REWRITE)
+             (NUMBERP (REMAINDER A P)))
+(PROVE-LEMMA
+  ALL-DISTINCT-REFLECT-LIST-3
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (LESSP J I)
+                (LESSP I P)
+                (NOT (DIVIDES P A)))
+           (NOT (EQUAL (REFLECT (REMAINDER (TIMES A I) P) P)
+                       (REFLECT (REMAINDER (TIMES A J) P) P))))
+  ((USE (ALL-DISTINCT-REFLECT-LIST-1))
+   (HANDS-OFF DIFFERENCE REMAINDER TIMES)
+   (DISABLE ALL-DISTINCT-REFLECT-LIST-1 PRIME)))
+(PROVE-LEMMA PLUS-MOD-1
+                       (REWRITE)
+                       (EQUAL (REMAINDER (PLUS (REMAINDER X P) Y) P)
+                              (REMAINDER (PLUS X Y) P))
+                       ((USE (REMAINDER-QUOTIENT (Y P))
+                             (REMAINDER-PLUS-TIMES-1 (J P)
+                                                     (X (PLUS (REMAINDER X
+                                                                         P)
+                                                              Y))
+                                                     (I (QUOTIENT X P))))
+                        (DISABLE REMAINDER-QUOTIENT
+                                 REMAINDER-QUOTIENT-ELIM
+                                 REMAINDER-PLUS-TIMES-1)))
+(PROVE-LEMMA PLUS-MOD-2
+                       (REWRITE)
+                       (EQUAL (REMAINDER (PLUS Y (REMAINDER X P)) P)
+                              (REMAINDER (PLUS X Y) P))
+                       ((USE (PLUS-MOD-1)) (DISABLE PLUS-MOD-1)))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST-4
+             NIL
+             (IMPLIES (AND (EQUAL X (DIFFERENCE P Y))
+                           (LESSP Y P))
+                      (EQUAL (REMAINDER (PLUS X Y) P) 0)))
+(PROVE-LEMMA
+  ALL-DISTINCT-REFLECT-LIST-5
+  NIL
+  (IMPLIES (AND (EQUAL (REMAINDER (TIMES A I) P)
+                       (DIFFERENCE P (REMAINDER (TIMES A J) P)))
+                (NOT (ZEROP P)))
+           (EQUAL (REMAINDER (TIMES A (PLUS I J)) P) 0))
+  ((USE (ALL-DISTINCT-REFLECT-LIST-4 (X (REMAINDER (TIMES A I) P))
+                                     (Y (REMAINDER (TIMES A J) P))))
+   ))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST-6
+             NIL
+             (IMPLIES (AND (LEQ I (QUOTIENT P 2))
+                           (LESSP J I))
+                      (AND (NOT (ZEROP (PLUS I J)))
+                           (LESSP (PLUS I J) P))))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST-7
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P A))
+                                     (LEQ I (QUOTIENT P 2))
+                                     (LESSP J I))
+                                (NOT (EQUAL (REMAINDER (TIMES A I) P)
+                                            (REFLECT (REMAINDER (TIMES A J)
+                                                                P)
+                                                     P))))
+                       ((USE (ALL-DISTINCT-REFLECT-LIST-5)
+                             (ALL-DISTINCT-REFLECT-LIST-6))
+                        (HANDS-OFF DIFFERENCE TIMES PLUS)
+                        (DISABLE PRIME1)))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST-8
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P A))
+                                     (LEQ I (QUOTIENT P 2))
+                                     (LESSP J I))
+                                (NOT (EQUAL (REFLECT (REMAINDER (TIMES A I)
+                                                                P)
+                                                     P)
+                                            (REMAINDER (TIMES A J) P))))
+                       ((USE (ALL-DISTINCT-REFLECT-LIST-5 (J I) (I J))
+                             (ALL-DISTINCT-REFLECT-LIST-6))
+                        (HANDS-OFF TIMES DIFFERENCE)
+                        (DISABLE PRIME1)))
+(PROVE-LEMMA
+  ALL-DISTINCT-REFLECT-LIST-9
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES 2 P))
+                (NOT (DIVIDES P A))
+                (LEQ I (QUOTIENT P 2))
+                (LESSP J I))
+           (NOT (MEMBER (REMAINDER (TIMES A I) P)
+                        (REFLECT-LIST J A P))))
+  ((USE (ALL-DISTINCT-REFLECT-LIST-1))
+   (INDUCT (REFLECT-LIST J A P))
+   (HANDS-OFF QUOTIENT REMAINDER TIMES)
+   (DISABLE PRIME1 REFLECT ALL-DISTINCT-REFLECT-LIST-1)))
+(PROVE-LEMMA
+  ALL-DISTINCT-REFLECT-LIST-10
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES 2 P))
+                (NOT (DIVIDES P A))
+                (LEQ I (QUOTIENT P 2))
+                (LESSP J I))
+           (NOT (MEMBER (REFLECT (REMAINDER (TIMES A I) P) P)
+                        (REFLECT-LIST J A P))))
+  ((USE (ALL-DISTINCT-REFLECT-LIST-3))
+   (INDUCT (REFLECT-LIST J A P))
+   (HANDS-OFF QUOTIENT REMAINDER TIMES)
+   (DISABLE PRIME1 REFLECT ALL-DISTINCT-REFLECT-LIST-3)))
+(PROVE-LEMMA ALL-DISTINCT-REFLECT-LIST
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (NOT (DIVIDES P A))
+                                     (LEQ I (QUOTIENT P 2)))
+                                (ALL-DISTINCT (REFLECT-LIST I A P)))
+                       ((USE (ALL-DISTINCT-REFLECT-LIST-9 (J (SUB1 I)))
+                             (ALL-DISTINCT-REFLECT-LIST-10 (J (SUB1 I))))
+                        (INDUCT (REFLECT-LIST I A P))
+                        (HANDS-OFF QUOTIENT REMAINDER TIMES)
+                        (DISABLE ALL-DISTINCT-REFLECT-LIST-9
+                                 ALL-DISTINCT-REFLECT-LIST-10
+                                 PRIME
+                                 DIVIDES
+                                 REFLECT)))
+(PROVE-LEMMA
+  TIMES-REFLECT-LIST
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES 2 P))
+                (NOT (DIVIDES P A)))
+           (EQUAL (TIMES-LIST (REFLECT-LIST (QUOTIENT P 2) A P))
+                  (FACT (QUOTIENT P 2))))
+  ((USE (PIGEON-HOLE-PRINCIPLE (L (REFLECT-LIST (QUOTIENT P 2)
+                                                A
+                                                P))))
+   (HANDS-OFF QUOTIENT REMAINDER)
+   (DISABLE PRIME1 REFLECT-LIST  TIMES-LIST FACT)))
+(PROVE-LEMMA PLUS-X-X-EVEN
+             (REWRITE)
+             (EQUAL (REMAINDER (PLUS X X) 2) 0))
+(PROVE-LEMMA RES1-REM-1-1
+                       NIL
+                       (IMPLIES (AND (NOT (ZEROP X))
+                                     (NOT (DIVIDES 2 P)))
+                                (NOT (EQUAL (REMAINDER (DIFFERENCE P X) P)
+                                            X)))
+                       ((USE (DIFFERENCE-ELIM (Y P)))))
+(PROVE-LEMMA RES1-REM-1
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES 2 P))
+                                     (NOT (DIVIDES P A))
+                                     (RES1 (QUOTIENT P 2) A P))
+                                (EQUAL (REMAINDER (EXP A (QUOTIENT P 2)) P)
+                                       1))
+                       ((USE (REM-REFLECT-LIST (N (QUOTIENT P 2)))
+                             (PRIME-KEY-TRICK (M (FACT (QUOTIENT P 2)))
+                                              (A (EXP A (QUOTIENT P 2)))
+                                              (B 1)))
+                        (DISABLE PRIME-KEY-TRICK
+                                 LESSP-REMAINDER-DIVISOR
+                                 PRIME1)))
+(PROVE-LEMMA REMAINDER-LESSP
+             NIL
+             (IMPLIES (LESSP A P) (EQUAL (REMAINDER A P) (FIX A))))
+(PROVE-LEMMA
+  RES1-REM-2
+  NIL
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES 2 P))
+                (NOT (DIVIDES P A))
+                (NOT (RES1 (QUOTIENT P 2) A P)))
+           (NOT (EQUAL (REMAINDER (EXP A (QUOTIENT P 2)) P) 1)))
+  ((USE (REM-REFLECT-LIST (N (QUOTIENT P 2)))
+        (REMAINDER-EXP-LEMMA (A P)
+                             (Y (EXP A (QUOTIENT P 2)))
+                             (Z 1)
+                             (X (FACT (QUOTIENT P 2))))
+        (RES1-REM-1-1 (X (REMAINDER (FACT (QUOTIENT P 2)) P)))
+        (REMAINDER-LESSP (A 1)))
+   (HANDS-OFF FACT EXP QUOTIENT REMAINDER REFLECT-LIST)
+   (DISABLE LESSP-REMAINDER-DIVISOR
+            PRIME1
+            DIFFERENCE
+            COROLLARY-55
+            REMAINDER-EXP-LEMMA)))
+(PROVE-LEMMA TWO-EVEN
+                       NIL
+                       (IMPLIES (NOT (DIVIDES 2 P))
+                                (NOT (EQUAL (SUB1 P) 1)))
+                       ((INDUCT (ODD P))))
+(PROVE-LEMMA GAUSS-LEMMA
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P A))
+                                     (NOT (DIVIDES 2 P)))
+                                (EQUAL (RES1 (QUOTIENT P 2) A P)
+                                       (RESIDUE A P)))
+                       ((USE (EULER-1)
+                             (EULER-2)
+                             (RES1-REM-1)
+                             (RES1-REM-2)
+                             (TWO-EVEN))
+                        (DISABLE EULER-1
+                                 EULER-2
+                                 QUOTIENT
+                                 EXP
+                                 RESIDUE
+                                 RES1
+                                 PRIME
+                                 DIVIDES)))
+(DEFN PLUS-LIST
+      (L)
+  (IF (NLISTP L) 0 (PLUS (CAR L) (PLUS-LIST (CDR L)))))
+(DEFN QUOT-LIST
+      (N A P)
+  (IF (ZEROP N)
+      NIL
+      (CONS (QUOTIENT (TIMES A N) P) (QUOT-LIST (SUB1 N) A P))))
+(DEFN REM-LIST
+      (N A P)
+  (IF (ZEROP N)
+      NIL
+      (CONS (REMAINDER (TIMES A N) P) (REM-LIST (SUB1 N) A P))))
+(PROVE-LEMMA REM-QUOT-LIST
+             NIL
+             (EQUAL (TIMES A (PLUS-LIST (POSITIVES N)))
+                    (PLUS (TIMES P (PLUS-LIST (QUOT-LIST N A P)))
+                          (PLUS-LIST (REM-LIST N A P)))))
+(DEFN EVEN3 (X) (IF (ZEROP X) T (NOT (EVEN3 (SUB1 X)))))
+(PROVE-LEMMA EVEN3-PLUS
+             (REWRITE)
+             (EQUAL (EVEN3 (PLUS A B)) (EQUAL (EVEN3 A) (EVEN3 B))))
+(PROVE-LEMMA EVEN3-DIFF
+             (REWRITE)
+             (IMPLIES (LEQ X P)
+                      (EQUAL (EVEN3 (DIFFERENCE P X))
+                             (EQUAL (EVEN3 P) (EVEN3 X)))))
+(PROVE-LEMMA EVEN3-TIMES
+             (REWRITE)
+             (EQUAL (EVEN3 (TIMES A B))
+                    (OR (EVEN3 A)
+                        (EVEN3 B))))
+(PROVE-LEMMA EVEN3-REM
+             (REWRITE)
+             (IMPLIES (NOT (EVEN3 P))
+                      (EQUAL (EVEN3 (DIFFERENCE P (REMAINDER X P)))
+                             (NOT (EVEN3 (REMAINDER X P))))))
+(PROVE-LEMMA
+  EVEN3-REM-REFLECT
+  (REWRITE)
+  (IMPLIES (NOT (EVEN3 P))
+           (EQUAL (RES1 N A P)
+                  (IFF (EVEN3 (PLUS-LIST (REM-LIST N A P)))
+                       (EVEN3 (PLUS-LIST (REFLECT-LIST N A P)))))))
+(PROVE-LEMMA PERM-PLUS-LIST-1
+             (REWRITE)
+             (IMPLIES (MEMBER X M)
+                      (EQUAL (PLUS X (PLUS-LIST (DELETE X M)))
+                             (PLUS-LIST M))))
+(PROVE-LEMMA PERM-PLUS-LIST
+             NIL
+             (IMPLIES (PERM L M)
+                      (EQUAL (PLUS-LIST L) (PLUS-LIST M))))
+(PROVE-LEMMA EVEN3-EVEN NIL (EQUAL (DIVIDES 2 P) (EVEN3 P)))
+(PROVE-LEMMA
+  PLUS-REFLECT-LIST
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES P A))
+                (NOT (EVEN3 P)))
+           (EQUAL (PLUS-LIST (REFLECT-LIST (QUOTIENT P 2) A P))
+                  (PLUS-LIST (POSITIVES (QUOTIENT P 2)))))
+  ((USE (PERM-PLUS-LIST (M (REFLECT-LIST (QUOTIENT P 2) A P))
+                        (L (POSITIVES (QUOTIENT P 2))))
+        (PIGEON-HOLE-PRINCIPLE (L (REFLECT-LIST (QUOTIENT P 2)
+                                                A
+                                                P)))
+        (EVEN3-EVEN)
+        (ALL-NON-ZEROP-REFLECT-LIST (B (QUOTIENT P 2))))
+   (DISABLE PRIME)))
+(PROVE-LEMMA EQUALS-HAVE-SAME-PARITY
+             NIL
+             (IMPLIES (EQUAL X Y) (EQUAL (EVEN3 X) (EVEN3 Y))))
+(PROVE-LEMMA
+  RES1-QUOT-LIST
+  NIL
+  (IMPLIES (AND (PRIME P)
+                (NOT (EVEN3 P))
+                (NOT (EVEN3 A))
+                (NOT (DIVIDES P A)))
+           (EQUAL (RES1 (QUOTIENT P 2) A P)
+                  (EVEN3 (PLUS-LIST (QUOT-LIST (QUOTIENT P 2)
+                                               A
+                                               P)))))
+  ((USE
+     (REM-QUOT-LIST (N (QUOTIENT P 2)))
+     (EQUALS-HAVE-SAME-PARITY
+       (X (TIMES A (PLUS-LIST (POSITIVES (QUOTIENT P 2)))))
+       (Y (PLUS (TIMES P
+                       (PLUS-LIST (QUOT-LIST (QUOTIENT P 2) A P)))
+                (PLUS-LIST (REM-LIST (QUOTIENT P 2) A P))))))
+   (DISABLE PRIME)))
+(DEFN WINS1
+      (X L)
+  (IF (NLISTP L)
+      0
+      (IF (LESSP (CAR L) X)
+          (ADD1 (WINS1 X (CDR L)))
+          (WINS1 X (CDR L)))))
+(DEFN WINS
+      (K L)
+  (IF (NLISTP K) 0 (PLUS (WINS1 (CAR K) L) (WINS (CDR K) L))))
+(DEFN LOSSES1
+      (X L)
+  (IF (NLISTP L)
+      0
+      (IF (LESSP X (CAR L))
+          (ADD1 (LOSSES1 X (CDR L)))
+          (LOSSES1 X (CDR L)))))
+(DEFN LOSSES
+      (K L)
+  (IF (NLISTP K)
+      0
+      (PLUS (LOSSES1 (CAR K) L) (LOSSES (CDR K) L))))
+(PROVE-LEMMA WIN-SOME-LOSE-SOME-1
+             (REWRITE)
+             (IMPLIES (AND (NOT (MEMBER X L))
+                           (ALL-NON-ZEROP L))
+                      (EQUAL (PLUS (LOSSES1 X L) (WINS1 X L))
+                             (LENGTH L))))
+(PROVE-LEMMA WIN-SOME-LOSE-SOME-2
+             (REWRITE)
+             (IMPLIES (AND (NLISTP (INTERSECT L M))
+                           (ALL-NON-ZEROP L)
+                           (ALL-NON-ZEROP M))
+                      (EQUAL (PLUS (WINS L M) (LOSSES L M))
+                             (TIMES (LENGTH L) (LENGTH M)))))
+(PROVE-LEMMA EQUAL-LOSSES-WINS
+             (REWRITE)
+             (EQUAL (LOSSES L M) (WINS M L)))
+(PROVE-LEMMA
+  A-WINNER-EVERY-TIME
+  (REWRITE)
+  (IMPLIES (AND (NLISTP (INTERSECT L M))
+                (ALL-NON-ZEROP L)
+                (ALL-NON-ZEROP M))
+           (EQUAL (PLUS (WINS L M) (WINS M L))
+                  (TIMES (LENGTH L) (LENGTH M))))
+  ((USE (WIN-SOME-LOSE-SOME-2)) (DISABLE WIN-SOME-LOSE-SOME-2)))
+(DEFN MULTS
+      (N P)
+  (IF (ZEROP N) NIL (CONS (TIMES N P) (MULTS (SUB1 N) P))))
+(PROVE-LEMMA LENGTH-MULTS
+             (REWRITE)
+             (EQUAL (LENGTH (MULTS N P)) (FIX N)))
+(PROVE-LEMMA LEQ-N-WINS1
+                       NIL
+                       (IMPLIES (LESSP (TIMES N P) A)
+                                (LEQ N (WINS1 A (MULTS N P))))
+                       ((INDUCT (MULTS N P))))
+(PROVE-LEMMA MONOTONE-WINS1
+                       NIL
+                       (IMPLIES (LEQ N M)
+                                (LEQ (WINS1 A (MULTS N P))
+                                     (WINS1 A (MULTS M P))))
+                       ((INDUCT (MULTS M P))))
+(DEFN QUOT-QUOT-INDUCTION
+      (A B C D)
+  (IF (ZEROP B)
+      T
+      (IF (ZEROP D)
+          T
+          (IF (LESSP A D)
+              T
+              (IF (LESSP C B)
+                  T
+                  (QUOT-QUOT-INDUCTION (DIFFERENCE A D)
+                                       B
+                                       (DIFFERENCE C B)
+                                       D))))))
+(PROVE-LEMMA LEQ-TIMES-QUOT
+                       NIL
+                       (IMPLIES (AND (NOT (ZEROP B))
+                                     (LEQ (TIMES A B) (TIMES C D)))
+                                (LEQ (QUOTIENT A D) (QUOTIENT C B)))
+                       ((INDUCT (QUOT-QUOT-INDUCTION A B C D))))
+(PROVE-LEMMA LEQ-QUOT-TIMES
+                       NIL
+                       (LEQ (QUOTIENT (TIMES (QUOTIENT P 2) Q) P)
+                            (QUOTIENT Q 2))
+                       ((USE (LEQ-TIMES-QUOT (A (TIMES (QUOTIENT P 2) Q))
+                                             (D P)
+                                             (C Q)
+                                             (B 2)))
+                        ))
+(DEFN MONOTONE-QUOT-INDUCTION
+      (I J P)
+  (IF (ZEROP P)
+      T
+      (IF (LESSP I P)
+          T
+          (IF (LESSP J P)
+              T
+              (MONOTONE-QUOT-INDUCTION (DIFFERENCE I P)
+                                       (DIFFERENCE J P)
+                                       P)))))
+(PROVE-LEMMA MONOTONE-QUOT
+                       NIL
+                       (IMPLIES (LEQ J I) (LEQ (QUOTIENT J P)
+                                               (QUOTIENT I P)))
+                       ((INDUCT (MONOTONE-QUOT-INDUCTION I J P))))
+(PROVE-LEMMA LEQ-QUOT-TIMES-2
+                       NIL
+                       (IMPLIES (LEQ J (QUOTIENT P 2))
+                                (LEQ (QUOTIENT (TIMES J Q) P)
+                                     (QUOTIENT Q 2)))
+                       ((USE (LEQ-QUOT-TIMES)
+                             (MONOTONE-QUOT (J (TIMES J Q))
+                                            (I (TIMES (QUOTIENT P 2) Q)))
+                             (LESSP-TIMES-CANCELLATION (X J)
+                                                       (Y (QUOTIENT P 2))
+                                                       (Z Q)))
+                        (DISABLE LESSP-TIMES-CANCELLATION)))
+(PROVE-LEMMA LEQ-QUOT-WINS1-1
+             NIL
+             (IMPLIES (NOT (DIVIDES P X))
+                      (LESSP (TIMES (QUOTIENT X P) P) X)))
+(PROVE-LEMMA
+  LEQ-QUOT-WINS1-2
+  NIL
+  (IMPLIES (AND (PRIME P)
+                (NOT (DIVIDES P Q))
+                (NOT (ZEROP Q))
+                (NOT (ZEROP J))
+                (LESSP J P))
+           (LESSP (TIMES (QUOTIENT (TIMES J Q) P) P) (TIMES J Q)))
+  ((USE (LEQ-QUOT-WINS1-1 (X (TIMES J Q)))) (DISABLE PRIME
+                                                     QUOTIENT
+                                                     TIMES)))
+(PROVE-LEMMA LEQ-QUOT-WINS1
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P Q))
+                                     (LEQ J (QUOTIENT P 2))
+                                     (NOT (ZEROP J))
+                                     (NOT (ZEROP Q)))
+                                (LEQ (QUOTIENT (TIMES J Q) P)
+                                     (WINS1 (TIMES J Q)
+                                            (MULTS (QUOTIENT Q 2) P))))
+                       ((USE (LEQ-QUOT-TIMES-2)
+                             (MONOTONE-WINS1 (A (TIMES J Q))
+                                             (N (QUOTIENT (TIMES J Q) P))
+                                             (M (QUOTIENT Q 2)))
+                             (LEQ-N-WINS1 (A (TIMES J Q))
+                                          (N (QUOTIENT (TIMES J Q) P)))
+                             (LEQ-QUOT-WINS1-2))
+                        (DISABLE PRIME)))
+(DEFN WINS2
+      (A N P)
+  (IF (ZEROP N)
+      0
+      (IF (LESSP (TIMES N P) A) N (WINS2 A (SUB1 N) P))))
+(PROVE-LEMMA LEQ-WINS2 NIL (LEQ (TIMES (WINS2 A N P) P) A))
+(PROVE-LEMMA LEQ-WINS1-N NIL (LEQ (WINS1 A (MULTS N P)) N))
+(PROVE-LEMMA LEQ-WINS1-WINS2
+                       NIL
+                       (LEQ (WINS1 A (MULTS N P)) (WINS2 A N P))
+                       ((USE (LEQ-WINS1-N)) (INDUCT (WINS2 A N P))))
+(PROVE-LEMMA LEQ-WINS1
+                       NIL
+                       (LEQ (TIMES (WINS1 A (MULTS N P)) P) A)
+                       ((USE (LEQ-WINS2)
+                             (LEQ-WINS1-WINS2)
+                             (LESSP-TIMES-CANCELLATION (X (WINS1 A
+                                                                 (MULTS N
+                                                                        P)))
+                                                       (Y (WINS2 A N P))
+                                                       (Z P)))
+                        (DISABLE LESSP-TIMES-CANCELLATION)))
+(PROVE-LEMMA LEQ-WINS1-QUOT
+                       NIL
+                       (IMPLIES (NOT (ZEROP P))
+                                (LEQ (WINS1 A (MULTS N P)) (QUOTIENT A P)))
+                       ((USE (MONOTONE-QUOT (I A)
+                                            (J (TIMES (WINS1 A (MULTS N P))
+                                                      P)))
+                             (LEQ-WINS1))
+                        ))
+(PROVE-LEMMA EQUAL-QUOT-WINS1
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P Q))
+                                     (LEQ J (QUOTIENT P 2))
+                                     (NOT (ZEROP J))
+                                     (NOT (ZEROP Q)))
+                                (EQUAL (WINS1 (TIMES J Q)
+                                              (MULTS (QUOTIENT Q 2) P))
+                                       (QUOTIENT (TIMES J Q) P)))
+                       ((USE (LEQ-QUOT-WINS1)
+                             (LEQ-WINS1-QUOT (A (TIMES J Q))
+                                             (N (QUOTIENT Q 2))))))
+(PROVE-LEMMA EQUAL-WINS-PLUS-QUOT-LIST
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (NOT (DIVIDES P Q))
+                                     (NOT (ZEROP Q))
+                                     (NOT (ZEROP J))
+                                     (LEQ J (QUOTIENT P 2)))
+                                (EQUAL (WINS (MULTS J Q)
+                                             (MULTS (QUOTIENT Q 2) P))
+                                       (PLUS-LIST (QUOT-LIST J Q P))))
+                       ((INDUCT (MULTS J Q))))
+(PROVE-LEMMA GAUSS-COROLLARY
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (PRIME Q)
+                                     (NOT (EQUAL P 2))
+                                     (NOT (EQUAL Q 2))
+                                     (NOT (EQUAL P Q)))
+                                (EQUAL (RES1 (QUOTIENT P 2) Q P)
+                                       (RESIDUE Q P)))
+                       ((USE (GAUSS-LEMMA (A Q))) (DISABLE RES1
+                                                           RESIDUE
+                                                           QUOTIENT
+                                                           PRIME1
+                                                           REMAINDER)))
+(PROVE-LEMMA
+  RESIDUE-QUOT-LIST
+  NIL
+  (IMPLIES
+    (AND (PRIME P)
+         (PRIME Q)
+         (NOT (EQUAL P Q))
+         (NOT (EQUAL P 2))
+         (NOT (EQUAL Q 2)))
+    (EQUAL (EQUAL (RESIDUE Q P) (RESIDUE P Q))
+           (EVEN3 (PLUS (PLUS-LIST (QUOT-LIST (QUOTIENT P 2) Q P))
+                        (PLUS-LIST (QUOT-LIST (QUOTIENT Q 2) P Q))))))
+  ((USE (RES1-QUOT-LIST (A Q))
+        (RES1-QUOT-LIST (A P) (P Q))
+        (EVEN3-EVEN)
+        (EVEN3-EVEN (P Q)))
+   (DISABLE RESIDUE
+            RES1
+            QUOTIENT
+            QUOT-LIST
+            PLUS-LIST
+            LESSP-REMAINDER-DIVISOR
+            DIFFERENCE
+            LESSP)))
+(PROVE-LEMMA ALL-NON-ZEROP-MULTS
+             (REWRITE)
+             (IMPLIES (NOT (ZEROP P)) (ALL-NON-ZEROP (MULTS N P))))
+(PROVE-LEMMA EMPTY-INTERSECT-MULTS-1
+                       (REWRITE)
+                       (IMPLIES (AND (PRIME P)
+                                     (PRIME Q)
+                                     (NOT (EQUAL P Q))
+                                     (LESSP I Q)
+                                     (LESSP J P))
+                                (NOT (MEMBER (TIMES I P) (MULTS J Q))))
+                       ((INDUCT (MULTS J Q))))
+(PROVE-LEMMA
+  EMPTY-INTERSECT-MULTS
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (PRIME Q)
+                (NOT (EQUAL P Q))
+                (LESSP I Q))
+           (NOT (LISTP (INTERSECT (MULTS I P)
+                                  (MULTS (QUOTIENT P 2) Q)))))
+  ((USE (EMPTY-INTERSECT-MULTS-1 (J (QUOTIENT P 2))))
+   (INDUCT (MULTS I P))
+   (DISABLE PRIME1
+            QUOTIENT
+            EMPTY-INTERSECT-MULTS-1
+            LESSP-REMAINDER-DIVISOR)))
+(PROVE-LEMMA
+  EQUAL-PLUS-QUOT-LIST-WINS
+  (REWRITE)
+  (IMPLIES (AND (PRIME P)
+                (PRIME Q)
+                (NOT (EQUAL P Q)))
+           (EQUAL (PLUS-LIST (QUOT-LIST (QUOTIENT P 2) Q P))
+                  (WINS (MULTS (QUOTIENT P 2) Q)
+                        (MULTS (QUOTIENT Q 2) P))))
+  ((USE (EQUAL-WINS-PLUS-QUOT-LIST (J (QUOTIENT P 2))))
+   (DISABLE EQUAL-WINS-PLUS-QUOT-LIST
+            MULTS
+            QUOT-LIST
+            WINS
+            PLUS-LIST
+            PRIME1)))
+(PROVE-LEMMA LAW-OF-QUADRATIC-RECIPROCITY
+                       NIL
+                       (IMPLIES (AND (PRIME P)
+                                     (PRIME Q)
+                                     (NOT (EQUAL P Q))
+                                     (NOT (EQUAL P 2))
+                                     (NOT (EQUAL Q 2)))
+                                (EQUAL (EQUAL (RESIDUE Q P) (RESIDUE P Q))
+                                       (EVEN (TIMES (QUOTIENT P 2)
+                                                    (QUOTIENT Q 2)))))
+                       ((USE (RESIDUE-QUOT-LIST)
+                             (EVEN3-EVEN (P (TIMES (QUOTIENT P 2)
+                                                   (QUOTIENT Q 2)))))
+                        (HANDS-OFF QUOTIENT QUOT-LIST EVEN3 RESIDUE TIMES)
+                        (DISABLE RESIDUE
+                                 PRIME1
+                                 QUOT-LIST
+                                 PLUS-LIST
+                                 EVEN3-PLUS
+                                 LESSP-REMAINDER-DIVISOR
+                                 INTERSECT)))

@@ -1,0 +1,121 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer and J Strother Moore.  All Rights
+ Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer and J Strother Moore PROVIDE ABSOLUTELY NO WARRANTY.  THE
+ EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+ OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO
+ THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT
+ PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
+ CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer or J Strother Moore BE LIABLE TO YOU FOR ANY
+ DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR
+ CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT
+ (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE
+ OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE
+ POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+(NOTE-LIB "proveall" T)
+(COMPILE-UNCOMPILED-DEFNS "tmp")
+(DEFN BC (N M)
+  (IF (ZEROP M) 1
+      (IF (LESSP N M) 0
+          (PLUS (BC (SUB1 N) M) (BC (SUB1 N) (SUB1 M))))))    
+(DISABLE EVAL$)
+(PROVE-LEMMA FOR-APPEND-SUM (REWRITE)
+             (EQUAL (FOR X (APPEND A B) TEST 'SUM BODY ALIST)
+                    (PLUS (FOR X A TEST 'SUM BODY ALIST)
+                          (FOR X B TEST 'SUM BODY ALIST))))
+(PROVE-LEMMA BC-X-X1 (REWRITE) (EQUAL (BC X (ADD1 X)) 0))
+(PROVE-LEMMA BC-X-X (REWRITE) (EQUAL (BC X X) 1))
+(PROVE-LEMMA FROM-TO-OPENS-AT-BTM (REWRITE)
+             (EQUAL (FROM-TO 0 B) (CONS 0 (FROM-TO 1 B))))
+(PROVE-LEMMA MEMBER-FROM-TO (REWRITE)
+             (EQUAL (MEMBER I (FROM-TO A B))
+                    (AND (NUMBERP I)
+                         (NOT (LESSP I A))
+                         (NOT (LESSP B I))))
+             ((INDUCT (FROM-TO A B))))
+(PROVE-LEMMA FOR-SUM-PLUS (REWRITE)
+             (EQUAL (FOR I RANGE TEST 'SUM (LIST (QUOTE PLUS) A B) ALIST)
+                    (PLUS (FOR I RANGE TEST 'SUM A ALIST)
+                          (FOR I RANGE TEST 'SUM B ALIST)))
+             ((ENABLE EVAL$)))
+(PROVE-LEMMA TIMES-PLUS-DISTRIBUTIVITY-AGAIN (REWRITE)
+             (EQUAL (TIMES (PLUS A B) C)
+                    (PLUS (TIMES A C) (TIMES B C))))
+(PROVE-LEMMA DIFFERENCE-SUB1-2 (REWRITE)
+             (IMPLIES (AND (NOT (ZEROP I))
+                           (NOT (LESSP X I)))
+                      (EQUAL (DIFFERENCE X (SUB1 I))
+                             (ADD1 (DIFFERENCE X I)))))
+(PROVE-LEMMA OUT-WITH-THE-FACTORS (REWRITE)
+             (IMPLIES (AND (NLISTP ONE)
+                           (NOT (EQUAL ONE VAR)))
+                      (EQUAL (FOR VAR RANGE CONDITION (QUOTE SUM)
+                                  (LIST (QUOTE TIMES) ONE TWO)
+                                  ALIST)
+                             (TIMES (EVAL$ (TRUE) ONE ALIST)
+                                    (FOR VAR RANGE CONDITION (QUOTE SUM) TWO
+                                         ALIST))))
+             ((ENABLE EVAL$)))
+(PROVE-LEMMA LESSP-1 (REWRITE)
+             (EQUAL (LESSP I 1) (ZEROP I)))
+(PROVE-LEMMA LESSP-CROCK1 (REWRITE)
+             (IMPLIES (NOT (ZEROP I))
+                      (EQUAL (LESSP X (SUB1 I))
+                             (AND (LESSP X I)
+                                  (NOT (EQUAL (FIX X) (SUB1 I)))))))
+(PROVE-LEMMA ZERO-SUM (REWRITE)
+             (EQUAL (FOR I L COND 'SUM ''0 ALIST) 0)
+             ((ENABLE EVAL$)))
+(PROVE-LEMMA SHIFT-INDICIAL-UP-CROCK (REWRITE)
+  (IMPLIES (NOT (ZEROP N))
+           (EQUAL (FOR I IN (FROM-TO 1 N) SUM
+                       (TIMES (EXP A I)
+                              (TIMES (BC X (SUB1 I))
+                                     (EXP B (DIFFERENCE X I)))))
+                  (FOR I IN (FROM-TO 0 (SUB1 N)) SUM
+                       (TIMES (EXP A (ADD1 I))
+                              (TIMES (BC X I)
+                                     (EXP B (DIFFERENCE X (ADD1 I)))))))))
+(PROVE-LEMMA GOAL1 (REWRITE)
+  (IMPLIES
+    (AND (NUMBERP X)
+         (NOT (EQUAL X 0))
+         (NOT (EQUAL 1 X))
+         (NOT (EQUAL (SUB1 X) 0)))
+    (EQUAL
+      (TIMES A
+             (FOR I IN
+                  (FROM-TO 1 (SUB1 X))
+                  SUM
+                  (TIMES (BC X I)
+                         (TIMES (EXP A I)
+                                (EXP B (DIFFERENCE X I))))))
+      (TIMES A
+             (TIMES B
+                    (FOR I IN
+                         (FROM-TO 1 (SUB1 X))
+                         SUM
+                         (TIMES (BC X I)
+                                (TIMES (EXP A I)
+                                       (EXP B
+                                            (DIFFERENCE (SUB1 X) I))))))))))
+(PROVE-LEMMA NEWTON (REWRITE)
+             (EQUAL (EXP (PLUS A B) N)
+                    (FOR I IN (FROM-TO 0 N) SUM
+                         (TIMES (BC N I)
+                                (EXP A I)
+                                (EXP B (DIFFERENCE N I)))))
+             ((INDUCT (EXP A N))))

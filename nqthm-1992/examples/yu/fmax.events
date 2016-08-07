@@ -1,0 +1,487 @@
+#|
+
+ Copyright (C) 1994 by Yuan Yu.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Yuan Yu PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS"
+ WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT
+ LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Yuan Yu BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS,
+ LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT
+ OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS
+ OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD
+ PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR
+ FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+;           Function Pointer Constrains with a Witness GT
+(note-lib "mc20-2" t)
+#|
+/* greater than relation */
+gt(int a, int b)
+{
+  if (a == b)
+    return 0;
+  else if (a > b)
+    return 1;
+  else return -1;
+}
+
+The MC68020 assembly code of the above GCD program.  The code is generated 
+by "gcc -O".
+
+0x22de <gt>:    linkw fp,#0 
+0x22e2 <gt+4>:  movel fp@(8),d1 
+0x22e6 <gt+8>:  movel fp@(12),d0 
+0x22ea <gt+12>: cmpl d1,d0 
+0x22ec <gt+14>: bne 0x22f2 <gt+20> 
+0x22ee <gt+16>: clrl d0 
+0x22f0 <gt+18>: bra 0x22fc <gt+30> 
+0x22f2 <gt+20>: cmpl d1,d0 
+0x22f4 <gt+22>: bge 0x22fa <gt+28> 
+0x22f6 <gt+24>: movel #1,d0 
+0x22f8 <gt+26>: bra 0x22fc <gt+30> 
+0x22fa <gt+28>: movel #-1,d0 
+0x22fc <gt+30>: unlk fp 
+0x22fe <gt+32>: rts 
+
+The machine code:
+
+0x22de <gt>:    0x4e56  0x0000  0x222e  0x0008  0x202e  0x000c  0xb081  0x6604 
+0x22ee <gt+16>: 0x4280  0x600a  0xb081  0x6c04  0x7001  0x6002  0x70ff  0x4e5e 
+0x22fe <gt+32>: 0x4e75 
+
+'(78      86      0       0       34      46      0       8 
+  32      46      0       12      176     129     102     4 
+  66      128     96      10      176     129     108     4 
+  112     1       96      2       112     255     78      94 
+  78      117)
+|#
+
+; In Nqthm logic, gt-code defines the programs.
+(defn gt-code ()
+  '(78      86      0       0       34      46      0       8 
+    32      46      0       12      176     129     102     4 
+    66      128     96      10      176     129     108     4 
+    112     1       96      2       112     255     78      94 
+    78      117))
+
+(defn gt (a b)
+  (if (equal a b)
+      0
+    (if (ilessp b a) 1 -1)))
+
+(defn gt-t (a b)
+  (if (equal a b)
+      9
+    (if (ilessp b a) 11 10)))
+
+; preconditions on the initial state.
+(defn gt-statep (s a b)
+  (and (equal (mc-status s) 'running)
+       (evenp (mc-pc s))
+       (rom-addrp (mc-pc s) (mc-mem s) 34)
+       (mcode-addrp (mc-pc s) (mc-mem s) (gt-code))
+       (ram-addrp (sub 32 4 (read-sp s)) (mc-mem s) 16)
+       (equal a (iread-mem (add 32 (read-sp s) 4) (mc-mem s) 4))
+       (equal b (iread-mem (add 32 (read-sp s) 8) (mc-mem s) 4))))
+
+; correctness.
+(disable ilessp)
+
+(prove-lemma gt-s-sn (rewrite)
+     (let ((sn (stepn s (gt-t a b))))
+       (implies (gt-statep s a b)
+                (and (equal (mc-status sn) 'running)
+                     (equal (mc-pc sn) (rts-addr s))
+                     (equal (read-rn 32 14 (mc-rfile sn))
+                            (read-rn 32 14 (mc-rfile s)))
+                     (equal (read-rn 32 15 (mc-rfile sn))
+                            (add 32 (read-sp s) 4))
+                     (implies (d2-7a2-5p rn)
+                              (equal (read-rn oplen rn (mc-rfile sn))
+                                     (read-rn oplen rn (mc-rfile s))))
+                     (implies (disjoint x k (sub 32 4 (read-sp s)) 4)
+                              (equal (read-mem x (mc-mem sn) k)
+                                     (read-mem x (mc-mem s) k)))
+                     (equal (iread-dn 32 0 sn) (gt a b))))))
+
+(disable gt-t)
+(disable gt)
+
+; function constrain with gt as witness.
+(constrain p-disjointness (rewrite)
+   (implies (and (p-disjoint x n s)
+                 (leq (plus j (index-n y x)) n))
+            (p-disjoint y j s))
+   ((p-disjoint (lambda (x n s) f))))
+                 
+(constrain fn*-correctness (rewrite)
+   (implies (fn*-statep s a b)
+            (let ((sn (stepn s (fn*-t a b))))
+              (and (equal (mc-status sn) 'running)
+                   (equal (mc-pc sn) (rts-addr s))
+                   (equal (read-rn 32 14 (mc-rfile sn))
+                          (read-rn 32 14 (mc-rfile s)))
+                   (equal (read-rn 32 15 (mc-rfile sn))
+                          (add 32 (read-sp s) 4))
+                   (implies (and (leq oplen 32)
+                                 (d2-7a2-5p rn))
+                            (equal (read-rn oplen rn (mc-rfile sn))
+                                   (read-rn oplen rn (mc-rfile s))))
+                   (implies (p-disjoint x k s)
+                            (equal (read-mem x (mc-mem sn) k)
+                                   (read-mem x (mc-mem s) k)))
+                   (equal (iread-dn 32 0 sn) (fn* a b)))))
+   ((fn*-statep (lambda (s a b) f))
+    (fn*-t (lambda (a b) 0))
+    (fn* (lambda (a b) 0))))
+
+;          Proof of the Correctness of a MAX Function        
+#|
+The following C function max computes the maximum of integers a and b, 
+according to the comparison function comp.  Here, we study the problem
+of function pointer.
+
+max(int a, int b, int (*comp)(int, int))
+{
+  if ((*comp)(a, b) < 0)
+    return b;
+  else return a;    
+}
+
+The MC68020 assembly code of the C function max on SUN-3 is given as 
+follows.  This binary is generated by "gcc -O".
+
+0x2320 <max>:           linkw fp,#0
+0x2324 <max+4>:         moveml d2-d3,sp@-
+0x2328 <max+8>:         movel fp@(8),d3
+0x232c <max+12>:        movel fp@(12),d2
+0x2330 <max+16>:        movel d2,sp@-
+0x2332 <max+18>:        movel d3,sp@-
+0x2334 <max+20>:        moveal fp@(16),a0
+0x2338 <max+24>:        jsr a0@
+0x233a <max+26>:        tstl d0
+0x233c <max+28>:        bge 0x2342 <max+34>
+0x233e <max+30>:        movel d2,d0
+0x2340 <max+32>:        bra 0x2344 <max+36>
+0x2342 <max+34>:        movel d3,d0
+0x2344 <max+36>:        moveml fp@(-8),d2-d3
+0x234a <max+42>:        unlk fp
+0x234c <max+44>:        rts
+
+The machine code of the above program is:
+
+<max>:      0x4e56  0x0000  0x48e7  0x3000  0x262e  0x0008  0x242e  0x000c
+<max+16>:   0x2f02  0x2f03  0x206e  0x0010  0x4e90  0x4a80  0x6c04  0x2002
+<max+32>:   0x6002  0x2003  0x4cee  0x000c  0xfff8  0x4e5e  0x4e75
+
+'(78      86      0       0       72      231     48      0
+  38      46      0       8       36      46      0       12
+  47      2       47      3       32      110     0       16
+  78      144     74      128     108     4       32      2
+  96      2       32      3       76      238     0       12
+  255     248     78      94      78      117)
+|#
+
+(defn max-code ()
+  '(78      86      0       0       72      231     48      0
+    38      46      0       8       36      46      0       12
+    47      2       47      3       32      110     0       16
+    78      144     74      128     108     4       32      2
+    96      2       32      3       76      238     0       12
+    255     248     78      94      78      117))
+
+; imax is the Nqthm counterpart of the program (max-code).
+(defn max-fn* (a b)
+  (if (negativep (fn* a b)) b a))
+
+; the computation time of the program.
+(defn max-t0 (a b) 8)
+
+(defn max-t (a b)
+  (splus (max-t0 a b)
+         (splus (fn*-t a b) 
+                (if (negativep (fn* a b)) 7 6))))
+
+; the assumptions of the initial state.
+(defn max-sp (s a b)
+  (and (equal (mc-status s) 'running)
+       (evenp (mc-pc s))
+       (rom-addrp (mc-pc s) (mc-mem s) 46)
+       (mcode-addrp (mc-pc s) (mc-mem s) (max-code))
+       (equal a (iread-mem (add 32 (read-sp s) 4) (mc-mem s) 4))
+       (equal b (iread-mem (add 32 (read-sp s) 8) (mc-mem s) 4))
+       (ram-addrp (sub 32 24 (read-sp s)) (mc-mem s) 40)))
+  
+(constrain max-state (rewrite)
+   (and (implies (max-statep s a b)
+                 (fn*-statep (stepn s (max-t0 a b)) a b))
+        (implies (max-statep s a b)
+                 (p-disjoint (add 32
+                                  (read-rn 32 15 (mc-rfile s))
+                                  4294967272)
+                             40
+                             (stepn s (max-t0 a b))))
+        (equal (max-statep s a b)
+               (and (max-sp s a b)
+                    (comp-loadp s a b))))
+   ((max-statep (lambda (s a b) f))
+    (comp-loadp (lambda (s a b) f))))
+
+; an intermediate state.
+(defn max-s0p (s a b)
+  (and (equal (mc-status s) 'running)
+       (equal (mc-pc s) (read-mem (add 32 (read-an 32 6 s) 16) (mc-mem s) 4))
+       (evenp (rts-addr s))
+       (rom-addrp (sub 32 26 (rts-addr s)) (mc-mem s) 46)
+       (mcode-addrp (sub 32 26 (rts-addr s)) (mc-mem s) (max-code))
+       (ram-addrp (read-sp s) (mc-mem s) 40)
+       (equal* (read-sp s) (sub 32 20 (read-an 32 6 s)))
+       (equal a (iread-dn 32 3 s))
+       (equal b (iread-dn 32 2 s))
+       (equal (iread-mem (add 32 (read-sp s) 4) (mc-mem s) 4) a)
+       (equal (iread-mem (add 32 (read-sp s) 8) (mc-mem s) 4) b)))
+
+; an intermediate state.
+(defn max-s1p (s a b)
+  (and (equal (mc-status s) 'running)
+       (evenp (mc-pc s))
+       (rom-addrp (sub 32 26 (mc-pc s)) (mc-mem s) 46)
+       (mcode-addrp (sub 32 26 (mc-pc s)) (mc-mem s) (max-code))
+       (ram-addrp (sub 32 20 (read-an 32 6 s)) (mc-mem s) 40)
+       (equal a (iread-dn 32 3 s))
+       (equal b (iread-dn 32 2 s))
+       (equal (iread-dn 32 0 s) (fn* a b))))
+
+(constrain max-disjointness (rewrite)
+   (implies (and (max-statep s a b)
+                 (max-disjoint x k s))
+            (p-disjoint x k (stepn s (max-t0 a b))))
+   ((max-disjoint (lambda (x k s) f))))
+
+; from the initial state to s0.  s --> s0.
+(prove-lemma max-s-s0 ()
+     (implies (max-sp s a b)
+              (max-s0p (stepn s (max-t0 a b)) a b)))
+
+(prove-lemma max-s-s0-else (rewrite)
+     (let ((s0 (stepn s (max-t0 a b))))
+       (implies (max-sp s a b)
+                (and (equal (linked-rts-addr s0) (rts-addr s))
+                     (equal (linked-a6 s0) (read-an 32 6 s))
+                     (equal (read-rn 32 14 (mc-rfile s0))
+                            (sub 32 4 (read-sp s)))
+                     (equal (movem-saved s0 4 8 2)
+                            (readm-rn 32 '(2 3) (mc-rfile s)))))))
+                     
+(prove-lemma max-s-s0-rfile (rewrite)
+     (implies (and (max-sp s a b)
+                   (d4-7a2-5p rn))
+              (equal (read-rn oplen rn (mc-rfile (stepn s (max-t0 a b))))
+                     (read-rn oplen rn (mc-rfile s)))))
+
+(prove-lemma max-s-s0-mem (rewrite)
+     (implies (and (max-sp s a b)
+                   (disjoint x k (sub 32 24 (read-sp s)) 24))
+              (equal (read-mem x (mc-mem (stepn s (max-t0 a b))) k)
+                     (read-mem x (mc-mem s) k))))
+
+; from s0 to s1.  s0 --> s1.  This is basically a fact about the
+; subroutine comp.
+(prove-lemma max-s0-s1 ()
+     (implies (and (max-s0p s a b)
+                   (fn*-statep s a b))
+              (max-s1p (stepn s (fn*-t a b)) a b)))
+
+(prove-lemma max-s0-s1-else (rewrite)
+     (implies (and (max-s0p s a b)
+                   (fn*-statep s a b)
+                   (p-disjoint (sub 32 20 (read-an 32 6 s)) 40 s))
+              (and (equal (linked-rts-addr (stepn s (fn*-t a b)))
+                          (linked-rts-addr s))
+                   (equal (read-rn 32 14 (mc-rfile (stepn s (fn*-t a b))))
+                          (read-rn 32 14 (mc-rfile s)))
+                   (equal (linked-a6 (stepn s (fn*-t a b)))
+                          (linked-a6 s))
+                   (equal (movem-saved (stepn s (fn*-t a b)) 4 8 2)
+                          (movem-saved s 4 8 2)))))
+
+(prove-lemma max-s0-s1-rfile (rewrite)
+     (implies (and (max-s0p s a b)
+                   (fn*-statep s a b)
+                   (leq oplen 32)
+                   (d2-7a2-5p rn))
+              (equal (read-rn oplen rn (mc-rfile (stepn s (fn*-t a b))))
+                     (read-rn oplen rn (mc-rfile s)))))
+
+(prove-lemma max-s0-s1-mem (rewrite)
+     (implies (and (max-s0p s a b)
+                   (fn*-statep s a b)
+                   (p-disjoint x k s))
+              (equal (read-mem x (mc-mem (stepn s (fn*-t a b))) k)
+                     (read-mem x (mc-mem s) k))))
+
+; from s1 to exit.  s1 --> exit.
+(prove-lemma max-s1-sn-1 (rewrite)
+     (implies (and (max-s1p s a b)
+                   (negativep (fn* a b)))
+              (and (equal (mc-status (stepn s 7)) 'running)
+                   (equal (mc-pc (stepn s 7)) (linked-rts-addr s))
+                   (equal (iread-dn 32 0 (stepn s 7)) b)
+                   (equal (read-rn 32 14 (mc-rfile (stepn s 7)))
+                          (linked-a6 s))
+                   (equal (read-rn 32 15 (mc-rfile (stepn s 7)))
+                          (add 32 (read-an 32 6 s) 8))
+                   (equal (read-mem x (mc-mem (stepn s 7)) k)
+                          (read-mem x (mc-mem s) k)))))
+
+(prove-lemma max-s1-sn-rfile-1 (rewrite)
+     (implies (and (max-s1p s a b)
+                   (negativep (fn* a b))
+                   (leq oplen 32)
+                   (d2-7a2-5p rn))
+              (equal (read-rn oplen rn (mc-rfile (stepn s 7)))
+                     (if (d4-7a2-5p rn)
+                         (read-rn oplen rn (mc-rfile s))
+                       (get-vlst oplen 0 rn '(2 3) (movem-saved s 4 8 2))))))
+
+(prove-lemma max-s1-sn-2 (rewrite)
+     (implies (and (max-s1p s a b)
+                   (not (negativep (fn* a b))))
+              (and (equal (mc-status (stepn s 6)) 'running)
+                   (equal (mc-pc (stepn s 6)) (linked-rts-addr s))
+                   (equal (iread-dn 32 0 (stepn s 6)) a)
+                   (equal (read-rn 32 14 (mc-rfile (stepn s 6)))
+                          (linked-a6 s))
+                   (equal (read-rn 32 15 (mc-rfile (stepn s 6)))
+                          (add 32 (read-an 32 6 s) 8))
+                   (equal (read-mem x (mc-mem (stepn s 6)) k)
+                          (read-mem x (mc-mem s) k)))))
+
+(prove-lemma max-s1-sn-rfile-2 (rewrite)
+     (implies (and (max-s1p s a b)
+                   (not (negativep (fn* a b)))
+                   (leq oplen 32)
+                   (d2-7a2-5p rn))
+              (equal (read-rn oplen rn (mc-rfile (stepn s 6)))
+                     (if (d4-7a2-5p rn)
+                         (read-rn oplen rn (mc-rfile s))
+                       (get-vlst oplen 0 rn '(2 3) (movem-saved s 4 8 2))))))
+
+; the correctness of max.
+(disable max-t0)
+
+(prove-lemma max-correctness (rewrite)
+     (let ((sn (stepn s (max-t a b))))
+       (implies (max-statep s a b)
+                (and (equal (mc-status sn) 'running)
+                     (equal (mc-pc sn) (rts-addr s))
+                     (equal (read-rn 32 14 (mc-rfile sn))
+                            (read-rn 32 14 (mc-rfile s)))
+                     (equal (read-rn 32 15 (mc-rfile sn))
+                            (add 32 (read-sp s) 4))
+                     (implies (and (leq oplen 32)
+                                   (d2-7a2-5p rn))
+                              (equal (read-rn oplen rn (mc-rfile sn))
+                                     (read-rn oplen rn (mc-rfile s))))
+                     (implies (and (disjoint x k (sub 32 24 (read-sp s)) 40)
+                                   (max-disjoint x k s))
+                              (equal (read-mem x (mc-mem sn) k)
+                                     (read-mem x (mc-mem s) k)))
+                     (equal (iread-dn 32 0 sn) (max-fn* a b)))))
+     ((use (max-s-s0)
+           (max-s0-s1 (s (stepn s (max-t0 a b)))))
+      (disable max-sp max-s0p max-s1p iread-dn linked-rts-addr 
+               stepn-rewriter)))
+
+(prove-lemma disjoint-la4 (rewrite)
+     (implies (and (disjoint a m b n)
+                   (leq (plus j (index-n a1 a)) m)
+                   (leq (plus l (index-n b1 b)) n))
+              (disjoint a1 j b1 l))
+     ((use (disjoint-la3 (i (index-n a1 a)) (k (index-n b1 b))))
+      (enable index-n)))
+
+; instantiation.
+(defn max-gt-statep (s a b)
+  (let ((comp (read-mem (add 32 (read-sp s) 12) (mc-mem s) 4)))
+    (and (equal (mc-status s) 'running)
+         (evenp (mc-pc s))
+         (rom-addrp (mc-pc s) (mc-mem s) 46)
+         (mcode-addrp (mc-pc s) (mc-mem s) (max-code))
+         (equal a (iread-mem (add 32 (read-sp s) 4) (mc-mem s) 4))
+         (equal b (iread-mem (add 32 (read-sp s) 8) (mc-mem s) 4))
+         (evenp comp)
+         (rom-addrp comp (mc-mem s) (len (gt-code)))
+         (mcode-addrp comp (mc-mem s) (gt-code))
+         (ram-addrp (sub 32 28 (read-sp s)) (mc-mem s) 44))))
+
+(defn max-gt-t (a b)
+  (splus (max-t0 a b)
+         (splus (gt-t a b) 
+                (if (negativep (gt a b)) 7 6))))
+
+(defn max-gt (a b)
+   (if (negativep (gt a b)) b a))
+
+(prove-lemma max-gt-statep-s0 (rewrite)
+     (let ((s0 (stepn s (max-t0 a b))))
+       (implies (max-gt-statep s a b)
+                (and (equal (mc-status s0) 'running)
+                     (equal (mc-pc s0) 
+                            (read-mem (add 32 (read-sp s) 12) (mc-mem s) 4))
+                     (equal (read-rn 32 15 (mc-rfile s0))
+                            (sub 32 24 (read-sp s)))
+                     (equal (iread-mem (add 32 (read-rn 32 15 (mc-rfile s0)) 4)
+                                       (mc-mem s0) 4)
+                            a)
+                     (equal (iread-mem (add 32 (read-rn 32 15 (mc-rfile s0)) 8)
+                                       (mc-mem s0) 4)
+                            b))))
+     ((use (max-s-s0))))
+
+(functionally-instantiate max-gt-correctness (rewrite)
+     (implies (max-gt-statep s a b)
+              (let ((sn (stepn s (max-gt-t a b))))
+                (and (equal (mc-status sn) 'running)
+                     (equal (mc-pc sn) (rts-addr s))
+                     (equal (read-rn 32 14 (mc-rfile sn))
+                            (read-rn 32 14 (mc-rfile s)))
+                     (equal (read-rn 32 15 (mc-rfile sn))
+                            (add 32  (read-sp s) 4))
+                     (implies (and (leq oplen 32)
+                                   (d2-7a2-5p rn))
+                              (equal (read-rn oplen rn (mc-rfile sn))
+                                     (read-rn oplen rn (mc-rfile s))))
+                     (implies (and (disjoint x k (sub 32 24 (read-sp s)) 40)
+                                   (disjoint x k (sub 32 28 (read-sp s)) 4))
+                              (equal (read-mem x (mc-mem sn) k)
+                                     (read-mem x (mc-mem s) k)))
+                     (equal (iread-dn 32 0 sn) (max-gt a b)))))
+     max-correctness
+     ((max-statep max-gt-statep)
+      (max-disjoint (lambda (x k s) (disjoint x k (sub 32 28 (read-sp s)) 4)))
+      (p-disjoint (lambda (x k s) (disjoint x k (sub 32 4 (read-sp s)) 4)))
+      (comp-loadp 
+       (lambda (s a b) 
+         (let ((comp (read-mem (add 32 (read-sp s) 12) (mc-mem s) 4)))
+           (and (evenp comp)
+                (rom-addrp comp (mc-mem s) (len (gt-code)))
+                (mcode-addrp comp (mc-mem s) (gt-code))
+                (ram-addrp (sub 32 28 (read-sp s)) (mc-mem s) 44)))))
+      (max-t max-gt-t)
+      (max-fn* max-gt)
+      (fn*-statep gt-statep)
+      (fn*-t gt-t)
+      (fn* gt))
+     ((disable iread-mem)))

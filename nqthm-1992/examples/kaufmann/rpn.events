@@ -1,0 +1,149 @@
+#|
+
+ Copyright (C) 1994 by Matt Kaufmann, Damir Jamsek, and Computational Logic,
+ Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Matt Kaufmann, Damir Jamsek, and Computational Logic, Inc. PROVIDE ABSOLUTELY
+ NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY
+ KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE
+ ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.
+ SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY
+ SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Matt Kaufmann, Damir Jamsek, or Computational Logic, Inc. BE
+ LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER
+ SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
+ INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR
+ DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF
+ YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY
+ ANY OTHER PARTY.''
+
+|#
+
+;; An exercise in reverse Polish notation evaluation suggested
+;; by Damir Jamsek.
+
+(boot-strap nqthm)
+
+(defn length (l)
+  (if (listp l)
+      (add1 (length (cdr l)))
+    0))
+
+(defn op1 () '(suc))
+
+(defn op2 () '(add mul div mod))
+
+(defn op1-form-p (e)
+  (and (listp e)
+       (listp (cdr e))
+       (equal (cddr e) nil)
+       (member (car e) (op1))))
+
+(defn op2-form-p (e)
+  (and (listp e)
+       (listp (cdr e))
+       (listp (cddr e))
+       (equal (cdddr e) nil)
+       (member (car e) (op2))))
+
+(defn exp-p (e)
+  (cond 
+   ((numberp e) t)
+   ((op1-form-p e)
+    (exp-p (cadr e)))
+   ((op2-form-p e)
+    (and (exp-p (cadr e))
+         (exp-p (caddr e))))
+   (t f)))
+
+(defn eval-exp (e)
+  (cond 
+   ((numberp e) e)
+   ((and (op1-form-p e) 
+         (equal (car e) 'suc)) 
+    (add1 (eval-exp (cadr e))))
+   ((and (op2-form-p e) 
+         (equal (car e) 'add)) 
+    (plus (eval-exp (cadr e))
+          (eval-exp (caddr e))))
+   ((and (op2-form-p e)
+         (equal (car e) 'mul))
+    (times (eval-exp (cadr e))
+           (eval-exp (caddr e))))
+   ((and (op2-form-p e)
+         (equal (car e) 'div))
+    (quotient (eval-exp (cadr e))
+              (eval-exp (caddr e))))
+   ((and (op2-form-p e) (equal (car e) 'mod))
+    (remainder (eval-exp (cadr e))
+               (eval-exp (caddr e))))
+   (t f)))
+
+
+(defn exp-to-rpn (e)
+  (cond 
+   ((numberp e)
+    (list e))
+   ((op1-form-p e)
+    (append (exp-to-rpn (cadr e))
+            (list (car e))))
+   ((op2-form-p e)
+    (append (exp-to-rpn (caddr e))
+            (append (exp-to-rpn (cadr e))
+                    (list (car e)))))
+   (t nil)))
+
+(defn eval-rpn (r s)
+  (if (listp r)
+      (cond 
+       ((numberp (car r)) 
+        (eval-rpn (cdr r)
+                  (cons (car r) s)))
+       ((equal (car r) 'suc) 
+        (eval-rpn (cdr r)
+                  (cons (add1 (car s)) (cdr s))))
+       ((equal (car r) 'add) 
+        (eval-rpn (cdr r)
+                  (cons (plus (car s) (cadr s))
+                        (cddr s))))
+       ((equal (car r) 'mul) 
+        (eval-rpn (cdr r)
+                  (cons (times (car s) (cadr s))
+                        (cddr s))))
+       ((equal (car r) 'div) 
+        (eval-rpn (cdr r)
+                  (cons (quotient (car s) (cadr s))
+                        (cddr s))))
+       ((equal (car r) 'mod) 
+        (eval-rpn (cdr r)
+                  (cons (remainder (car s) (cadr s))
+                        (cddr s))))
+       (t (eval-rpn (cdr r) s)))
+    s))
+
+(prove-lemma eval-rpn-append (rewrite)
+  (equal (eval-rpn (append r1 r2) s)
+         (eval-rpn r2 (eval-rpn r1 s))))
+
+(defn l1-ind (e s)
+  (cond 
+   ((numberp e) t)
+   ((op1-form-p e)
+    (l1-ind (cadr e) s))
+   ((op2-form-p e)
+    (and (l1-ind (caddr e) s)
+         (l1-ind (cadr e) (cons (eval-exp (caddr e)) s))))
+   (t t)))
+
+(prove-lemma l1 ()
+             (implies (exp-p e)
+                      (equal (cons (eval-exp e) s)
+                             (eval-rpn (exp-to-rpn e) s)))
+             ((induct (l1-ind e s))))

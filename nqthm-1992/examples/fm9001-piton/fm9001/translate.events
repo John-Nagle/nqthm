@@ -1,0 +1,148 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    TRANSLATE.EVENTS
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  LISP-NETLIST converts a netlist that may include INDEX shells to one where
+;;;  the indexed names have been collapsed into literal atoms.  For example,
+;;;  the indexed name (INDEX 'G 0) become 'G_0.  
+
+(defn rev-0 (x)
+  (rev1 x 0))
+
+(defn number-to-digit (number)
+  (nth number
+       (cdr (unpack 'a0123456789))))
+
+(defn number-to-list1 (number)
+  (if (zerop number)
+      0
+      (cons (number-to-digit (remainder number 10))
+            (number-to-list1 (quotient number 10)))))
+
+(defn number-to-list (number)
+  (if (zerop number)
+      (cons (cadr (unpack 'a0)) 0)
+      (rev-0 (number-to-list1 number))))
+
+(defn lisp-netlist (netlist)
+  (if (indexp netlist)
+      (pack (append (unpack (i-name netlist))
+                    (cons (cadr (unpack 'a_))
+                          (number-to-list (i-num netlist)))))
+  (if (nlistp netlist)
+      netlist
+      (cons (lisp-netlist (car netlist))
+            (lisp-netlist (cdr netlist))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    Below are some utilities to count the number of primitives in the
+;;;  FM9001.  COLLECT-PRIMITIVES just collects the different primitives
+;;;  for a particular module, X0, in NETLIST.  
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn collect-primitives (flg x0 netlist)
+  (case flg
+
+    (0 (let ((fn x0))
+         (let ((module (lookup-module fn netlist)))
+           (if (or (primp fn) (not module))
+               (list fn)
+               (flatten-list
+                (collect-primitives
+                 1 (module-occurrences module)
+                 (delete-module fn netlist)))))))
+
+    (1 (let ((body x0))
+         (if (nlistp body)
+             nil
+             (cons (collect-primitives
+                    0 (occ-function (car body)) netlist)
+                   (collect-primitives 1 (cdr body) netlist)))))
+
+    (otherwise f))
+
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+
+(defn count-primitives (flg x0 x1 type netlist)
+  (case flg
+
+    (0 (let ((fn x0))
+         (if (primp fn)
+             (if (primp-lookup fn type)
+                 (primp2 fn type)
+               f)
+           (let ((module (lookup-module fn netlist)))
+             (if (listp module)
+                 (let ((m-ins  (module-inputs      module))
+                       (m-outs (module-outputs     module))
+                       (m-occs (module-occurrences module)))
+                   (count-primitives 1 m-occs 0 type
+                                           (delete-module fn netlist)))
+               f)))))
+
+    (1 (let ((body x0)
+             (sum x1))
+         (if (nlistp body)
+             sum
+           (let ((occ (car body)))
+             (let ((o-outs (occ-outputs  occ))
+                   (o-fn   (occ-function occ))
+                   (o-ins  (occ-inputs   occ)))
+               (if (count-primitives 0 o-fn nil type netlist)
+                   (count-primitives
+                    1 (cdr body)
+                    (plus sum
+                          (count-primitives 0 o-fn nil type netlist))
+                    type
+                    netlist)
+                 f))))))
+    (otherwise f))
+
+  ((ord-lessp (cons (add1 (count netlist)) (count x0)))))
+                     
+(disable count-primitives)
+
+
+#|
+
+;;;  In R-LOOP, the entire FM9001, sans the I/O pads, can be generated
+;;;  and its primitives can be counted.
+
+(setq chip-module-net          (lisp-netlist (chip-module$netlist)))
+(setq first-chip-module        (car chip-module-net))
+(setq first-chip-module-name   (module-name first-chip-module))
+(setq first-chip-module-inputs (module-inputs first-chip-module))
+
+(collect-primitives 0 first-chip-module chip-module-net)
+
+(count-primitives 0 first-chip-module-name first-chip-module-inputs
+                  'primitives chip-module-net)
+(count-primitives 0 first-chip-module-name first-chip-module-inputs
+                  'gates chip-module-net)
+(count-primitives 0 first-chip-module-name first-chip-module-inputs
+                  'transistors chip-module-net)
+
+
+;;; print-ndl-form-to-file is in "translate.lisp".
+
+(print-ndl-form-to-file (cdr (assoc 'chip-module-net r-alist))
+                        "chip-module.net")
+
+
+;;;  For the entire chip, including pads, use the following forms.
+
+(setq pads-net (lisp-netlist (chip$netlist)))
+
+(print-ndl-form-to-file (cdr (assoc 'pads-net r-alist))
+                        "chip.net")
+
+|#

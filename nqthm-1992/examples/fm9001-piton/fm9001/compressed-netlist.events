@@ -1,0 +1,1225 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    COMPRESSED-NETLIST.EVENTS
+;;;    
+;;;    Bishop C. Brock & Warren A. Hunt, Jr.
+;;;
+;;;    This file contains a "compressed" version of the final netlist,
+;;;    (CHIP-SYSTEM$NETLIST).  Our HDL does not support any syntax for the
+;;;    direct specification of vectors of signals.  It turn out that fully
+;;;    half of the printed netlist is made up of I/O lists, because of the
+;;;    number of 32-bit and larger busses.  This netlist was first processed
+;;;    to remove all INDEX shell names (via the Nqthm function LISP-NETLIST).
+;;;    Next, a Common Lisp compression program compressed sequences of
+;;;    indexed names of the form A_n ... A_m into A_[n..m].  Compressing the
+;;;    netlist reduces its size by half and renders it much more readable.
+;;;    The compression program and an uncompression program appear at the end
+;;;    of this file.
+;;;    
+;;;    The module CHIP-SYSTEM is the first module in the netlist, and
+;;;    represents the FM9001 processor with a memory.  The module
+;;;    CHIP, which follows shortly thereafter, is the processor by
+;;;    itself.  This is the module that was implemented by LSI Logic
+;;;    as the FM9001 microprocessor.
+;;;
+;;;    A Common Lisp "wrapper" around the netlist uncompresses it, and defines
+;;;    an Nqthm constant (CHIP-SYSTEM-NETLIST).  If this file is loaded into an
+;;;    Nqthm session that includes (CHIP-SYSTEM$NETLIST), then you can prove
+;;;    the theorem:
+;;;    
+;;;
+;;;    (EQUAL (LISP-NETLIST (CHIP-SYSTEM$NETLIST))
+;;;           (CHIP-SYSTEM-NETLIST))
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#.`(PROGN ,@(reverse '(       
+
+(eval `
+(defn chip-system-netlist () ',chip-system-netlist))
+
+(defconstant chip-system-netlist (uncompress-netlist '
+
+((CHIP-SYSTEM 
+     (CLK TI TE RESET- HOLD- DISABLE-REGFILE- TEST-REGFILE- 
+          PC-REG_[0..3]) 
+     NIL 
+     ((FM9001 (PO TO TIMING HDACK- RW- STROBE- ADDR-OUT_[0..31] 
+                  FM9001-DATA_[0..31] FLAGS_[0..3] CNTL-STATE_[0..4] 
+                  I-REG_[28..31]) 
+              CHIP 
+              (CLK TI TE DTACK- RESET- HOLD- DISABLE-REGFILE- 
+                   TEST-REGFILE- PC-REG_[0..3] DATA-BUS_[0..31])) 
+      (PULLUP-RW- (RW-BUS) PULLUP (RW-)) 
+      (PULLUP-STROBE- (STROBE-BUS) PULLUP (STROBE-)) 
+      (ADDRESS (ADDR-BUS_[0..31]) V-PULLUP_32 (ADDR-OUT_[0..31])) 
+      (MEM (DTACK- MEM-DATA_[0..31]) MEM-32X32 
+           (RW-BUS STROBE-BUS ADDR-BUS_[0..31] DATA-BUS_[0..31])) 
+      (DATA-WIRE (DATA-WIRE_[0..31]) V-WIRE_32 
+          (FM9001-DATA_[0..31] MEM-DATA_[0..31])) 
+      (DATA (DATA-BUS_[0..31]) V-PULLUP_32 (DATA-WIRE_[0..31]))) 
+     (FM9001 MEM)) 
+ (V-PULLUP_32 (A_[0..31]) (Y_[0..31]) 
+     ((G_0 (Y_0) PULLUP (A_0)) (G_1 (Y_1) PULLUP (A_1)) 
+      (G_2 (Y_2) PULLUP (A_2)) (G_3 (Y_3) PULLUP (A_3)) 
+      (G_4 (Y_4) PULLUP (A_4)) (G_5 (Y_5) PULLUP (A_5)) 
+      (G_6 (Y_6) PULLUP (A_6)) (G_7 (Y_7) PULLUP (A_7)) 
+      (G_8 (Y_8) PULLUP (A_8)) (G_9 (Y_9) PULLUP (A_9)) 
+      (G_10 (Y_10) PULLUP (A_10)) (G_11 (Y_11) PULLUP (A_11)) 
+      (G_12 (Y_12) PULLUP (A_12)) (G_13 (Y_13) PULLUP (A_13)) 
+      (G_14 (Y_14) PULLUP (A_14)) (G_15 (Y_15) PULLUP (A_15)) 
+      (G_16 (Y_16) PULLUP (A_16)) (G_17 (Y_17) PULLUP (A_17)) 
+      (G_18 (Y_18) PULLUP (A_18)) (G_19 (Y_19) PULLUP (A_19)) 
+      (G_20 (Y_20) PULLUP (A_20)) (G_21 (Y_21) PULLUP (A_21)) 
+      (G_22 (Y_22) PULLUP (A_22)) (G_23 (Y_23) PULLUP (A_23)) 
+      (G_24 (Y_24) PULLUP (A_24)) (G_25 (Y_25) PULLUP (A_25)) 
+      (G_26 (Y_26) PULLUP (A_26)) (G_27 (Y_27) PULLUP (A_27)) 
+      (G_28 (Y_28) PULLUP (A_28)) (G_29 (Y_29) PULLUP (A_29)) 
+      (G_30 (Y_30) PULLUP (A_30)) (G_31 (Y_31) PULLUP (A_31))) 
+     NIL) 
+ (V-WIRE_32 (A_[0..31] B_[0..31]) (Y_[0..31]) 
+     ((G_0 (Y_0) T-WIRE (A_0 B_0)) (G_1 (Y_1) T-WIRE (A_1 B_1)) 
+      (G_2 (Y_2) T-WIRE (A_2 B_2)) (G_3 (Y_3) T-WIRE (A_3 B_3)) 
+      (G_4 (Y_4) T-WIRE (A_4 B_4)) (G_5 (Y_5) T-WIRE (A_5 B_5)) 
+      (G_6 (Y_6) T-WIRE (A_6 B_6)) (G_7 (Y_7) T-WIRE (A_7 B_7)) 
+      (G_8 (Y_8) T-WIRE (A_8 B_8)) (G_9 (Y_9) T-WIRE (A_9 B_9)) 
+      (G_10 (Y_10) T-WIRE (A_10 B_10)) (G_11 (Y_11) T-WIRE (A_11 B_11)) 
+      (G_12 (Y_12) T-WIRE (A_12 B_12)) (G_13 (Y_13) T-WIRE (A_13 B_13)) 
+      (G_14 (Y_14) T-WIRE (A_14 B_14)) (G_15 (Y_15) T-WIRE (A_15 B_15)) 
+      (G_16 (Y_16) T-WIRE (A_16 B_16)) (G_17 (Y_17) T-WIRE (A_17 B_17)) 
+      (G_18 (Y_18) T-WIRE (A_18 B_18)) (G_19 (Y_19) T-WIRE (A_19 B_19)) 
+      (G_20 (Y_20) T-WIRE (A_20 B_20)) (G_21 (Y_21) T-WIRE (A_21 B_21)) 
+      (G_22 (Y_22) T-WIRE (A_22 B_22)) (G_23 (Y_23) T-WIRE (A_23 B_23)) 
+      (G_24 (Y_24) T-WIRE (A_24 B_24)) (G_25 (Y_25) T-WIRE (A_25 B_25)) 
+      (G_26 (Y_26) T-WIRE (A_26 B_26)) (G_27 (Y_27) T-WIRE (A_27 B_27)) 
+      (G_28 (Y_28) T-WIRE (A_28 B_28)) (G_29 (Y_29) T-WIRE (A_29 B_29)) 
+      (G_30 (Y_30) T-WIRE (A_30 B_30)) 
+      (G_31 (Y_31) T-WIRE (A_31 B_31))) 
+     NIL) 
+ (CHIP (CLK TI TE DTACK- RESET- HOLD- DISABLE-REGFILE- TEST-REGFILE- 
+            PC-REG-IN_[0..3] DATA-BUS_[0..31]) 
+       (PO TO TIMING HDACK- RW- STROBE- ADDR-OUT_[0..31] 
+           DATA-BUS_[0..31] FLAGS_[0..3] CNTL-STATE_[0..4] 
+           I-REG_[28..31]) 
+       ((BODY (I-TO I-TIMING I-HDACK- I-EN-ADDR-OUT- I-RW- I-STROBE- 
+                    I-ADDR-OUT_[0..31] I-DATA-OUT_[0..31] 
+                    I-FLAGS_[0..3] I-CNTL-STATE_[0..4] 
+                    I-I-REG_[28..31]) 
+              CHIP-MODULE 
+              (I-CLK I-TI I-TE I-DTACK- I-RESET- I-HOLD- 
+                     I-DISABLE-REGFILE- I-TEST-REGFILE- I-PC-REG_[0..3] 
+                     I-DATA-IN_[0..31])) 
+        (PLUS-5 (B-TRUE-P) VDD-PARAMETRIC NIL) 
+        (CLOCK-PAD (I-CLK CLK-PO) TTL-CLK-INPUT (CLK B-TRUE-P)) 
+        (TI-PAD (I-TI TI-PO) TTL-INPUT (TI B-TRUE-P)) 
+        (TE-PAD (I-TE TE-PO) TTL-INPUT (TE TI-PO)) 
+        (DTACK-PAD (I-DTACK- DTACK-PO) TTL-INPUT (DTACK- TE-PO)) 
+        (RESET-PAD (I-RESET- RESET-PO) TTL-INPUT (RESET- DTACK-PO)) 
+        (HOLD-PAD (I-HOLD- HOLD-PO) TTL-INPUT (HOLD- RESET-PO)) 
+        (DISABLE-REGFILE-PAD (I-DISABLE-REGFILE- DISABLE-REGFILE-PO) 
+            TTL-INPUT (DISABLE-REGFILE- HOLD-PO)) 
+        (TEST-REGFILE-PAD (I-TEST-REGFILE- TEST-REGFILE-PO) TTL-INPUT 
+            (TEST-REGFILE- DISABLE-REGFILE-PO)) 
+        (DATA-BUS-PADS (DATA-BUS-PO DATA-BUS_[0..31] I-DATA-IN_[0..31]) 
+            TTL-BIDIRECT-PADS_32 
+            (I-RW- TEST-REGFILE-PO DATA-BUS_[0..31] I-DATA-OUT_[0..31])) 
+        (PC-REG-PADS (PC-REG-PO I-PC-REG_[0..3]) TTL-INPUT-PADS_4 
+            (DATA-BUS-PO PC-REG-IN_[0..3])) 
+        (MONITOR (I-PO) PROCMON (PC-REG-PO CLK-PO B-TRUE-P B-TRUE-P)) 
+        (PO-PAD (PO) TTL-OUTPUT-PARAMETRIC (I-PO)) 
+        (TO-PAD (TO) TTL-OUTPUT (I-TO)) 
+        (TIMING-PAD (TIMING) TTL-OUTPUT-FAST (I-TIMING)) 
+        (HDACK-PAD (HDACK-) TTL-OUTPUT-FAST (I-HDACK-)) 
+        (RW-PAD (RW-) TTL-TRI-OUTPUT-FAST (I-RW- I-EN-ADDR-OUT-)) 
+        (STROBE-PAD (STROBE-) TTL-TRI-OUTPUT-FAST 
+            (I-STROBE- I-EN-ADDR-OUT-)) 
+        (ADDR-OUT-PADS (ADDR-OUT_[0..31]) TTL-TRI-OUTPUT-PADS_32 
+            (I-EN-ADDR-OUT- I-ADDR-OUT_[0..31])) 
+        (FLAGS-PADS (FLAGS_[0..3]) TTL-OUTPUT-PADS_4 (I-FLAGS_[0..3])) 
+        (CNTL-STATE-PADS (CNTL-STATE_[0..4]) TTL-OUTPUT-PADS_5 
+            (I-CNTL-STATE_[0..4])) 
+        (I-REG-PADS (I-REG_[28..31]) TTL-OUTPUT-PADS_4 
+            (I-I-REG_[28..31]))) 
+       BODY) 
+ (TTL-BIDIRECT-PADS_32 (ENABLE PI DATA_[0..31] IN_[0..31]) 
+     (PO_31 DATA_[0..31] OUT_[0..31]) 
+     ((ENABLE-BUF (BUF-ENABLE) B-BUF-PWR (ENABLE)) 
+      (G_0 (DATA_0 OUT_0 PO_0) TTL-BIDIRECT 
+           (DATA_0 IN_0 BUF-ENABLE PI)) 
+      (G_1 (DATA_1 OUT_1 PO_1) TTL-BIDIRECT 
+           (DATA_1 IN_1 BUF-ENABLE PO_0)) 
+      (G_2 (DATA_2 OUT_2 PO_2) TTL-BIDIRECT 
+           (DATA_2 IN_2 BUF-ENABLE PO_1)) 
+      (G_3 (DATA_3 OUT_3 PO_3) TTL-BIDIRECT 
+           (DATA_3 IN_3 BUF-ENABLE PO_2)) 
+      (G_4 (DATA_4 OUT_4 PO_4) TTL-BIDIRECT 
+           (DATA_4 IN_4 BUF-ENABLE PO_3)) 
+      (G_5 (DATA_5 OUT_5 PO_5) TTL-BIDIRECT 
+           (DATA_5 IN_5 BUF-ENABLE PO_4)) 
+      (G_6 (DATA_6 OUT_6 PO_6) TTL-BIDIRECT 
+           (DATA_6 IN_6 BUF-ENABLE PO_5)) 
+      (G_7 (DATA_7 OUT_7 PO_7) TTL-BIDIRECT 
+           (DATA_7 IN_7 BUF-ENABLE PO_6)) 
+      (G_8 (DATA_8 OUT_8 PO_8) TTL-BIDIRECT 
+           (DATA_8 IN_8 BUF-ENABLE PO_7)) 
+      (G_9 (DATA_9 OUT_9 PO_9) TTL-BIDIRECT 
+           (DATA_9 IN_9 BUF-ENABLE PO_8)) 
+      (G_10 (DATA_10 OUT_10 PO_10) TTL-BIDIRECT 
+            (DATA_10 IN_10 BUF-ENABLE PO_9)) 
+      (G_11 (DATA_11 OUT_11 PO_11) TTL-BIDIRECT 
+            (DATA_11 IN_11 BUF-ENABLE PO_10)) 
+      (G_12 (DATA_12 OUT_12 PO_12) TTL-BIDIRECT 
+            (DATA_12 IN_12 BUF-ENABLE PO_11)) 
+      (G_13 (DATA_13 OUT_13 PO_13) TTL-BIDIRECT 
+            (DATA_13 IN_13 BUF-ENABLE PO_12)) 
+      (G_14 (DATA_14 OUT_14 PO_14) TTL-BIDIRECT 
+            (DATA_14 IN_14 BUF-ENABLE PO_13)) 
+      (G_15 (DATA_15 OUT_15 PO_15) TTL-BIDIRECT 
+            (DATA_15 IN_15 BUF-ENABLE PO_14)) 
+      (G_16 (DATA_16 OUT_16 PO_16) TTL-BIDIRECT 
+            (DATA_16 IN_16 BUF-ENABLE PO_15)) 
+      (G_17 (DATA_17 OUT_17 PO_17) TTL-BIDIRECT 
+            (DATA_17 IN_17 BUF-ENABLE PO_16)) 
+      (G_18 (DATA_18 OUT_18 PO_18) TTL-BIDIRECT 
+            (DATA_18 IN_18 BUF-ENABLE PO_17)) 
+      (G_19 (DATA_19 OUT_19 PO_19) TTL-BIDIRECT 
+            (DATA_19 IN_19 BUF-ENABLE PO_18)) 
+      (G_20 (DATA_20 OUT_20 PO_20) TTL-BIDIRECT 
+            (DATA_20 IN_20 BUF-ENABLE PO_19)) 
+      (G_21 (DATA_21 OUT_21 PO_21) TTL-BIDIRECT 
+            (DATA_21 IN_21 BUF-ENABLE PO_20)) 
+      (G_22 (DATA_22 OUT_22 PO_22) TTL-BIDIRECT 
+            (DATA_22 IN_22 BUF-ENABLE PO_21)) 
+      (G_23 (DATA_23 OUT_23 PO_23) TTL-BIDIRECT 
+            (DATA_23 IN_23 BUF-ENABLE PO_22)) 
+      (G_24 (DATA_24 OUT_24 PO_24) TTL-BIDIRECT 
+            (DATA_24 IN_24 BUF-ENABLE PO_23)) 
+      (G_25 (DATA_25 OUT_25 PO_25) TTL-BIDIRECT 
+            (DATA_25 IN_25 BUF-ENABLE PO_24)) 
+      (G_26 (DATA_26 OUT_26 PO_26) TTL-BIDIRECT 
+            (DATA_26 IN_26 BUF-ENABLE PO_25)) 
+      (G_27 (DATA_27 OUT_27 PO_27) TTL-BIDIRECT 
+            (DATA_27 IN_27 BUF-ENABLE PO_26)) 
+      (G_28 (DATA_28 OUT_28 PO_28) TTL-BIDIRECT 
+            (DATA_28 IN_28 BUF-ENABLE PO_27)) 
+      (G_29 (DATA_29 OUT_29 PO_29) TTL-BIDIRECT 
+            (DATA_29 IN_29 BUF-ENABLE PO_28)) 
+      (G_30 (DATA_30 OUT_30 PO_30) TTL-BIDIRECT 
+            (DATA_30 IN_30 BUF-ENABLE PO_29)) 
+      (G_31 (DATA_31 OUT_31 PO_31) TTL-BIDIRECT 
+            (DATA_31 IN_31 BUF-ENABLE PO_30))) 
+     NIL) 
+ (CHIP-MODULE 
+     (CLK TI TE DTACK- RESET- HOLD- DISABLE-REGFILE- TEST-REGFILE- 
+          PC-REG-IN_[0..3] DATA-IN_[0..31]) 
+     (TO TIMING HDACK- EN-ADDR-OUT- RW- STROBE- ADDR-OUT_[0..31] 
+         DATA-OUT_[0..31] FLAGS_[0..3] CNTL-STATE_[0..4] 
+         I-REG_[28..31]) 
+     ((CNTL-STATE 
+          (RW-SIG- STROBE- HDACK- WE-REGS WE-A-REG WE-B-REG WE-I-REG 
+                   WE-DATA-OUT WE-ADDR-OUT WE-HOLD- WE-PC-REG 
+                   DATA-IN-SELECT DEC-ADDR-OUT SELECT-IMMEDIATE ALU-C 
+                   ALU-ZERO CNTL-STATE_[0..4] WE-FLAGS_[0..3] 
+                   REGS-ADDRESS_[0..3] ALU-OP_[0..3] ALU-MPG_[0..6]) 
+          REG_40 (CLK TE-SIG TI NEXT-STATE_[0..39])) 
+      (REGS (REGFILE-TO REGFILE-OUT_[0..31]) REGFILE 
+            (CLK TE-SIG ALU-MPG_6 WE-REGS DISABLE-REGFILE- 
+                 TEST-REGFILE- REGS-ADDRESS_[0..3] ALU-BUS_[3..34])) 
+      (CVNZ-FLAGS (FLAGS_[0..3]) FLAGS 
+          (CLK TE-SIG REGFILE-TO WE-FLAGS_[0..3] ALU-BUS_[0..34])) 
+      (A-REG (A-REG_[0..31]) WE-REG_32 
+             (CLK WE-A-REG TE-SIG FLAGS_3 ABI-BUS_[0..31])) 
+      (B-REG (B-REG_[0..31]) WE-REG_32 
+             (CLK WE-B-REG TE-SIG A-REG_31 ABI-BUS_[0..31])) 
+      (I-REG (I-REG_[0..31]) WE-REG_32 
+             (CLK WE-I-REG TE-SIG B-REG_31 ABI-BUS_[0..31])) 
+      (DATA-OUT (DATA-OUT_[0..31]) WE-REG_32 
+          (CLK WE-DATA-OUT TE-SIG I-REG_31 ALU-BUS_[3..34])) 
+      (ADDR-OUT (ADDR-OUT_[0..31]) WE-REG_32 
+          (CLK WE-ADDR-OUT TE-SIG DATA-OUT_31 ADDR-OUT-BUS_[0..31])) 
+      (RESET-LATCH (LAST-RESET- LAST-RESET-INV) FD1S 
+          (RESET- CLK ADDR-OUT_31 TE-SIG)) 
+      (DTACK--OR (DTACK--OR-STROBE-) B-OR (STROBE- DTACK-)) 
+      (DTACK-LATCH (LAST-DTACK- LAST-DTACK-INV) FD1S 
+          (DTACK--OR-STROBE- CLK LAST-RESET- TE-SIG)) 
+      (HOLD-LATCH (LAST-HOLD- LAST-HOLD-INV) FD1SLP 
+          (HOLD- CLK WE-HOLD- LAST-DTACK- TE-SIG)) 
+      (PC-REG (PC-REG_[0..3]) WE-REG_4 
+              (CLK WE-PC-REG TE-SIG LAST-HOLD- PC-REG-IN_[0..3])) 
+      (IMMEDIATE-PASS (REG-BUS_[0..31]) EXTEND-IMMEDIATE 
+          (SELECT-IMMEDIATE I-REG_[0..8] REGFILE-OUT_[0..31])) 
+      (DEC-PASS (ADDR-OUT-BUS_[0..31]) DEC-PASS_32 
+          (DEC-ADDR-OUT REG-BUS_[0..31])) 
+      (MUX-CNTL (ABI-CNTL) B-NAND (DATA-IN-SELECT LAST-DTACK-INV)) 
+      (DATA-IN-MUX (ABI-BUS_[0..31]) TV-IF_32 
+          (ABI-CNTL REG-BUS_[0..31] DATA-IN_[0..31])) 
+      (ALU (ALU-BUS_[0..34]) CORE-ALU_32 
+           (ALU-C A-REG_[0..31] B-REG_[0..31] ALU-ZERO ALU-MPG_[0..6] 
+                  ALU-OP_[0..3])) 
+      (NEXT-STATE (NEXT-STATE_[0..39]) NEXT-CNTL-STATE 
+          (LAST-RESET- LAST-DTACK- LAST-HOLD- RW-SIG- CNTL-STATE_[0..4] 
+              I-REG_[0..31] FLAGS_[0..3] PC-REG_[0..3] 
+              REGS-ADDRESS_[0..3])) 
+      (TE-BUFFER (TE-SIG) B-BUF-PWR (TE)) 
+      (RW-BUFFER (RW-) B-BUF (RW-SIG-)) 
+      (EN-ADDR-OUT-GATE (EN-ADDR-OUT-) B-NOT (HDACK-)) 
+      (TIMING-GATE (TIMING) ID (ALU-BUS_2)) 
+      (SCANOUT (TO) ID (PC-REG_3))) 
+     (REGS CVNZ-FLAGS A-REG B-REG I-REG DATA-OUT ADDR-OUT RESET-LATCH 
+           DTACK-LATCH HOLD-LATCH PC-REG CNTL-STATE)) 
+ (REGFILE (CLK TE TI WE DISABLE-REGFILE- TEST-REGFILE- ADDRESS_[0..3] 
+               DATA_[0..31]) 
+          (TO OUT_[0..31]) 
+          ((WE-LATCH (WE-DP-RAM WE-DP-RAM-) FD1S (WE CLK TI TE)) 
+           (ADDRESS-LATCH (ADDRESS-DP-RAM_[0..3]) WE-REG_4 
+               (CLK WE TE WE-DP-RAM ADDRESS_[0..3])) 
+           (DATA-LATCH (DATA-DP-RAM_[0..31]) WE-REG_32 
+               (CLK WE TE ADDRESS-DP-RAM_3 DATA_[0..31])) 
+           (REG-EN-CIRCUIT (WE-) RAM-ENABLE-CIRCUIT 
+               (CLK TEST-REGFILE- DISABLE-REGFILE- WE-DP-RAM)) 
+           (RAM (RAMOUT_[0..31]) DP-RAM-16X32 
+                (ADDRESS_[0..3] ADDRESS-DP-RAM_[0..3] WE- 
+                    DATA-DP-RAM_[0..31])) 
+           (COMPARE (READ-EQUAL-WRITE) V-EQUAL_4 
+                    (ADDRESS_[0..3] ADDRESS-DP-RAM_[0..3])) 
+           (MUX-CONTROL (S) B-AND3 
+               (WE-DP-RAM READ-EQUAL-WRITE TEST-REGFILE-)) 
+           (MUX (OUT_[0..31]) TV-IF_32 
+                (S DATA-DP-RAM_[0..31] RAMOUT_[0..31])) 
+           (SCANOUT (TO) ID (DATA-DP-RAM_31))) 
+          (RAM WE-LATCH DATA-LATCH ADDRESS-LATCH)) 
+ (V-EQUAL_4 (A_[0..3] B_[0..3]) (EQUAL) 
+     ((G0 (X_[0..3]) V-XOR_4 (A_[0..3] B_[0..3])) 
+      (G1 (EQUAL) TV-ZEROP_4 (X_[0..3]))) 
+     NIL) 
+ (V-XOR_4 (A_[0..3] B_[0..3]) (Y_[0..3]) 
+          ((G_0 (Y_0) B-XOR (A_0 B_0)) (G_1 (Y_1) B-XOR (A_1 B_1)) 
+           (G_2 (Y_2) B-XOR (A_2 B_2)) (G_3 (Y_3) B-XOR (A_3 B_3))) 
+          NIL) 
+ (TV-ZEROP_4 (IN_[0..3]) (OUT) 
+     ((G0 (OUT-) T-OR_4 (IN_[0..3])) (G1 (OUT) B-NOT (OUT-))) NIL) 
+ (T-OR_4 (A_[0..3]) (OUT) 
+         ((LEFT (LEFT-OUT) T-NOR_2 (A_[0..1])) 
+          (RIGHT (RIGHT-OUT) T-NOR_2 (A_[2..3])) 
+          (OUTPUT (OUT) B-NAND (LEFT-OUT RIGHT-OUT))) 
+         NIL) 
+ (T-NOR_2 (A_[0..1]) (OUT) ((LEAF (OUT) B-NOR (A_[0..1]))) NIL) 
+ (FLAGS (CLK TE TI SET-FLAGS_[0..3] CVZBV_[0..34]) (Z N V C) 
+        ((Z-LATCH (Z ZB) FD1SLP (CVZBV_2 CLK SET-FLAGS_0 TI TE)) 
+         (N-LATCH (N NB) FD1SLP (CVZBV_34 CLK SET-FLAGS_1 Z TE)) 
+         (V-LATCH (V VB) FD1SLP (CVZBV_1 CLK SET-FLAGS_2 N TE)) 
+         (C-LATCH (C CB) FD1SLP (CVZBV_0 CLK SET-FLAGS_3 V TE))) 
+        (Z-LATCH N-LATCH V-LATCH C-LATCH)) 
+ (WE-REG_32 (CLK WE TE TI D_[0..31]) (Q_[0..31]) 
+     ((WE-BUFFER (WE-BUF) B-BUF-PWR (WE)) 
+      (TE-BUFFER (TE-BUF) B-BUF-PWR (TE)) (TI-DEL (TI-BUF) DEL4 (TI)) 
+      (G_0 (Q_0 QB_0) FD1SLP (D_0 CLK WE-BUF TI-BUF TE-BUF)) 
+      (G_1 (Q_1 QB_1) FD1SLP (D_1 CLK WE-BUF Q_0 TE-BUF)) 
+      (G_2 (Q_2 QB_2) FD1SLP (D_2 CLK WE-BUF Q_1 TE-BUF)) 
+      (G_3 (Q_3 QB_3) FD1SLP (D_3 CLK WE-BUF Q_2 TE-BUF)) 
+      (G_4 (Q_4 QB_4) FD1SLP (D_4 CLK WE-BUF Q_3 TE-BUF)) 
+      (G_5 (Q_5 QB_5) FD1SLP (D_5 CLK WE-BUF Q_4 TE-BUF)) 
+      (G_6 (Q_6 QB_6) FD1SLP (D_6 CLK WE-BUF Q_5 TE-BUF)) 
+      (G_7 (Q_7 QB_7) FD1SLP (D_7 CLK WE-BUF Q_6 TE-BUF)) 
+      (G_8 (Q_8 QB_8) FD1SLP (D_8 CLK WE-BUF Q_7 TE-BUF)) 
+      (G_9 (Q_9 QB_9) FD1SLP (D_9 CLK WE-BUF Q_8 TE-BUF)) 
+      (G_10 (Q_10 QB_10) FD1SLP (D_10 CLK WE-BUF Q_9 TE-BUF)) 
+      (G_11 (Q_11 QB_11) FD1SLP (D_11 CLK WE-BUF Q_10 TE-BUF)) 
+      (G_12 (Q_12 QB_12) FD1SLP (D_12 CLK WE-BUF Q_11 TE-BUF)) 
+      (G_13 (Q_13 QB_13) FD1SLP (D_13 CLK WE-BUF Q_12 TE-BUF)) 
+      (G_14 (Q_14 QB_14) FD1SLP (D_14 CLK WE-BUF Q_13 TE-BUF)) 
+      (G_15 (Q_15 QB_15) FD1SLP (D_15 CLK WE-BUF Q_14 TE-BUF)) 
+      (G_16 (Q_16 QB_16) FD1SLP (D_16 CLK WE-BUF Q_15 TE-BUF)) 
+      (G_17 (Q_17 QB_17) FD1SLP (D_17 CLK WE-BUF Q_16 TE-BUF)) 
+      (G_18 (Q_18 QB_18) FD1SLP (D_18 CLK WE-BUF Q_17 TE-BUF)) 
+      (G_19 (Q_19 QB_19) FD1SLP (D_19 CLK WE-BUF Q_18 TE-BUF)) 
+      (G_20 (Q_20 QB_20) FD1SLP (D_20 CLK WE-BUF Q_19 TE-BUF)) 
+      (G_21 (Q_21 QB_21) FD1SLP (D_21 CLK WE-BUF Q_20 TE-BUF)) 
+      (G_22 (Q_22 QB_22) FD1SLP (D_22 CLK WE-BUF Q_21 TE-BUF)) 
+      (G_23 (Q_23 QB_23) FD1SLP (D_23 CLK WE-BUF Q_22 TE-BUF)) 
+      (G_24 (Q_24 QB_24) FD1SLP (D_24 CLK WE-BUF Q_23 TE-BUF)) 
+      (G_25 (Q_25 QB_25) FD1SLP (D_25 CLK WE-BUF Q_24 TE-BUF)) 
+      (G_26 (Q_26 QB_26) FD1SLP (D_26 CLK WE-BUF Q_25 TE-BUF)) 
+      (G_27 (Q_27 QB_27) FD1SLP (D_27 CLK WE-BUF Q_26 TE-BUF)) 
+      (G_28 (Q_28 QB_28) FD1SLP (D_28 CLK WE-BUF Q_27 TE-BUF)) 
+      (G_29 (Q_29 QB_29) FD1SLP (D_29 CLK WE-BUF Q_28 TE-BUF)) 
+      (G_30 (Q_30 QB_30) FD1SLP (D_30 CLK WE-BUF Q_29 TE-BUF)) 
+      (G_31 (Q_31 QB_31) FD1SLP (D_31 CLK WE-BUF Q_30 TE-BUF))) 
+     (G_[0..31])) 
+ (WE-REG_4 (CLK WE TE TI D_[0..3]) (Q_[0..3]) 
+     ((WE-BUFFER (WE-BUF) B-BUF (WE)) (TE-BUFFER (TE-BUF) B-BUF (TE)) 
+      (TI-DEL (TI-BUF) DEL4 (TI)) 
+      (G_0 (Q_0 QB_0) FD1SLP (D_0 CLK WE-BUF TI-BUF TE-BUF)) 
+      (G_1 (Q_1 QB_1) FD1SLP (D_1 CLK WE-BUF Q_0 TE-BUF)) 
+      (G_2 (Q_2 QB_2) FD1SLP (D_2 CLK WE-BUF Q_1 TE-BUF)) 
+      (G_3 (Q_3 QB_3) FD1SLP (D_3 CLK WE-BUF Q_2 TE-BUF))) 
+     (G_[0..3])) 
+ (REG_40 (CLK TE TI D_[0..39]) (Q_[0..39]) 
+         ((TE-BUFFER (TE-BUF) B-BUF-PWR (TE)) 
+          (TI-DEL (TI-BUF) DEL4 (TI)) 
+          (G_0 (Q_0 QB_0) FD1S (D_0 CLK TI-BUF TE-BUF)) 
+          (G_1 (Q_1 QB_1) FD1S (D_1 CLK Q_0 TE-BUF)) 
+          (G_2 (Q_2 QB_2) FD1S (D_2 CLK Q_1 TE-BUF)) 
+          (G_3 (Q_3 QB_3) FD1S (D_3 CLK Q_2 TE-BUF)) 
+          (G_4 (Q_4 QB_4) FD1S (D_4 CLK Q_3 TE-BUF)) 
+          (G_5 (Q_5 QB_5) FD1S (D_5 CLK Q_4 TE-BUF)) 
+          (G_6 (Q_6 QB_6) FD1S (D_6 CLK Q_5 TE-BUF)) 
+          (G_7 (Q_7 QB_7) FD1S (D_7 CLK Q_6 TE-BUF)) 
+          (G_8 (Q_8 QB_8) FD1S (D_8 CLK Q_7 TE-BUF)) 
+          (G_9 (Q_9 QB_9) FD1S (D_9 CLK Q_8 TE-BUF)) 
+          (G_10 (Q_10 QB_10) FD1S (D_10 CLK Q_9 TE-BUF)) 
+          (G_11 (Q_11 QB_11) FD1S (D_11 CLK Q_10 TE-BUF)) 
+          (G_12 (Q_12 QB_12) FD1S (D_12 CLK Q_11 TE-BUF)) 
+          (G_13 (Q_13 QB_13) FD1S (D_13 CLK Q_12 TE-BUF)) 
+          (G_14 (Q_14 QB_14) FD1S (D_14 CLK Q_13 TE-BUF)) 
+          (G_15 (Q_15 QB_15) FD1S (D_15 CLK Q_14 TE-BUF)) 
+          (G_16 (Q_16 QB_16) FD1S (D_16 CLK Q_15 TE-BUF)) 
+          (G_17 (Q_17 QB_17) FD1S (D_17 CLK Q_16 TE-BUF)) 
+          (G_18 (Q_18 QB_18) FD1S (D_18 CLK Q_17 TE-BUF)) 
+          (G_19 (Q_19 QB_19) FD1S (D_19 CLK Q_18 TE-BUF)) 
+          (G_20 (Q_20 QB_20) FD1S (D_20 CLK Q_19 TE-BUF)) 
+          (G_21 (Q_21 QB_21) FD1S (D_21 CLK Q_20 TE-BUF)) 
+          (G_22 (Q_22 QB_22) FD1S (D_22 CLK Q_21 TE-BUF)) 
+          (G_23 (Q_23 QB_23) FD1S (D_23 CLK Q_22 TE-BUF)) 
+          (G_24 (Q_24 QB_24) FD1S (D_24 CLK Q_23 TE-BUF)) 
+          (G_25 (Q_25 QB_25) FD1S (D_25 CLK Q_24 TE-BUF)) 
+          (G_26 (Q_26 QB_26) FD1S (D_26 CLK Q_25 TE-BUF)) 
+          (G_27 (Q_27 QB_27) FD1S (D_27 CLK Q_26 TE-BUF)) 
+          (G_28 (Q_28 QB_28) FD1S (D_28 CLK Q_27 TE-BUF)) 
+          (G_29 (Q_29 QB_29) FD1S (D_29 CLK Q_28 TE-BUF)) 
+          (G_30 (Q_30 QB_30) FD1S (D_30 CLK Q_29 TE-BUF)) 
+          (G_31 (Q_31 QB_31) FD1S (D_31 CLK Q_30 TE-BUF)) 
+          (G_32 (Q_32 QB_32) FD1S (D_32 CLK Q_31 TE-BUF)) 
+          (G_33 (Q_33 QB_33) FD1S (D_33 CLK Q_32 TE-BUF)) 
+          (G_34 (Q_34 QB_34) FD1S (D_34 CLK Q_33 TE-BUF)) 
+          (G_35 (Q_35 QB_35) FD1S (D_35 CLK Q_34 TE-BUF)) 
+          (G_36 (Q_36 QB_36) FD1S (D_36 CLK Q_35 TE-BUF)) 
+          (G_37 (Q_37 QB_37) FD1S (D_37 CLK Q_36 TE-BUF)) 
+          (G_38 (Q_38 QB_38) FD1S (D_38 CLK Q_37 TE-BUF)) 
+          (G_39 (Q_39 QB_39) FD1S (D_39 CLK Q_38 TE-BUF))) 
+         (G_[0..39])) 
+ (EXTEND-IMMEDIATE (SELECT-IMMEDIATE IMMEDIATE_[0..8] REG-DATA_[0..31]) 
+     (Z_[0..31]) 
+     ((BUFFER (SIGN-BIT) B-BUF-PWR (IMMEDIATE_8)) 
+      (MUX (Z_[0..31]) TV-IF_32 
+           (SELECT-IMMEDIATE IMMEDIATE_[0..8] SIGN-BIT SIGN-BIT 
+               SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT 
+               SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT 
+               SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT SIGN-BIT 
+               SIGN-BIT SIGN-BIT SIGN-BIT REG-DATA_[0..31]))) 
+     NIL) 
+ (DEC-PASS_32 (C A_[0..31]) (Z_[0..31]) 
+     ((M0 (CN) B-NOT (C)) 
+      (M1 (Z_[0..31]) TV-DEC-PASS-NG_32 (CN A_[0..31]))) 
+     NIL) 
+ (TV-DEC-PASS-NG_32 (C A_[0..31]) (Z_[0..31]) 
+     ((LEFT (GL Z_[0..15]) TV-DEC-PASS-G_16 (C A_[0..15])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (Z_[16..31]) TV-DEC-PASS-NG_16 (CX A_[16..31]))) 
+     NIL) 
+ (TV-DEC-PASS-G_16 (C A_[0..15]) (G Z_[0..15]) 
+     ((LEFT (GL Z_[0..7]) TV-DEC-PASS-G_8 (C A_[0..7])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (GR Z_[8..15]) TV-DEC-PASS-G_8 (CX A_[8..15])) 
+      (GENERATE (G) B-OR (GL GR))) 
+     NIL) 
+ (TV-DEC-PASS-NG_16 (C A_[0..15]) (Z_[0..15]) 
+     ((LEFT (GL Z_[0..7]) TV-DEC-PASS-G_8 (C A_[0..7])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (Z_[8..15]) TV-DEC-PASS-NG_8 (CX A_[8..15]))) 
+     NIL) 
+ (TV-DEC-PASS-G_8 (C A_[0..7]) (G Z_[0..7]) 
+     ((LEFT (GL Z_[0..3]) TV-DEC-PASS-G_4 (C A_[0..3])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (GR Z_[4..7]) TV-DEC-PASS-G_4 (CX A_[4..7])) 
+      (GENERATE (G) B-OR (GL GR))) 
+     NIL) 
+ (TV-DEC-PASS-NG_8 (C A_[0..7]) (Z_[0..7]) 
+     ((LEFT (GL Z_[0..3]) TV-DEC-PASS-G_4 (C A_[0..3])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (Z_[4..7]) TV-DEC-PASS-NG_4 (CX A_[4..7]))) 
+     NIL) 
+ (TV-DEC-PASS-G_4 (C A_[0..3]) (G Z_[0..3]) 
+     ((LEFT (GL Z_[0..1]) TV-DEC-PASS-G_2 (C A_[0..1])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (GR Z_[2..3]) TV-DEC-PASS-G_2 (CX A_[2..3])) 
+      (GENERATE (G) B-OR (GL GR))) 
+     NIL) 
+ (TV-DEC-PASS-NG_4 (C A_[0..3]) (Z_[0..3]) 
+     ((LEFT (GL Z_[0..1]) TV-DEC-PASS-G_2 (C A_[0..1])) 
+      (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (Z_[2..3]) TV-DEC-PASS-NG_2 (CX A_[2..3]))) 
+     NIL) 
+ (TV-DEC-PASS-G_2 (C A_[0..1]) (G Z_[0..1]) 
+     ((LEFT (GL Z_0) TV-DEC-PASS-G_1 (C A_0)) (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (GR Z_1) TV-DEC-PASS-G_1 (CX A_1)) 
+      (GENERATE (G) B-OR (GL GR))) 
+     NIL) 
+ (TV-DEC-PASS-NG_2 (C A_[0..1]) (Z_[0..1]) 
+     ((LEFT (GL Z_0) TV-DEC-PASS-G_1 (C A_0)) (CARRY (CX) B-OR (C GL)) 
+      (RIGHT (Z_1) TV-DEC-PASS-NG_1 (CX A_1))) 
+     NIL) 
+ (TV-DEC-PASS-G_1 (C A_0) (G Z_0) 
+     ((LEAF (G Z_0) DEC-PASS-CELL (C A_0))) NIL) 
+ (TV-DEC-PASS-NG_1 (C A_0) (Z_0) ((LEAF (G Z_0) DEC-PASS-CELL (C A_0))) 
+     NIL) 
+ (DEC-PASS-CELL (C A) (G Z) ((G0 (G) ID (A)) (G1 (Z) B-EQUV (A C))) 
+     NIL) 
+ (CORE-ALU_32 (C A_[0..31] B_[0..31] ZERO MPG_[0..6] OP_[0..3]) 
+     (CARRY OVERFLOW ZEROP OUT_[0..31]) 
+     ((M-ALU (P G ALU-OUT_[0..31]) TV-ALU-HELP_32 
+             (C A_[0..31] B_[0..31] MPG_[0..6])) 
+      (M-ALU-CARRY (ALU-CARRY) T-CARRY (C P G)) 
+      (M-CARRY-OUT-HELP (CARRY) CARRY-OUT-HELP 
+          (A_0 ALU-CARRY ZERO OP_[0..3])) 
+      (M-OVERFLOW-HELP (OVERFLOW) OVERFLOW-HELP 
+          (ALU-OUT_31 A_31 B_31 ZERO OP_[0..3])) 
+      (M-SHIFT (OUT_[0..31]) TV-SHIFT-OR-BUF_32 
+               (C ALU-OUT_[0..31] A_31 ZERO OP_[0..3])) 
+      (M-ZEROP (ZEROP) FAST-ZERO_32 (OUT_[0..31]))) 
+     NIL) 
+ (TV-ALU-HELP_32 (C A_[0..31] B_[0..31] MPG_[0..6]) (P G OUT_[0..31]) 
+     ((LHS (PL GL OUT_[0..15]) TV-ALU-HELP_16 
+           (C A_[0..15] B_[0..15] MPG_[0..6])) 
+      (LHS-CARRY (CL) T-CARRY (C PL GL)) 
+      (RHS (PR GR OUT_[16..31]) TV-ALU-HELP_16 
+           (CL A_[16..31] B_[16..31] MPG_[0..6])) 
+      (P (P) B-AND (PL PR)) (G (G) T-CARRY (GL PR GR))) 
+     NIL) 
+ (TV-ALU-HELP_16 (C A_[0..15] B_[0..15] MPG_[0..6]) (P G OUT_[0..15]) 
+     ((LHS (PL GL OUT_[0..7]) TV-ALU-HELP_8 
+           (C A_[0..7] B_[0..7] MPG_[0..6])) 
+      (LHS-CARRY (CL) T-CARRY (C PL GL)) 
+      (RHS (PR GR OUT_[8..15]) TV-ALU-HELP_8 
+           (CL A_[8..15] B_[8..15] MPG_[0..6])) 
+      (P (P) B-AND (PL PR)) (G (G) T-CARRY (GL PR GR))) 
+     NIL) 
+ (TV-ALU-HELP_8 (C A_[0..7] B_[0..7] MPG_[0..6]) (P G OUT_[0..7]) 
+     ((BUFFERMPG (MPG-_[0..6]) V-BUF_7 (MPG_[0..6])) 
+      (LHS (PL GL OUT_[0..3]) TV-ALU-HELP_4 
+           (C A_[0..3] B_[0..3] MPG-_[0..6])) 
+      (LHS-CARRY (CL) T-CARRY (C PL GL)) 
+      (RHS (PR GR OUT_[4..7]) TV-ALU-HELP_4 
+           (CL A_[4..7] B_[4..7] MPG-_[0..6])) 
+      (P (P) B-AND (PL PR)) (G (G) T-CARRY (GL PR GR))) 
+     NIL) 
+ (TV-ALU-HELP_4 (C A_[0..3] B_[0..3] MPG_[0..6]) (P G OUT_[0..3]) 
+     ((LHS (PL GL OUT_[0..1]) TV-ALU-HELP_2 
+           (C A_[0..1] B_[0..1] MPG_[0..6])) 
+      (LHS-CARRY (CL) T-CARRY (C PL GL)) 
+      (RHS (PR GR OUT_[2..3]) TV-ALU-HELP_2 
+           (CL A_[2..3] B_[2..3] MPG_[0..6])) 
+      (P (P) B-AND (PL PR)) (G (G) T-CARRY (GL PR GR))) 
+     NIL) 
+ (TV-ALU-HELP_2 (C A_[0..1] B_[0..1] MPG_[0..6]) (P G OUT_[0..1]) 
+     ((LHS (PL GL OUT_0) TV-ALU-HELP_1 (C A_0 B_0 MPG_[0..6])) 
+      (LHS-CARRY (CL) T-CARRY (C PL GL)) 
+      (RHS (PR GR OUT_1) TV-ALU-HELP_1 (CL A_1 B_1 MPG_[0..6])) 
+      (P (P) B-AND (PL PR)) (G (G) T-CARRY (GL PR GR))) 
+     NIL) 
+ (TV-ALU-HELP_1 (C A_0 B_0 MPG_[0..6]) (P G OUT_0) 
+     ((LEAF (P G OUT_0) ALU-CELL (C A_0 B_0 MPG_[0..6]))) NIL) 
+ (ALU-CELL (C A B GBN GAN GA PB PAN PA M) (P G Z) 
+     ((N0 (AN) B-NOT (A)) (N1 (BN) B-NOT (B)) 
+      (P0 (P) P-CELL (A AN B PA PAN PB)) 
+      (G0 (G) G-CELL (A AN BN GA GAN GBN)) (M0 (MC) B-NAND (C M)) 
+      (Z0 (Z) B-EQUV3 (MC P G))) 
+     NIL) 
+ (P-CELL (A AN B PA PAN PB) (W-3) 
+         ((G-2 (W-2) B-NAND (B PB)) (G-1 (W-1) B-NAND (AN PAN)) 
+          (G-0 (W-0) B-NAND (A PA)) (G-3 (W-3) B-NAND3 (W-0 W-1 W-2))) 
+         NIL) 
+ (G-CELL (A AN BN GA GAN GBN) (W-3) 
+         ((G-2 (W-2) B-NAND (BN GBN)) (G-1 (W-1) B-NAND (AN GAN)) 
+          (G-0 (W-0) B-NAND (A GA)) (G-3 (W-3) B-AND3 (W-0 W-1 W-2))) 
+         NIL) 
+ (V-BUF_7 (A_[0..6]) (Y_[0..6]) 
+          ((G_0 (Y_0) B-BUF (A_0)) (G_1 (Y_1) B-BUF (A_1)) 
+           (G_2 (Y_2) B-BUF (A_2)) (G_3 (Y_3) B-BUF (A_3)) 
+           (G_4 (Y_4) B-BUF (A_4)) (G_5 (Y_5) B-BUF (A_5)) 
+           (G_6 (Y_6) B-BUF (A_6))) 
+          NIL) 
+ (T-CARRY (C PROP GEN) (Z) 
+          ((G0 (Z-) AO6 (C PROP GEN)) (G1 (Z) B-NOT (Z-))) NIL) 
+ (CARRY-OUT-HELP (A0 RESULT ZERO OP0 OP1 OP2 OP3) (W-22) 
+     ((G-21 (W-21) B-NOT (ZERO)) (G-16 (W-16) B-NOT (OP1)) 
+      (G-17 (W-17) B-NOT (W-16)) (G-14 (W-14) B-NOT (OP0)) 
+      (G-15 (W-15) B-NOT (W-14)) (G-18 (W-18) B-NAND (W-15 W-17)) 
+      (G-13 (W-13) B-NOT (OP2)) (G-11 (W-11) B-NOT (OP3)) 
+      (G-12 (W-12) B-NOT (W-11)) 
+      (G-19 (W-19) B-NAND4 (W-12 W-13 W-18 A0)) 
+      (G-9 (W-9) B-NOT (RESULT)) (G-8 (W-8) B-NOT (W-13)) 
+      (G-10 (W-10) B-NAND3 (W-11 W-8 W-9)) 
+      (G-3 (W-3) B-NAND (W-14 W-16)) 
+      (G-5 (W-5) B-NAND4 (W-11 W-3 W-13 RESULT)) 
+      (G-20 (W-20) B-NAND3 (W-5 W-10 W-19)) 
+      (G-22 (W-22) B-AND (W-20 W-21))) 
+     NIL) 
+ (OVERFLOW-HELP (RN AN BN ZERO OP0 OP1 OP2 OP3) (W-83) 
+     ((G-77 (W-77) B-NOT (AN)) (G-78 (W-78) B-NOT (W-77)) 
+      (G-76 (W-76) B-NOT (OP2)) (G-79 (W-79) B-NAND (W-76 W-78)) 
+      (G-72 (W-72) B-NOT (OP1)) (G-75 (W-75) B-NAND3 (OP0 W-72 W-78)) 
+      (G-69 (W-69) B-NOT (W-76)) (G-71 (W-71) B-NAND (W-69 W-77)) 
+      (G-80 (W-80) B-NAND3 (W-71 W-75 W-79)) (G-81 (W-81) B-NOT (W-80)) 
+      (G-66 (W-66) B-NOT (ZERO)) (G-63 (W-63) B-NAND3 (W-72 W-76 W-78)) 
+      (G-57 (W-57) B-XOR (W-78 BN)) 
+      (G-58 (W-58) B-NAND3 (OP1 W-76 W-57)) 
+      (G-64 (W-64) B-NAND (W-58 W-63)) 
+      (G-52 (W-52) B-NAND3 (W-72 W-69 W-77)) 
+      (G-47 (W-47) B-OR3 (W-72 W-76 W-57)) (G-41 (W-41) B-NOT (OP3)) 
+      (G-53 (W-53) B-NAND3 (W-41 W-47 W-52)) 
+      (G-65 (W-65) B-NOR (W-53 W-64)) (G-67 (W-67) B-NAND (W-65 W-66)) 
+      (G-82 (W-82) B-NOR (W-67 W-81)) (G-40 (W-40) B-NOR (W-67 W-80)) 
+      (G-83 (W-83) B-IF (RN W-40 W-82))) 
+     NIL) 
+ (TV-SHIFT-OR-BUF_32 (C A_[0..31] AN ZERO OP0 OP1 OP2 OP3) 
+     (OUT_[0..31]) 
+     ((CNTL (CTL SI) SHIFT-OR-BUF-CNTL (C AN ZERO OP0 OP1 OP2 OP3)) 
+      (MUX (OUT_[0..31]) TV-IF_32 (CTL A_[0..31] A_[1..31] SI))) 
+     NIL) 
+ (TV-IF_32 (C A_[0..31] B_[0..31]) (OUT_[0..31]) 
+     ((C-BUF (C-BUF) B-BUF (C)) 
+      (LEFT (OUT_[0..15]) TV-IF_16 (C-BUF A_[0..15] B_[0..15])) 
+      (RIGHT (OUT_[16..31]) TV-IF_16 (C-BUF A_[16..31] B_[16..31]))) 
+     NIL) 
+ (TV-IF_16 (C A_[0..15] B_[0..15]) (OUT_[0..15]) 
+     ((LEFT (OUT_[0..7]) TV-IF_8 (C A_[0..7] B_[0..7])) 
+      (RIGHT (OUT_[8..15]) TV-IF_8 (C A_[8..15] B_[8..15]))) 
+     NIL) 
+ (TV-IF_8 (C A_[0..7] B_[0..7]) (OUT_[0..7]) 
+          ((LEFT (OUT_[0..3]) TV-IF_4 (C A_[0..3] B_[0..3])) 
+           (RIGHT (OUT_[4..7]) TV-IF_4 (C A_[4..7] B_[4..7]))) 
+          NIL) 
+ (SHIFT-OR-BUF-CNTL (C AN ZERO OP0 OP1 OP2 OP3) (W-3 W-9) 
+     ((G-6 (W-6) B-NOT (OP1)) (G-5 (W-5) B-NOT (OP0)) 
+      (G-7 (W-7) B-AND (W-5 W-6)) (G-8 (W-8) B-AND (W-7 C)) 
+      (G-4 (W-4) B-AND (OP0 AN)) (G-9 (W-9) B-OR (W-4 W-8)) 
+      (G-1 (W-1) B-NOT (OP2)) (G-2 (W-2) B-NAND (W-1 OP3)) 
+      (G-0 (W-0) B-AND (OP0 OP1)) (G-3 (W-3) B-OR3 (W-0 W-2 ZERO))) 
+     NIL) 
+ (FAST-ZERO_32 (A_[0..31]) (Z) 
+     ((FRONT (ZFRONT) T-OR_34358165488 (A_[0..29])) 
+      (RESULT (Z) B-NOR3 (ZFRONT A_[30..31]))) 
+     NIL) 
+ (T-OR_34358165488 (A_[0..29]) (OUT) 
+     ((LEFT (LEFT-OUT) T-NOR_262136 (A_[0..14])) 
+      (RIGHT (RIGHT-OUT) T-NOR_262136 (A_[15..29])) 
+      (OUTPUT (OUT) B-NAND (LEFT-OUT RIGHT-OUT))) 
+     NIL) 
+ (T-NOR_262136 (A_[0..14]) (OUT) 
+     ((LEFT (LEFT-OUT) T-OR_508 (A_[0..6])) 
+      (RIGHT (RIGHT-OUT) T-OR_8 (A_[7..14])) 
+      (OUTPUT (OUT) B-NOR (LEFT-OUT RIGHT-OUT))) 
+     NIL) 
+ (T-OR_508 (A_[0..6]) (OUT) 
+     ((LEFT (LEFT-OUT) T-NOR_14 (A_[0..2])) 
+      (RIGHT (RIGHT-OUT) T-NOR_4 (A_[3..6])) 
+      (OUTPUT (OUT) B-NAND (LEFT-OUT RIGHT-OUT))) 
+     NIL) 
+ (T-NOR_14 (A_[0..2]) (OUT) 
+     ((LEFT (LEFT-OUT) T-OR_1 (A_0)) 
+      (RIGHT (RIGHT-OUT) T-OR_2 (A_[1..2])) 
+      (OUTPUT (OUT) B-NOR (LEFT-OUT RIGHT-OUT))) 
+     NIL) 
+ (T-OR_1 (A_0) (OUT) ((LEAF (OUT) B-BUF (A_0))) NIL) 
+ (T-OR_8 (A_[0..7]) (OUT) 
+         ((LEFT (LEFT-OUT) T-NOR_4 (A_[0..3])) 
+          (RIGHT (RIGHT-OUT) T-NOR_4 (A_[4..7])) 
+          (OUTPUT (OUT) B-NAND (LEFT-OUT RIGHT-OUT))) 
+         NIL) 
+ (T-NOR_4 (A_[0..3]) (OUT) 
+          ((LEFT (LEFT-OUT) T-OR_2 (A_[0..1])) 
+           (RIGHT (RIGHT-OUT) T-OR_2 (A_[2..3])) 
+           (OUTPUT (OUT) B-NOR (LEFT-OUT RIGHT-OUT))) 
+          NIL) 
+ (T-OR_2 (A_[0..1]) (OUT) ((LEAF (OUT) B-OR (A_[0..1]))) NIL) 
+ (NEXT-CNTL-STATE 
+     (RESET- DTACK- HOLD- RW- STATE_[0..4] I-REG_[0..31] FLAGS_[0..3] 
+             PC-REG_[0..3] REGS-ADDRESS_[0..3]) 
+     (NEXT-CNTL-STATE_[0..39]) 
+     ((CONTROL-SIGNALS 
+          (A-IMMEDIATE-P STORE SET-SOME-FLAGS DIRECT-A DIRECT-B UNARY 
+              PRE-DEC-A PRE-DEC-B C ALL-T-REGS-ADDRESS SIDE-EFFECT-A 
+              SIDE-EFFECT-B) 
+          CONTROL-LET (I-REG_[0..31] FLAGS_[0..3] REGS-ADDRESS_[0..3])) 
+      (NOT-RESET (RESET) B-NOT (RESET-)) 
+      (RESET5X (RESET5X_[0..4]) FANOUT-5 (RESET)) 
+      (XSTATE (XSTATE_[0..4]) V-OR_5 (RESET5X_[0..4] STATE_[0..4])) 
+      (DSTATE (DECODED-STATE_[0..31]) DECODE-5 (XSTATE_[0..4])) 
+      (NXSTATE (NEXT-STATE_[0..31]) NEXT-STATE 
+               (DECODED-STATE_[0..31] STORE SET-SOME-FLAGS UNARY 
+                   DIRECT-A DIRECT-B SIDE-EFFECT-A SIDE-EFFECT-B 
+                   ALL-T-REGS-ADDRESS DTACK- HOLD-)) 
+      (CVECTOR (NEXT-CNTL-STATE_[0..39]) CV 
+               (NEXT-STATE_[0..31] I-REG_[0..3] I-REG_[10..13] 
+                   I-REG_[24..27] PC-REG_[0..3] REGS-ADDRESS_[0..3] 
+                   I-REG_[16..19] STORE C A-IMMEDIATE-P RW- DIRECT-A 
+                   SIDE-EFFECT-A SIDE-EFFECT-B PRE-DEC-A PRE-DEC-B))) 
+     NIL) 
+ (CONTROL-LET (I-REG_[0..31] FLAGS_[0..3] REGS-ADDRESS_[0..3]) 
+     (A-IMMEDIATE-P STORE SET-SOME-FLAGS DIRECT-A DIRECT-B UNARY 
+         PRE-DEC-A PRE-DEC-B C ALL-T-REGS-ADDRESS SIDE-EFFECT-A 
+         SIDE-EFFECT-B) 
+     ((G0 (A-IMMEDIATE-P) ID (I-REG_9)) 
+      (G1 (A-IMMEDIATE-P-) B-NOT (A-IMMEDIATE-P)) 
+      (G2 (STORE) B-STORE-RESULTP (I-REG_[20..23] FLAGS_[0..3])) 
+      (G3 (SET-SOME-FLAGS) B-OR4 (I-REG_[16..19])) 
+      (G4 (ALMOST-DIRECT-A PRE-DEC-A ALMOST-SIDE-EFFECT-A) 
+          DECODE-REG-MODE (I-REG_[4..5])) 
+      (G5 (DIRECT-B PRE-DEC-B SIDE-EFFECT-B) DECODE-REG-MODE 
+          (I-REG_[14..15])) 
+      (G6 (UNARY) UNARY-OP-CODE-P (I-REG_[24..27])) 
+      (G7 (C) ID (FLAGS_3)) 
+      (G8 (ALL-T-REGS-ADDRESS) B-AND4 (REGS-ADDRESS_[0..3])) 
+      (G9 (SIDE-EFFECT-A) B-AND (A-IMMEDIATE-P- ALMOST-SIDE-EFFECT-A)) 
+      (GA (DIRECT-A) B-OR (A-IMMEDIATE-P ALMOST-DIRECT-A))) 
+     NIL) 
+ (B-STORE-RESULTP (S0 S1 S2 S3 Z N V C) (RESULT) 
+     ((G0 (CZ) B-OR (C Z)) (G1 (NV) B-XOR (N V)) (G2 (ZNV) B-OR (Z NV)) 
+      (G3 (MUX) STORE-RESULTP-MUX (S1 S2 S3 C V N Z CZ NV ZNV)) 
+      (G4 (RESULT) B-XOR (S0 MUX))) 
+     NIL) 
+ (STORE-RESULTP-MUX (S0 S1 S2 D0 D1 D2 D3 D4 D5 D6) (W-13) 
+     ((G-10 (W-10) B-NOT (S0)) (G-11 (W-11) B-NAND (W-10 D6)) 
+      (G-9 (W-9) AO2 (W-10 D4 S0 D5)) (G-7 (W-7) B-NOT (S1)) 
+      (G-12 (W-12) AO2 (W-7 W-9 S1 W-11)) 
+      (G-5 (W-5) AO2 (W-10 D2 S0 D3)) (G-3 (W-3) AO2 (W-10 D0 S0 D1)) 
+      (G-6 (W-6) AO2 (W-7 W-3 S1 W-5)) (G-0 (W-0) B-NOT (S2)) 
+      (G-13 (W-13) AO2 (W-0 W-6 S2 W-12))) 
+     NIL) 
+ (DECODE-REG-MODE (M0 M1) (DIRECT PRE-DEC SIDE-EFFECT) 
+     ((G0 (DIRECT) B-NOR (M0 M1)) (G1 (M1-) B-NOT (M1)) 
+      (G2 (PRE-DEC) B-NOR (M0 M1-)) (G3 (SIDE-EFFECT) ID (M1))) 
+     NIL) 
+ (UNARY-OP-CODE-P (OP0 OP1 OP2 OP3) (Z) 
+     ((G0 (OP0-) B-NOT (OP0)) (G1 (OP1-) B-NOT (OP1)) 
+      (G2 (OP2-) B-NOT (OP2)) (G3 (OP3-) B-NOT (OP3)) 
+      (G4 (S0) B-NAND (OP3- OP1-)) (G5 (S1) B-NAND (OP2- OP1-)) 
+      (G6 (S2) B-NAND3 (OP3 OP1 OP0-)) (G7 (S3) B-NAND3 (OP3 OP2 OP1)) 
+      (G8 (Z) B-NAND4 (S0 S1 S2 S3))) 
+     NIL) 
+ (FANOUT-5 (A) (Z0 Z1 Z2 Z3 Z4) 
+     ((AA (AA) B-BUF (A)) (G0 (Z0) ID (AA)) (G1 (Z1) ID (AA)) 
+      (G2 (Z2) ID (AA)) (G3 (Z3) ID (AA)) (G4 (Z4) ID (AA))) 
+     NIL) 
+ (V-OR_5 (A_[0..4] B_[0..4]) (Y_[0..4]) 
+         ((G_0 (Y_0) B-OR (A_0 B_0)) (G_1 (Y_1) B-OR (A_1 B_1)) 
+          (G_2 (Y_2) B-OR (A_2 B_2)) (G_3 (Y_3) B-OR (A_3 B_3)) 
+          (G_4 (Y_4) B-OR (A_4 B_4))) 
+         NIL) 
+ (DECODE-5 (S0 S1 S2 S3 S4) 
+     (X00 X10 X20 X30 X01 X11 X21 X31 X02 X12 X22 X32 X03 X13 X23 X33 
+          X04 X14 X24 X34 X05 X15 X25 X35 X06 X16 X26 X36 X07 X17 X27 
+          X37) 
+     ((GS0- (S0-) B-NOT (S0)) (GS1- (S1-) B-NOT (S1)) 
+      (GS2- (S2-) B-NOT (S2)) (GS3- (S3-) B-NOT (S3)) 
+      (GS4- (S4-) B-NOT (S4)) (GS0 (BS0) B-NOT (S0-)) 
+      (GS1 (BS1) B-NOT (S1-)) (GS2 (BS2) B-NOT (S2-)) 
+      (GS3 (BS3) B-NOT (S3-)) (GS4 (BS4) B-NOT (S4-)) 
+      (GL0 (L0) B-NAND (S0- S1-)) (GL1 (L1) B-NAND (BS0 S1-)) 
+      (GL2 (L2) B-NAND (S0- BS1)) (GL3 (L3) B-NAND (BS0 BS1)) 
+      (GH0 (H0) B-NAND3 (S2- S3- S4-)) (GH1 (H1) B-NAND3 (BS2 S3- S4-)) 
+      (GH2 (H2) B-NAND3 (S2- BS3 S4-)) (GH3 (H3) B-NAND3 (BS2 BS3 S4-)) 
+      (GH4 (H4) B-NAND3 (S2- S3- BS4)) (GH5 (H5) B-NAND3 (BS2 S3- BS4)) 
+      (GH6 (H6) B-NAND3 (S2- BS3 BS4)) (GH7 (H7) B-NAND3 (BS2 BS3 BS4)) 
+      (GX00 (X00) B-NOR (L0 H0)) (GX10 (X10) B-NOR (L1 H0)) 
+      (GX20 (X20) B-NOR (L2 H0)) (GX30 (X30) B-NOR (L3 H0)) 
+      (GX01 (X01) B-NOR (L0 H1)) (GX11 (X11) B-NOR (L1 H1)) 
+      (GX21 (X21) B-NOR (L2 H1)) (GX31 (X31) B-NOR (L3 H1)) 
+      (GX02 (X02) B-NOR (L0 H2)) (GX12 (X12) B-NOR (L1 H2)) 
+      (GX22 (X22) B-NOR (L2 H2)) (GX32 (X32) B-NOR (L3 H2)) 
+      (GX03 (X03) B-NOR (L0 H3)) (GX13 (X13) B-NOR (L1 H3)) 
+      (GX23 (X23) B-NOR (L2 H3)) (GX33 (X33) B-NOR (L3 H3)) 
+      (GX04 (X04) B-NOR (L0 H4)) (GX14 (X14) B-NOR (L1 H4)) 
+      (GX24 (X24) B-NOR (L2 H4)) (GX34 (X34) B-NOR (L3 H4)) 
+      (GX05 (X05) B-NOR (L0 H5)) (GX15 (X15) B-NOR (L1 H5)) 
+      (GX25 (X25) B-NOR (L2 H5)) (GX35 (X35) B-NOR (L3 H5)) 
+      (GX06 (X06) B-NOR (L0 H6)) (GX16 (X16) B-NOR (L1 H6)) 
+      (GX26 (X26) B-NOR (L2 H6)) (GX36 (X36) B-NOR (L3 H6)) 
+      (GX07 (X07) B-NOR (L0 H7)) (GX17 (X17) B-NOR (L1 H7)) 
+      (GX27 (X27) B-NOR (L2 H7)) (GX37 (X37) B-NOR (L3 H7))) 
+     NIL) 
+ (NEXT-STATE 
+     (S_[0..31] STORE SET-SOME-FLAGS UNARY DIRECT-A DIRECT-B 
+                SIDE-EFFECT-A SIDE-EFFECT-B ALL-T-REGS-ADDRESS DTACK- 
+                HOLD-) 
+     (W-17 W-18 W-19 W-22 W-24 W-27 W-29 W-44 W-47 W-48 W-49 W-52 W-61 
+           W-62 W-63 W-66 W-74 W-75 W-76 W-79 W-82 W-83 W-89 W-93 W-98 
+           W-99 W-112 W-113 W-105 W-106 W-110 W-111) 
+     ((R-0 (FETCH0) ID (S_0)) (R-1 (FETCH1) ID (S_1)) 
+      (R-2 (FETCH2) ID (S_2)) (R-3 (FETCH3) ID (S_3)) 
+      (R-4 (DECODE) ID (S_4)) (R-5 (REGA) ID (S_5)) 
+      (R-6 (REGB) ID (S_6)) (R-7 (UPDATE) ID (S_7)) 
+      (R-8 (READA0) ID (S_8)) (R-9 (READA1) ID (S_9)) 
+      (R-10 (READA2) ID (S_10)) (R-11 (READA3) ID (S_11)) 
+      (R-12 (READB0) ID (S_12)) (R-13 (READB1) ID (S_13)) 
+      (R-14 (READB2) ID (S_14)) (R-15 (READB3) ID (S_15)) 
+      (R-16 (WRITE0) ID (S_16)) (R-17 (WRITE1) ID (S_17)) 
+      (R-18 (WRITE2) ID (S_18)) (R-19 (WRITE3) ID (S_19)) 
+      (R-20 (SEFA0) ID (S_20)) (R-21 (SEFA1) ID (S_21)) 
+      (R-22 (SEFB0) ID (S_22)) (R-23 (SEFB1) ID (S_23)) 
+      (R-24 (HOLD0) ID (S_24)) (R-25 (HOLD1) ID (S_25)) 
+      (R-26 (V11010) ID (S_26)) (R-27 (V11011) ID (S_27)) 
+      (R-28 (RESET0) ID (S_28)) (R-29 (RESET1) ID (S_29)) 
+      (R-30 (RESET2) ID (S_30)) (R-31 (V11111) ID (S_31)) 
+      (G-111 (W-111) VSS NIL) (G-109 (W-109) B-NOT (RESET1)) 
+      (G-107 (W-107) B-NOT (ALL-T-REGS-ADDRESS)) 
+      (G-108 (W-108) B-NAND (W-107 RESET2)) 
+      (G-110 (W-110) B-NAND (W-108 W-109)) (G-106 (W-106) ID (RESET0)) 
+      (G-104 (W-104) B-NOT (V11010)) (G-103 (W-103) B-NOT (V11011)) 
+      (G-102 (W-102) B-NOT (V11111)) 
+      (G-105 (W-105) B-NAND3 (W-102 W-103 W-104)) 
+      (G-99 (W-99) B-AND (HOLD- HOLD0)) (G-96 (W-96) B-NOT (HOLD-)) 
+      (G-97 (W-97) B-NAND (W-96 FETCH1)) 
+      (G-95 (W-95) B-NAND (W-96 HOLD0)) 
+      (G-98 (W-98) B-NAND (W-95 W-97)) 
+      (G-91 (W-91) B-AND (SIDE-EFFECT-B UNARY)) 
+      (G-92 (W-92) B-NAND (W-91 UPDATE)) (G-90 (W-90) B-NOT (SEFB0)) 
+      (G-93 (W-93) B-NAND (W-90 W-92)) 
+      (G-86 (W-86) B-OR (STORE SET-SOME-FLAGS)) 
+      (G-87 (W-87) B-NOT (W-86)) (G-85 (W-85) B-NOT (SIDE-EFFECT-A)) 
+      (G-88 (W-88) B-NAND4 (SIDE-EFFECT-B W-85 W-87 DECODE)) 
+      (G-84 (W-84) B-NAND (SIDE-EFFECT-B SEFA1)) 
+      (G-89 (W-89) B-NAND (W-84 W-88)) (G-83 (W-83) ID (SEFA0)) 
+      (G-82 (W-82) B-AND3 (SIDE-EFFECT-A W-87 DECODE)) 
+      (G-78 (W-78) B-NOT (WRITE2)) (G-77 (W-77) B-NAND (DTACK- WRITE3)) 
+      (G-79 (W-79) B-NAND (W-77 W-78)) (G-76 (W-76) ID (WRITE1)) 
+      (G-75 (W-75) ID (WRITE0)) (G-72 (W-72) B-NOT (DIRECT-B)) 
+      (G-73 (W-73) B-NAND3 (STORE W-72 REGA)) 
+      (G-70 (W-70) B-NOT (DTACK-)) 
+      (G-71 (W-71) B-NAND5 (STORE UNARY W-72 W-70 READA3)) 
+      (G-68 (W-68) B-NAND3 (STORE W-70 READB3)) 
+      (G-74 (W-74) B-NAND3 (W-68 W-71 W-73)) 
+      (G-65 (W-65) B-NOT (READB2)) (G-64 (W-64) B-NAND (DTACK- READB3)) 
+      (G-66 (W-66) B-NAND (W-64 W-65)) (G-63 (W-63) ID (READB1)) 
+      (G-62 (W-62) ID (READB0)) (G-57 (W-57) B-OR (DIRECT-B UNARY)) 
+      (G-58 (W-58) B-NOT (W-57)) 
+      (G-60 (W-60) B-NAND4 (W-58 DIRECT-A W-86 DECODE)) 
+      (G-53 (W-53) B-NOT (UNARY)) 
+      (G-56 (W-56) B-NAND4 (W-53 W-72 W-70 READA3)) 
+      (G-61 (W-61) B-NAND (W-56 W-60)) (G-51 (W-51) B-NOT (READA2)) 
+      (G-50 (W-50) B-NAND (DTACK- READA3)) 
+      (G-52 (W-52) B-NAND (W-50 W-51)) (G-49 (W-49) ID (READA1)) 
+      (G-48 (W-48) ID (READA0)) (G-45 (W-45) B-NOT (DIRECT-A)) 
+      (G-47 (W-47) B-AND3 (W-45 W-86 DECODE)) 
+      (G-43 (W-43) B-NAND3 (UNARY DIRECT-B REGA)) 
+      (G-40 (W-40) B-NOT (STORE)) 
+      (G-42 (W-42) B-NAND3 (W-40 W-72 REGA)) (G-39 (W-39) B-NOT (REGB)) 
+      (G-38 (W-38) B-NAND3 (DIRECT-B W-70 READA3)) 
+      (G-36 (W-36) B-NAND5 (W-40 UNARY W-72 W-70 READA3)) 
+      (G-32 (W-32) B-NAND3 (W-40 W-70 READB3)) 
+      (G-44 (W-44) B-NAND6 (W-32 W-36 W-38 W-39 W-42 W-43)) 
+      (G-29 (W-29) B-AND3 (W-53 DIRECT-B REGA)) 
+      (G-27 (W-27) B-AND4 (W-57 DIRECT-A W-86 DECODE)) 
+      (G-24 (W-24) B-AND (W-70 FETCH3)) (G-21 (W-21) B-NOT (FETCH2)) 
+      (G-20 (W-20) B-NAND (DTACK- FETCH3)) 
+      (G-22 (W-22) B-NAND (W-20 W-21)) 
+      (G-19 (W-19) B-AND (HOLD- FETCH1)) (G-18 (W-18) ID (FETCH0)) 
+      (G-11 (W-11) B-NOT (SIDE-EFFECT-B)) 
+      (G-15 (W-15) B-NAND4 (W-11 W-85 W-87 DECODE)) 
+      (G-9 (W-9) B-NOT (W-91)) (G-10 (W-10) B-NAND (W-9 UPDATE)) 
+      (G-7 (W-7) B-NAND (W-70 WRITE3)) 
+      (G-16 (W-16) B-AND3 (W-7 W-10 W-15)) 
+      (G-4 (W-4) B-NAND (W-11 SEFA1)) (G-2 (W-2) B-NOT (SEFB1)) 
+      (G-1 (W-1) B-NOT (HOLD1)) 
+      (G-0 (W-0) B-NAND (ALL-T-REGS-ADDRESS RESET2)) 
+      (G-5 (W-5) B-AND4 (W-0 W-1 W-2 W-4)) 
+      (G-17 (W-17) B-NAND (W-5 W-16)) (G-112 (W-112) ID (W-111)) 
+      (G-113 (W-113) ID (W-111))) 
+     NIL) 
+ (CV (DECODED-STATE_[0..31] RN-A_[0..3] RN-B_[0..3] OP-CODE_[0..3] 
+         PC-REG_[0..3] REGS-ADDRESS_[0..3] SET-FLAGS_[0..3] STORE C 
+         A-IMMEDIATE-P RW- DIRECT-A SIDE-EFFECT-A SIDE-EFFECT-B 
+         PRE-DEC-A PRE-DEC-B) 
+     (NEW-RW- STROBE- HDACK- WE-REGS WE-A-REG WE-B-REG WE-I-REG 
+              WE-DATA-OUT WE-ADDR-OUT WE-HOLD- WE-PC-REG DATA-IN-SELECT 
+              DEC-ADDR-OUT SELECT-IMMEDIATE ALU-C ALU-ZERO STATE_[0..4] 
+              WE-FLAGS_[0..3] NEW-REGS-ADDRESS_[0..3] ALU-OP_[0..3] 
+              ALU-MPG_[0..6]) 
+     ((G-FETCH0 (FETCH0) ID (DECODED-STATE_0)) 
+      (G-FETCH1 (FETCH1) ID (DECODED-STATE_1)) 
+      (G-FETCH2 (FETCH2) ID (DECODED-STATE_2)) 
+      (G-FETCH3 (FETCH3) ID (DECODED-STATE_3)) 
+      (G-DECODE (DECODE) ID (DECODED-STATE_4)) 
+      (G-REGA (REGA) ID (DECODED-STATE_5)) 
+      (G-REGB (REGB) ID (DECODED-STATE_6)) 
+      (G-UPDATE (UPDATE) ID (DECODED-STATE_7)) 
+      (G-READA0 (READA0) ID (DECODED-STATE_8)) 
+      (G-READA1 (READA1) ID (DECODED-STATE_9)) 
+      (G-READA2 (READA2) ID (DECODED-STATE_10)) 
+      (G-READA3 (READA3) ID (DECODED-STATE_11)) 
+      (G-READB0 (READB0) ID (DECODED-STATE_12)) 
+      (G-READB1 (READB1) ID (DECODED-STATE_13)) 
+      (G-READB2 (READB2) ID (DECODED-STATE_14)) 
+      (G-READB3 (READB3) ID (DECODED-STATE_15)) 
+      (G-WRITE0 (WRITE0) ID (DECODED-STATE_16)) 
+      (G-WRITE1 (WRITE1) ID (DECODED-STATE_17)) 
+      (G-WRITE2 (WRITE2) ID (DECODED-STATE_18)) 
+      (G-WRITE3 (WRITE3) ID (DECODED-STATE_19)) 
+      (G-SEFA0 (SEFA0) ID (DECODED-STATE_20)) 
+      (G-SEFA1 (SEFA1) ID (DECODED-STATE_21)) 
+      (G-SEFB0 (SEFB0) ID (DECODED-STATE_22)) 
+      (G-SEFB1 (SEFB1) ID (DECODED-STATE_23)) 
+      (G-HOLD0 (HOLD0) ID (DECODED-STATE_24)) 
+      (G-HOLD1 (HOLD1) ID (DECODED-STATE_25)) 
+      (G-V11010 (V11010) ID (DECODED-STATE_26)) 
+      (G-V11011 (V11011) ID (DECODED-STATE_27)) 
+      (G-RESET0 (RESET0) ID (DECODED-STATE_28)) 
+      (G-RESET1 (RESET1) ID (DECODED-STATE_29)) 
+      (G-RESET2 (RESET2) ID (DECODED-STATE_30)) 
+      (G-V11111 (V11111) ID (DECODED-STATE_31)) 
+      (G0 (STORE-) B-NOT (STORE)) 
+      (G1 (ALU-ZERO) B-OR4 (FETCH0 RESET0 RESET1 RESET2)) 
+      (G2 (ALU-SWAP) B-OR3 (READB2 WRITE1 SEFB1)) 
+      (G3 (INCDECA) B-OR (READA1 SEFA1)) 
+      (G4 (S4) B-NOR4 (FETCH2 INCDECA ALU-SWAP ALU-ZERO)) 
+      (G5 (S5) B-NAND (INCDECA PRE-DEC-A)) 
+      (G6 (S6) B-NAND (ALU-SWAP PRE-DEC-B)) (G7 (S7) B-NAND (S5 S6)) 
+      (G8 (ALU-OP_[0..3]) SELECT-OP-CODE (S4 S7 OP-CODE_[0..3])) 
+      (G10 (S10) B-NOT (RW-)) (G11 (S11) B-NAND (S10 FETCH0)) 
+      (G12 (S12) B-NOR3 (WRITE1 WRITE2 WRITE3)) 
+      (G13 (NEW-RW-) B-AND (S11 S12)) 
+      (G14 (STROBE-) B-NOR8 
+           (FETCH2 FETCH3 READA2 READA3 READB2 READB3 WRITE2 WRITE3)) 
+      (G15 (HDACK-) B-NOT (HOLD0)) (G17 (S17) B-NAND (STORE UPDATE)) 
+      (G18 (S18) B-NAND (SIDE-EFFECT-A READA1)) 
+      (G19 (S19) B-NAND3 (STORE- SIDE-EFFECT-B READB2)) 
+      (G20 (S20) B-NAND (SIDE-EFFECT-B WRITE1)) 
+      (G21 (S21) B-NOR5 (FETCH2 SEFA1 SEFB1 RESET0 RESET2)) 
+      (G22 (WE-REGS) B-NAND5 (S17 S18 S19 S20 S21)) 
+      (G23 (S23) B-NAND (DIRECT-A READB1)) 
+      (G24 (S24) B-NOR6 (FETCH0 REGA READA0 READA3 SEFA0 RESET1)) 
+      (G25 (WE-A-REG) B-NAND (S23 S24)) 
+      (G26 (S26) B-NOR4 (REGB UPDATE READA2 READB0)) 
+      (G27 (S27) B-NOR4 (READB3 WRITE0 SEFB0 RESET1)) 
+      (G28 (WE-B-REG) B-NAND (S26 S27)) 
+      (G29 (WE-I-REG) B-OR (FETCH3 RESET1)) 
+      (G30 (WE-DATA-OUT) B-OR (WRITE0 RESET0)) 
+      (G31 (S31) B-NOR3 (FETCH0 READA0 READB0)) 
+      (G32 (S32) B-NOR (WRITE0 RESET1)) 
+      (G33 (WE-ADDR-OUT) B-NAND (S31 S32)) 
+      (G34 (WE-HOLD-) B-OR3 (FETCH0 HOLD0 RESET0)) 
+      (G35 (WE-PC-REG) B-OR (HOLD0 RESET0)) 
+      (G36 (DATA-IN-SELECT) B-OR3 (FETCH3 READA3 READB3)) 
+      (G37 (S37) B-NAND (PRE-DEC-A READA0)) 
+      (G38 (S38) B-OR (READB0 WRITE0)) 
+      (G39 (S39) B-NAND (PRE-DEC-B S38)) 
+      (G40 (DEC-ADDR-OUT) B-NAND (S37 S39)) 
+      (G41 (S41) B-OR (REGA READB1)) 
+      (G42 (SELECT-IMMEDIATE) B-AND (A-IMMEDIATE-P S41)) 
+      (G43 (ALU-C) CARRY-IN-HELP (C ALU-ZERO ALU-OP_[0..3])) 
+      (G44 (STATE_[0..4]) ENCODE-32 (DECODED-STATE_[0..31])) 
+      (G45 (FANOUT-RESET0_[0..3]) FANOUT-4 (RESET0)) 
+      (G46 (S46) B-NOR (UPDATE WRITE0)) 
+      (G47 (WE-FLAGS_[0..3]) TV-IF_4 
+           (S46 FANOUT-RESET0_[0..3] SET-FLAGS_[0..3])) 
+      (G48 (S48) B-NOR3 (REGA READA0 READA1)) 
+      (G49 (S49) B-NOR3 (READB1 SEFA0 SEFA1)) 
+      (G50 (SELECT-RN-A) B-NAND (S48 S49)) 
+      (G51 (S51) B-NOR5 (REGB UPDATE READA2 READB0 READB2)) 
+      (G52 (S52) B-NOR4 (WRITE0 WRITE1 SEFB0 SEFB1)) 
+      (G53 (SELECT-RN-B) B-NAND (S51 S52)) 
+      (G54 (SELECT-ALL-F) B-OR (RESET0 RESET1)) 
+      (G55 (V-INC-REGS-ADDRESS_[0..3]) V-INC4 (REGS-ADDRESS_[0..3])) 
+      (G56 (S56_[0..3]) TV-IF_4 
+           (RESET2 V-INC-REGS-ADDRESS_[0..3] PC-REG_[0..3])) 
+      (G57 (S57_[0..3]) V-IF-F-4 (SELECT-ALL-F S56_[0..3])) 
+      (G58 (S58_[0..3]) TV-IF_4 (SELECT-RN-B RN-B_[0..3] S57_[0..3])) 
+      (G59 (NEW-REGS-ADDRESS_[0..3]) TV-IF_4 
+           (SELECT-RN-A RN-A_[0..3] S58_[0..3])) 
+      (G60 (ALU-MPG_[0..6]) MPG (ALU-ZERO ALU-SWAP ALU-OP_[0..3]))) 
+     NIL) 
+ (SELECT-OP-CODE (SELECT DEC OP0 OP1 OP2 OP3) (Z0 Z1 Z2 Z3) 
+     ((I0 (OP0-) B-NOT (OP0)) (G0 (Z0) B-NAND (SELECT OP0-)) 
+      (G1 (Z1) B-AND (SELECT OP1)) (G2 (Z2) B-IF (SELECT OP2 DEC)) 
+      (G3 (Z3) B-AND (SELECT OP3))) 
+     NIL) 
+ (TV-IF_4 (C A_[0..3] B_[0..3]) (OUT_[0..3]) 
+          ((C-BUF (C-BUF) B-BUF (C)) 
+           (LEFT (OUT_[0..1]) TV-IF_2 (C-BUF A_[0..1] B_[0..1])) 
+           (RIGHT (OUT_[2..3]) TV-IF_2 (C-BUF A_[2..3] B_[2..3]))) 
+          NIL) 
+ (TV-IF_2 (C A_[0..1] B_[0..1]) (OUT_[0..1]) 
+          ((LEFT (OUT_0) TV-IF_1 (C A_0 B_0)) 
+           (RIGHT (OUT_1) TV-IF_1 (C A_1 B_1))) 
+          NIL) 
+ (TV-IF_1 (C A_0 B_0) (OUT_0) ((LEAF (OUT_0) B-IF (C A_0 B_0))) NIL) 
+ (CARRY-IN-HELP (CIN Z OP0IN OP1IN OP2IN OP3IN) (COUT) 
+     ((G0 (C- C) B-NBUF (CIN)) (G1 (OP0- OP0) B-NBUF (OP0IN)) 
+      (G2 (OP1- OP1) B-NBUF (OP1IN)) (G3 (OP2- OP2) B-NBUF (OP2IN)) 
+      (G4 (OP3- OP3) B-NBUF (OP3IN)) (G5 (S5) B-NAND3 (OP1- OP2- OP3-)) 
+      (G6 (S6) B-NAND3 (OP0- OP1- OP2)) (G7 (S7) B-NAND3 (OP0 OP1 OP2)) 
+      (G8 (S8) B-NAND3 (S5 S6 S7)) (G9 (S9) B-NAND (OP3 C)) 
+      (G10 (S10) B-NAND3 (OP0- OP2- C)) 
+      (G11 (S11) B-NAND3 (OP0- OP2 C-)) 
+      (G12 (S12) B-NAND3 (S9 S10 S11)) (G13 (COUT) B-OR (S8 S12))) 
+     NIL) 
+ (ENCODE-32 
+     (S0 S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 S12 S13 S14 S15 S16 S17 S18 
+         S19 S20 S21 S22 S23 S24 S25 S26 S27 S28 S29 S30 S31) 
+     (W-4 W-9 W-14 W-19 W-24) 
+     ((G-23 (W-23) B-NOR3 (S28 S29 S30)) (G-22 (W-22) B-NOR (S24 S25)) 
+      (G-21 (W-21) B-NOR4 (S20 S21 S22 S23)) 
+      (G-20 (W-20) B-NOR4 (S16 S17 S18 S19)) 
+      (G-24 (W-24) B-NAND4 (W-20 W-21 W-22 W-23)) 
+      (G-16 (W-16) B-NOR4 (S12 S13 S14 S15)) 
+      (G-15 (W-15) B-NOR4 (S8 S9 S10 S11)) 
+      (G-19 (W-19) B-NAND4 (W-15 W-16 W-22 W-23)) 
+      (G-10 (W-10) B-NOR4 (S4 S5 S6 S7)) 
+      (G-14 (W-14) B-NAND4 (W-10 W-16 W-21 W-23)) 
+      (G-8 (W-8) B-NOT (S30)) (G-7 (W-7) B-NOR4 (S18 S19 S22 S23)) 
+      (G-6 (W-6) B-NOR4 (S10 S11 S14 S15)) 
+      (G-5 (W-5) B-NOR4 (S2 S3 S6 S7)) 
+      (G-9 (W-9) B-NAND4 (W-5 W-6 W-7 W-8)) (G-3 (W-3) B-NOR (S25 S29)) 
+      (G-2 (W-2) B-NOR4 (S17 S19 S21 S23)) 
+      (G-1 (W-1) B-NOR4 (S9 S11 S13 S15)) 
+      (G-0 (W-0) B-NOR4 (S1 S3 S5 S7)) 
+      (G-4 (W-4) B-NAND4 (W-0 W-1 W-2 W-3))) 
+     NIL) 
+ (FANOUT-4 (A) (Z0 Z1 Z2 Z3) 
+     ((AA (AA) B-BUF (A)) (G0 (Z0) ID (AA)) (G1 (Z1) ID (AA)) 
+      (G2 (Z2) ID (AA)) (G3 (Z3) ID (AA))) 
+     NIL) 
+ (V-INC4 (A0 A1 A2 A3) (W-10 W-3 W-8 W-14) 
+         ((G-12 (W-12) B-NOT (A2)) (G-11 (W-11) B-NOT (A1)) 
+          (G-10 (W-10) B-NOT (A0)) 
+          (G-13 (W-13) B-NOR3 (W-10 W-11 W-12)) (G-9 (W-9) B-NOT (A3)) 
+          (G-14 (W-14) B-EQUV (W-9 W-13)) (G-7 (W-7) B-NOR (W-10 W-11)) 
+          (G-8 (W-8) B-EQUV (W-12 W-7)) (G-3 (W-3) B-XOR (W-11 W-10))) 
+         NIL) 
+ (V-IF-F-4 (C A0 A1 A2 A3) (Z0 Z1 Z2 Z3) 
+     ((CB (C-) B-NOT (C)) (G0 (Z0) B-AND (C- A0)) 
+      (G1 (Z1) B-AND (C- A1)) (G2 (Z2) B-AND (C- A2)) 
+      (G3 (Z3) B-AND (C- A3))) 
+     NIL) 
+ (MPG (ZERO SWAP OP0 OP1 OP2 OP3) (GBN GAN GA PB PAN PA MODE) 
+      ((M (MODE) DECODE-MODE (OP0 OP1 OP2 OP3)) 
+       (P (PB PAN PA) DECODE-PROP (ZERO SWAP OP0 OP1 OP2 OP3)) 
+       (G (GBN GAN GA) DECODE-GEN (ZERO SWAP OP0 OP1 OP2 OP3))) 
+      NIL) 
+ (DECODE-MODE (OP0 OP1 OP2 OP3) (W-1) 
+     ((G-0 (W-0) B-NOR3 (OP0 OP1 OP2)) (G-1 (W-1) B-NOR (W-0 OP3))) 
+     NIL) 
+ (DECODE-PROP (ZERO SWAP OP0 OP1 OP2 OP3) (W-16 W-24 W-48) 
+     ((G-47 (W-47) B-NOT (ZERO)) (G-44 (W-44) B-NOT (OP3)) 
+      (G-42 (W-42) B-NOT (OP2)) (G-43 (W-43) B-NOT (W-42)) 
+      (G-41 (W-41) B-NOT (OP1)) (G-39 (W-39) B-NOT (OP0)) 
+      (G-40 (W-40) B-NOT (W-39)) 
+      (G-45 (W-45) B-NAND4 (W-40 W-41 W-43 W-44)) 
+      (G-34 (W-34) B-NOT (SWAP)) (G-35 (W-35) B-NOT (W-34)) 
+      (G-37 (W-37) B-NAND (W-35 W-44)) (G-38 (W-38) B-NAND (W-42 W-37)) 
+      (G-30 (W-30) B-NOT (W-41)) (G-31 (W-31) B-EQUV (W-40 W-30)) 
+      (G-26 (W-26) B-NOT (W-44)) (G-32 (W-32) B-NAND (W-26 W-31)) 
+      (G-46 (W-46) B-NAND3 (W-32 W-38 W-45)) 
+      (G-48 (W-48) B-AND (W-46 W-47)) (G-22 (W-22) B-NOR (W-40 W-41)) 
+      (G-23 (W-23) B-NOR (W-44 W-22)) (G-24 (W-24) B-NOR (W-42 W-23)) 
+      (G-15 (W-15) B-NAND3 (W-42 W-44 W-35)) 
+      (G-10 (W-10) B-NAND (W-30 W-44)) 
+      (G-6 (W-6) B-NAND4 (W-39 W-41 W-43 W-26)) 
+      (G-16 (W-16) B-NAND3 (W-6 W-10 W-15))) 
+     NIL) 
+ (DECODE-GEN (ZERO SWAP OP0 OP1 OP2 OP3) (W-22 W-41 W-66) 
+     ((G-64 (W-64) B-NOT (ZERO)) (G-65 (W-65) B-NOT (W-64)) 
+      (G-61 (W-61) B-NOT (OP3)) (G-60 (W-60) B-NOT (OP2)) 
+      (G-58 (W-58) B-NOT (OP1)) (G-59 (W-59) B-NOT (W-58)) 
+      (G-62 (W-62) B-NAND3 (W-59 W-60 W-61)) (G-56 (W-56) B-NOT (W-60)) 
+      (G-52 (W-52) B-NOT (OP0)) (G-53 (W-53) B-NOT (W-52)) 
+      (G-57 (W-57) B-NAND3 (W-53 W-58 W-56)) 
+      (G-50 (W-50) B-XOR (W-59 W-56)) (G-45 (W-45) B-NOT (W-61)) 
+      (G-51 (W-51) B-NAND3 (W-53 W-45 W-50)) 
+      (G-63 (W-63) B-NAND3 (W-51 W-57 W-62)) 
+      (G-66 (W-66) B-NOR (W-63 W-65)) (G-35 (W-35) B-NOT (SWAP)) 
+      (G-36 (W-36) B-NAND (W-58 W-35)) 
+      (G-37 (W-37) B-NAND3 (W-56 W-61 W-36)) 
+      (G-30 (W-30) B-NAND4 (W-53 W-59 W-60 W-45)) 
+      (G-38 (W-38) B-NAND (W-30 W-37)) (G-41 (W-41) B-NOR (W-38 W-65)) 
+      (G-22 (W-22) B-NAND3 (W-51 W-37 W-62))) 
+     NIL) 
+ (TTL-INPUT-PADS_4 (PI IN_[0..3]) (PO_3 B-OUT_[0..3]) 
+     ((G_0 (OUT_0 PO_0) TTL-INPUT (IN_0 PI)) 
+      (B_0 (B-OUT_0) B-BUF (OUT_0)) 
+      (G_1 (OUT_1 PO_1) TTL-INPUT (IN_1 PO_0)) 
+      (B_1 (B-OUT_1) B-BUF (OUT_1)) 
+      (G_2 (OUT_2 PO_2) TTL-INPUT (IN_2 PO_1)) 
+      (B_2 (B-OUT_2) B-BUF (OUT_2)) 
+      (G_3 (OUT_3 PO_3) TTL-INPUT (IN_3 PO_2)) 
+      (B_3 (B-OUT_3) B-BUF (OUT_3))) 
+     NIL) 
+ (TTL-TRI-OUTPUT-PADS_32 (ENABLE IN_[0..31]) (OUT_[0..31]) 
+     ((ENABLE-BUFFER (ENABLE-BUF) B-BUF-PWR (ENABLE)) 
+      (G_0 (OUT_0) TTL-TRI-OUTPUT (IN_0 ENABLE-BUF)) 
+      (G_1 (OUT_1) TTL-TRI-OUTPUT (IN_1 ENABLE-BUF)) 
+      (G_2 (OUT_2) TTL-TRI-OUTPUT (IN_2 ENABLE-BUF)) 
+      (G_3 (OUT_3) TTL-TRI-OUTPUT (IN_3 ENABLE-BUF)) 
+      (G_4 (OUT_4) TTL-TRI-OUTPUT (IN_4 ENABLE-BUF)) 
+      (G_5 (OUT_5) TTL-TRI-OUTPUT (IN_5 ENABLE-BUF)) 
+      (G_6 (OUT_6) TTL-TRI-OUTPUT (IN_6 ENABLE-BUF)) 
+      (G_7 (OUT_7) TTL-TRI-OUTPUT (IN_7 ENABLE-BUF)) 
+      (G_8 (OUT_8) TTL-TRI-OUTPUT (IN_8 ENABLE-BUF)) 
+      (G_9 (OUT_9) TTL-TRI-OUTPUT (IN_9 ENABLE-BUF)) 
+      (G_10 (OUT_10) TTL-TRI-OUTPUT (IN_10 ENABLE-BUF)) 
+      (G_11 (OUT_11) TTL-TRI-OUTPUT (IN_11 ENABLE-BUF)) 
+      (G_12 (OUT_12) TTL-TRI-OUTPUT (IN_12 ENABLE-BUF)) 
+      (G_13 (OUT_13) TTL-TRI-OUTPUT (IN_13 ENABLE-BUF)) 
+      (G_14 (OUT_14) TTL-TRI-OUTPUT (IN_14 ENABLE-BUF)) 
+      (G_15 (OUT_15) TTL-TRI-OUTPUT (IN_15 ENABLE-BUF)) 
+      (G_16 (OUT_16) TTL-TRI-OUTPUT (IN_16 ENABLE-BUF)) 
+      (G_17 (OUT_17) TTL-TRI-OUTPUT (IN_17 ENABLE-BUF)) 
+      (G_18 (OUT_18) TTL-TRI-OUTPUT (IN_18 ENABLE-BUF)) 
+      (G_19 (OUT_19) TTL-TRI-OUTPUT (IN_19 ENABLE-BUF)) 
+      (G_20 (OUT_20) TTL-TRI-OUTPUT (IN_20 ENABLE-BUF)) 
+      (G_21 (OUT_21) TTL-TRI-OUTPUT (IN_21 ENABLE-BUF)) 
+      (G_22 (OUT_22) TTL-TRI-OUTPUT (IN_22 ENABLE-BUF)) 
+      (G_23 (OUT_23) TTL-TRI-OUTPUT (IN_23 ENABLE-BUF)) 
+      (G_24 (OUT_24) TTL-TRI-OUTPUT (IN_24 ENABLE-BUF)) 
+      (G_25 (OUT_25) TTL-TRI-OUTPUT (IN_25 ENABLE-BUF)) 
+      (G_26 (OUT_26) TTL-TRI-OUTPUT (IN_26 ENABLE-BUF)) 
+      (G_27 (OUT_27) TTL-TRI-OUTPUT (IN_27 ENABLE-BUF)) 
+      (G_28 (OUT_28) TTL-TRI-OUTPUT (IN_28 ENABLE-BUF)) 
+      (G_29 (OUT_29) TTL-TRI-OUTPUT (IN_29 ENABLE-BUF)) 
+      (G_30 (OUT_30) TTL-TRI-OUTPUT (IN_30 ENABLE-BUF)) 
+      (G_31 (OUT_31) TTL-TRI-OUTPUT (IN_31 ENABLE-BUF))) 
+     NIL) 
+ (B-BUF-PWR (IN) (OUT) 
+     ((G0 (OUT-) B-NOT (IN)) (G1 (OUT) B-NOT-B4IP (OUT-))) NIL) 
+ (TTL-OUTPUT-PADS_4 (IN_[0..3]) (OUT_[0..3]) 
+     ((B_0 (B-IN_0) B-BUF (IN_0)) (G_0 (OUT_0) TTL-OUTPUT (B-IN_0)) 
+      (B_1 (B-IN_1) B-BUF (IN_1)) (G_1 (OUT_1) TTL-OUTPUT (B-IN_1)) 
+      (B_2 (B-IN_2) B-BUF (IN_2)) (G_2 (OUT_2) TTL-OUTPUT (B-IN_2)) 
+      (B_3 (B-IN_3) B-BUF (IN_3)) (G_3 (OUT_3) TTL-OUTPUT (B-IN_3))) 
+     NIL) 
+ (TTL-OUTPUT-PADS_5 (IN_[0..4]) (OUT_[0..4]) 
+     ((B_0 (B-IN_0) B-BUF (IN_0)) (G_0 (OUT_0) TTL-OUTPUT (B-IN_0)) 
+      (B_1 (B-IN_1) B-BUF (IN_1)) (G_1 (OUT_1) TTL-OUTPUT (B-IN_1)) 
+      (B_2 (B-IN_2) B-BUF (IN_2)) (G_2 (OUT_2) TTL-OUTPUT (B-IN_2)) 
+      (B_3 (B-IN_3) B-BUF (IN_3)) (G_3 (OUT_3) TTL-OUTPUT (B-IN_3)) 
+      (B_4 (B-IN_4) B-BUF (IN_4)) (G_4 (OUT_4) TTL-OUTPUT (B-IN_4))) 
+     NIL) 
+ (B-BUF (IN) (OUT) ((G0 (OUT- OUT) B-NBUF (IN))) NIL)) 
+
+))
+
+
+;;;    The function COMPRESS-NETLIST runs through a netlist
+;;;    and replaces indexed name sequences A_n ... A_m with A_[n..m].  The
+;;;    function assumes well-formed netlists that have had the INDEX shells
+;;;    removed with LISP-NETLIST.  Again, the assumption is that this was a
+;;;    well formed Nqthm netlist brought out into the Common Lisp world to be
+;;;    compressed and displayed.
+
+(defun compress-netlist (netlist)
+  (iterate for module in netlist collect
+    (list (first module)                ;Name
+          (compress-list (second module) nil nil nil) ;Inputs
+          (compress-list (third module) nil nil nil) ;Outputs
+          (compress-occurrences (fourth module)) ;Occurrences
+          (compress-list (fifth module) nil nil nil)))) ;State
+
+(defun compress-occurrences (occurrences)
+  (iterate for occurrence in occurrences collect
+    (list (first occurrence)            ;Name
+          (compress-list (second occurrence) nil nil nil) ;Outputs
+          (third occurrence)            ;Module
+          (compress-list (fourth occurrence) nil nil nil)))) ;Inputs
+
+(defun compress-list (list prefix start end)
+  (if (consp list)
+      (if (indexed (car list))
+          (if prefix
+              (if (equal (prefix (car list)) prefix)
+                  (if (equal (index (car list)) (1+ end))
+                      (compress-list (cdr list) prefix start (1+ end))
+                    (cons (index-name prefix start end)
+                          (compress-list (cdr list)
+                                         (prefix (car list))
+                                         (index (car list))
+                                         (index (car list)))))
+                (cons (index-name prefix start end)
+                      (compress-list (cdr list)
+                                     (prefix (car list))
+                                     (index (car list))
+                                     (index (car list)))))
+            (compress-list (cdr list)
+                           (prefix (car list))
+                           (index (car list))
+                           (index (car list))))
+        (if prefix
+            (list* (index-name prefix start end)
+                   (car list)
+                   (compress-list (cdr list) nil nil nil))
+          (cons (car list)
+                (compress-list (cdr list) nil nil nil))))
+    (if prefix
+        (list (index-name prefix start end))
+      list)))
+
+(defun indexed (atom)
+  (position #\_ (string atom)))
+
+(defun index (atom)
+  (read-from-string (string atom) t nil :start (1+ (indexed atom))))
+
+(defun prefix (atom)
+  (subseq (string atom) 0 (indexed atom)))
+
+(defun index-name (prefix start end)
+  (if (equal start end)
+      (unstring prefix "_" start)
+    (unstring prefix "_[" start ".." end "]")))
+
+(defun unstring (&rest args)
+  (intern (apply #'concatenate 'string
+                 (mapcar #'(lambda (x)
+                             (if (numberp x)
+                                 (format nil "~d" x)
+                               (string x)))
+                         args))))
+
+;;;    The function UNCOMPRESS-NETLIST uncompresses netlists have been
+;;;    previously compressed by COMPRESS-NETLIST.
+
+(defun uncompress-netlist (netlist)
+  (iterate for module in netlist collect
+    (list (first module)                ;Name
+          (uncompress-list (second module)) ;Inputs
+          (uncompress-list (third module)) ;Outputs
+          (uncompress-occurrences (fourth module)) ;Occurrences
+          (uncompress-list (fifth module))))) ;State
+
+(defun uncompress-occurrences (occurrences)
+  (iterate for occurrence in occurrences collect
+    (list (first occurrence)            ;Name
+          (uncompress-list (second occurrence)) ;Outputs
+          (third occurrence)            ;Module
+          (uncompress-list (fourth occurrence))))) ;Inputs
+
+(defun uncompress-list (list)
+  (if (consp list)
+      (if (compressed (car list))
+          (append (uncompress (car list)) (uncompress-list (cdr list)))
+        (cons (car list) (uncompress-list (cdr list))))
+    list))
+
+(defun compressed (atom)
+  (position #\[ (string atom)))
+
+(defun uncompress (atom)
+  (let ((string (substitute-if #\
+                               #'(lambda (x) (find x "_[..]"))
+                               (string atom))))
+    (multiple-value-bind (name pos)
+      (read-from-string string)
+      (multiple-value-bind (start pos)
+        (read-from-string string t nil :start pos)
+        (let ((end (read-from-string string t nil :start pos)))
+          (iterate for i from start to end collect
+            (unstring name "_" i)))))))
+
+
+;;;  Closes #. above.
+
+)))

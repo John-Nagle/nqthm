@@ -1,0 +1,572 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+;; Matt Kaufmann
+
+;; Koenig Tree Lemma events supporting ``An Extension of the
+;; Boyer-Moore Theorem Prover to Support First-Order Quantification,''
+;; to appear in JAR (1992?).  The DEFN-SK events have been replaced by
+;; DCLs and ADD-AXIOMs, as shown.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Koenig's Lemma Events List
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; All this initial stuff is just to get the CONSTRAIN below accepted.
+
+(boot-strap nqthm)
+
+(defn ones (n)
+  ;; a list of n ones
+  (if (zerop n)
+      nil
+    (cons 1 (ones (sub1 n)))))
+
+(defn all-ones (s)
+  ;; all are ones
+  (if (listp s)
+      (and (equal (car s) 1)
+           (all-ones (cdr s)))
+    (equal s nil)))
+
+(defn length (s)
+  (if (listp s)
+      (add1 (length (cdr s)))
+    0))
+
+(defn subseq (s1 s2)
+  ;; s1 is a terminal subsequence (nthcdr) of s2
+  (if (equal s1 s2)
+      t
+    (if (nlistp s2)
+        f
+      (subseq s1 (cdr s2)))))
+
+(prove-lemma subseq-all-ones (rewrite)
+  (implies (and (all-ones s1)
+                (subseq s2 s1))
+           (all-ones s2)))
+
+(defn plistp (s)
+  (if (listp s)
+      (plistp (cdr s))
+    (equal s nil)))
+
+(prove-lemma plistp-all-ones (rewrite)
+  (implies (all-ones s)
+           (plistp s)))
+
+(prove-lemma all-ones-ones (rewrite)
+  (all-ones (ones n)))
+
+(prove-lemma ones-is-injective (rewrite)
+  (implies (and (numberp i) (numberp j) (not (equal i j)))
+           (not (equal (ones i) (ones j))))
+  ((induct (lessp i j))))
+
+(constrain koenig-intro (rewrite)
+  ;; Introduce the predicate node-p for the nodes of (i.e. finite paths
+  ;; through) the tree.  That is, node-p recognizes the legal paths.
+  (and
+   ;; nil is the root 
+   (node-p nil)
+   ;; node-p is a predicate
+   (or (truep (node-p s))
+       (falsep (node-p s)))
+   ;; the successors of s are determined by succard (Successors Cardinality)
+   (implies (node-p s)
+            (equal (node-p (cons n s))
+                   ;; n is in {1, ..., (succard s)}
+                   (and (lessp 0 n)
+                        (not (lessp (succard s) n)))))
+   (implies (and (node-p s1)
+                 (subseq s s1))
+            (node-p s))
+   ;; we stipulate that the tree is infinite by saying that s-n is a one-one
+   ;; enumeration of nodes
+   (node-p (s-n n))
+   (implies (and (numberp i) (numberp j) (not (equal i j)))
+            (not (equal (s-n i) (s-n j))))
+   ;; nodes are proper
+   (implies (not (plistp s))
+            (not (node-p s))))
+  ((node-p all-ones)
+   (succard (lambda (s) 1))
+   (s-n ones))
+  ((disable subseq)))
+
+;; We want to define a function s-height which returns an element of a given height.
+;; The next several events culminate in the following lemma:
+
+;; (prove-lemma length-s-height (rewrite)
+;;   (equal (length (s-height n)) (fix n)))
+
+(defn succ-aux (s n)
+  (if (zerop n)
+      nil
+    (cons (cons n s) (succ-aux s (sub1 n)))))
+
+(defn successors (s)
+  (succ-aux s (succard s)))
+
+(defn successors-list (ss)
+  ;; given a list ss of nodes, returns a list of all successor
+  ;; to all elements in ss
+  (if (listp ss)
+      (append (successors (car ss))
+              (successors-list (cdr ss)))
+    nil))
+
+(defn level (n)
+  (if (zerop n)
+      (list nil)
+    (successors-list (level (sub1 n)))))
+
+(defn init-tree (n)
+  ;; level <= n
+  (if (zerop n)
+      (list nil)
+    (append (level n)
+            (init-tree (sub1 n)))))
+
+(defn remove1 (a x)
+  ;; remove the first occurrence of a from the list x
+  (if (listp x)
+      (if (equal a (car x))
+          (cdr x)
+        (cons (car x)
+              (remove1 a (cdr x))))
+    x))
+
+(prove-lemma length-remove1 (rewrite)
+  (implies (member a x)
+           (lessp (length (remove1 a x))
+                  (length x))))
+
+(defn first-non-member-index (i x)
+  ;; returns index some (s-n j) (j >= i) not in the set x
+  (if (member (s-n i) x)
+      (first-non-member-index (add1 i) (remove1 (s-n i) x))
+    i)
+  ((lessp (length x))))
+
+(defn nthcdr (n s)
+  (if (zerop n)
+      s
+    (nthcdr (sub1 n) (cdr s))))
+
+(defn s-height (n)
+  ;; should return a node of height n
+    (nthcdr (difference (length (s-n (first-non-member-index 0 (init-tree n)))) n)
+            (s-n (first-non-member-index 0 (init-tree n)))))
+
+(prove-lemma nthcdr-subseq (rewrite)
+  (implies (not (lessp (length s) n))
+           (subseq (nthcdr n s) s)))
+
+(prove-lemma node-p-nthcdr (rewrite)
+  (implies (and (node-p s)
+                (not (lessp (length s) n)))
+           (node-p (nthcdr n s))))
+
+(prove-lemma lessp-difference-1 (rewrite)
+  (equal (lessp x (difference x n)) f))
+
+(prove-lemma node-p-s-height (rewrite)
+  (node-p (s-height n)))
+
+(prove-lemma length-nthcdr (rewrite)
+  (equal (length (nthcdr n s))
+         (difference (length s) n)))
+
+(prove-lemma first-non-member-index-lessp (rewrite)
+  (not (lessp (first-non-member-index i x) i)))
+
+(prove-lemma s-n-first-non-member-index-not-equal (rewrite)
+  (implies (numberp i)
+           (not (equal (s-n (first-non-member-index (add1 i)
+                                                    (remove1 (s-n i) x)))
+                       (s-n i)))))
+
+(prove-lemma member-remove1 (rewrite)
+  (implies (not (equal a b))
+           (equal (member a (remove1 b x))
+                  (member a x))))
+
+(prove-lemma s-n-first-non-member-index (rewrite)
+  (implies (numberp i)
+           (not (member (s-n (first-non-member-index i x))
+                        x))))
+
+(prove-lemma member-append (rewrite)
+  (equal (member a (append x y))
+         (or (member a x) (member a y))))
+
+(prove-lemma member-cons-succ-aux (rewrite)
+             (equal (member (cons z v) (succ-aux v n))
+                    (and (lessp 0 z) (not (lessp n z))))
+             ((induct (succ-aux v n))))
+
+(prove-lemma node-p-cons-lemma ()
+  (implies (not (node-p s))
+           (not (node-p (cons n s)))))
+
+(prove-lemma node-p-cons (rewrite)
+  (equal (node-p (cons n s))
+         (and (node-p s)
+              (lessp 0 n)
+              (not (lessp (succard s) n))))
+  ((use (node-p-cons-lemma))))
+
+(defn all-length-n (ss n)
+  (if (listp ss)
+      (and (equal (length (car ss)) n)
+           (all-length-n (cdr ss) n))
+    t))
+
+(prove-lemma all-length-n-append (rewrite)
+  (equal (all-length-n (append ss1 ss2) n)
+         (and (all-length-n ss1 n)
+              (all-length-n ss2 n))))
+
+(prove-lemma all-length-n-succ-aux (rewrite)
+  (implies (equal (length s) n)
+           (all-length-n (succ-aux s k) (add1 n))))
+
+(prove-lemma all-length-n-successors-list (rewrite)
+  (implies (all-length-n ss n)
+           (all-length-n (successors-list ss) (add1 n))))
+
+(prove-lemma length-0 (rewrite)
+  (equal (equal (length s) 0)
+         (nlistp s)))
+
+(defn member-level-induction (s n)
+  (if (zerop n)
+      t
+    (member-level-induction (cdr s) (sub1 n))))
+
+(prove-lemma succ-aux-listp (rewrite)
+  (implies (not (listp s))
+           (not (member s (succ-aux z n)))))
+
+(prove-lemma successors-list-listp (rewrite)
+  (implies (not (listp s))
+           (not (member s (successors-list ss)))))
+
+(prove-lemma member-succ-aux nil
+  (implies (member s (succ-aux x n))
+           (equal (cdr s) x)))
+
+(prove-lemma member-successors-list-successors-list-witness (rewrite)
+  (equal (member s (successors-list ss))
+         (and (member (cdr s) ss)
+              (member s (successors (cdr s)))))
+  ((use (member-succ-aux (x (car ss)) (n (succard (car ss)))))
+   (induct (successors-list ss))))
+
+(prove-lemma member-level (rewrite)
+  (implies (and (numberp n)
+                (node-p s))
+           (equal (member s (level n))
+                  (equal (length s) n)))
+  ((induct (member-level-induction s n))))
+
+(prove-lemma member-init-tree (rewrite)
+  (implies (node-p s)
+           (equal (member s (init-tree n))
+                  (not (lessp n (length s))))))
+
+(prove-lemma length-s-non-member-index (rewrite)
+ (implies (numberp i)
+          (lessp n
+                 (length (s-n (first-non-member-index i
+                                                      (init-tree n))))))
+ ((use (s-n-first-non-member-index (x (init-tree n))))
+  (disable s-n-first-non-member-index)))
+
+(prove-lemma length-s-height (rewrite)
+  (equal (length (s-height n)) (fix n)))
+
+(disable s-height)
+
+;; End of s-height excursion.
+
+;; Our goal:
+
+;(prove-lemma konig-tree-lemma nil
+;  (and (node-p (k n))
+;       (implies (not (lessp j i))
+;                (subseq (k i) (k j)))
+;       (equal (length (k n)) (fix n))))
+
+#| The original DEFN-SK event here was processed as follows:
+
+>(defn-sk inf (s)
+  ;; says that s has arbitrarily high successors
+  (forall big-h (exists big-s
+    (and (subseq s big-s)
+         (node-p big-s)
+         (lessp big-h (length big-s))))))
+
+
+Adding the Skolem axiom:
+      (AND (IMPLIES (AND (SUBSEQ S BIG-S)
+                         (NODE-P BIG-S)
+                         (LESSP (BIG-H S) (LENGTH BIG-S)))
+                    (INF S))
+           (IMPLIES (NOT (AND (SUBSEQ S (BIG-S BIG-H S))
+                              (NODE-P (BIG-S BIG-H S))
+                              (LESSP BIG-H
+                                     (LENGTH (BIG-S BIG-H S)))))
+                    (NOT (INF S)))).
+
+
+     As this is a DEFN-SK we can conclude that:
+      (OR (TRUEP (INF S)) (FALSEP (INF S)))
+is a theorem.
+
+
+[ 0.2 0.0 0.0 ]
+INF
+
+>
+|#
+
+(dcl inf (s))
+(dcl big-h (s))
+(dcl big-s (big-h s))
+
+(add-axiom inf-intro (rewrite)
+  (AND (IMPLIES (AND (SUBSEQ S BIG-S)
+                     (NODE-P BIG-S)
+                     (LESSP (BIG-H S) (LENGTH BIG-S)))
+                (INF S))
+       (IMPLIES (NOT (AND (SUBSEQ S (BIG-S BIG-H S))
+                          (NODE-P (BIG-S BIG-H S))
+                          (LESSP BIG-H
+                                 (LENGTH (BIG-S BIG-H S)))))
+                (NOT (INF S)))))
+
+(add-axiom inf-boolean (rewrite)
+  (OR (TRUEP (INF S)) (FALSEP (INF S))))
+
+;; The following three events were generated mechanically.  They are
+;; useful especially for applying the Skolem axioms for INF inside the
+;; proof-checker, via the macro command SK*.
+
+(DISABLE INF-intro)
+
+(PROVE-LEMMA INF-SUFF
+             (REWRITE)
+             (IMPLIES (AND (SUBSEQ S BIG-S)
+                           (NODE-P BIG-S)
+                           (LESSP (BIG-H S) (LENGTH BIG-S)))
+                      (INF S))
+             ((USE (INF-intro))))
+
+(PROVE-LEMMA INF-NECC
+             (REWRITE)
+             (IMPLIES (NOT (AND (SUBSEQ S (BIG-S BIG-H S))
+                                (NODE-P (BIG-S BIG-H S))
+                                (LESSP BIG-H
+                                       (LENGTH (BIG-S BIG-H S)))))
+                      (NOT (INF S)))
+             ((USE (INF-intro))))
+
+(defn next (s max)
+  ;; picks a successor of s that has infinitely many successors,
+  ;; if there is one
+  (if (zerop max)
+      (cons 0 s)                        ;not a legal node --
+                                        ;was 0, but this is easier for length calculations
+    (if (inf (cons max s))
+        (cons max s)
+      (next s (sub1 max)))))
+
+;; We want to show that NEXT gives us a successor with infinitely many
+;; successors.
+
+; INF-IMPLIES-INF-NEXT:
+;(implies (and (node-p s)
+;             (inf s))
+;        (inf (next s (succard s))))
+
+;; Note that if some successor of s has infinitely many successors, so
+;; does (NEXT S (SUCCARD S)).  This is the lemma
+;; INF-CONS-IMPLIES-INF-NEXT below.  But first note:
+
+(prove-lemma inf-implies-node-p (rewrite)
+  ;; Done initially with proof-checker.
+  (implies (inf s)
+           (node-p s))
+  ((use (inf-necc))))
+
+(prove-lemma not-inf-zerop (rewrite)
+  (implies (zerop i)
+           (not (inf (cons i s))))
+  ((use (inf-implies-node-p (s (cons i s))))
+   (disable inf-implies-node-p)))
+
+(prove-lemma inf-cons-implies-inf-next (rewrite)
+  (implies (and (node-p s)
+                (inf (cons i s))
+                (not (lessp n i)))
+           (inf (next s n)))
+  ((induct (next s n))))
+
+;; Our goal now is to apply this lemma by proving that
+;; (inf (cons i s)) for some i <= (succard s).
+
+(defn all-big-h (s n)
+  ;; at least as big as (big-h (cons s i)) for all i <= n and is bigger than length of s
+  (if (zerop n)
+      (add1 (length s))
+    (plus (big-h (cons n s))
+          (all-big-h s (sub1 n)))))
+
+(prove-lemma all-big-h-length (rewrite)
+  (lessp (length s)
+         (all-big-h s n)))
+
+(prove-lemma all-big-h-lessp (rewrite)
+             (implies (and (lessp 0 i)
+                           (not (lessp n i)))
+                      (equal (lessp (big-h (cons i s))
+                                    (all-big-h s n))
+                             t))
+             ((induct (all-big-h s n))))
+
+;; Here's a function which tells us which way s first branches on its
+;; way to extending to s1.
+
+(defn first-branch (s s1)
+  ;; assumes s is a proper subsequence of s1
+  (if (equal s (cdr s1))
+      (car s1)
+    (if (nlistp s1)
+        0
+      (first-branch s (cdr s1)))))
+
+(prove-lemma subseq-cons-first-branch (rewrite)
+  (implies (and (subseq s x)
+                (not (equal s x)))
+           (subseq (cons (first-branch s x) s)
+                   x)))
+
+(prove-lemma length-non-equal (rewrite)
+  (implies (lessp (length x) (length y))
+           (equal (equal x y) f)))
+
+(prove-lemma first-branch-ok-for-succard (rewrite)
+            (implies (and (subseq s big-s)
+                          (node-p big-s)
+                          (not (equal s big-s)))
+                     (and (numberp (first-branch s big-s))
+                          (lessp 0 (first-branch s big-s))
+                          (not (lessp (succard s)
+                                      (first-branch s big-s))))))
+
+(prove-lemma all-big-h-lessp-linear
+             (rewrite)
+             (implies (and (lessp 0 i) (not (lessp (succard s) i)))
+                      (lessp (big-h (cons i s))
+                             (all-big-h s (succard s)))))
+
+(disable all-big-h-lessp)
+
+(prove-lemma inf-implies-inf-next (rewrite)
+  (implies (and (node-p s) (inf s))
+           (inf (next s (succard s))))
+  ((use (inf-suff (big-s (big-s (all-big-h s (succard s)) s))
+                  (s (cons (first-branch s
+                                         (big-s (all-big-h s (succard s)) s))
+                           s)))
+        (inf-necc (big-h (all-big-h s (succard s))) (s s))
+        (all-big-h-lessp-linear
+         (i (first-branch s
+                          (big-s (all-big-h s (succard s)) s)))))
+   (disable all-big-h-lessp-linear))) 
+
+(defn k (n)
+  ;; picks out the path
+  (if (zerop n)
+      nil
+    (next (k (sub1 n)) (succard (k (sub1 n))))))
+
+(prove-lemma subseq-nil (rewrite)
+  (equal (subseq nil x)
+         (plistp x))
+  ((enable subseq)))
+
+(prove-lemma node-p-implies-plistp (rewrite)
+  ;; contrapositive of part of KOENIG-INTRO; needed for proof of INF-NIL
+  (implies (node-p s)
+           (plistp s)))
+
+(prove-lemma inf-nil
+          ;; done with help of proof-checker
+          (rewrite)
+          (inf nil)
+          ((use (inf-suff
+                 (big-s (s-height (add1 (big-h nil))))
+                 (s nil)))))
+
+(disable node-p-implies-plistp)
+
+(prove-lemma konig-tree-lemma-1 (rewrite)
+  (inf (k n)))
+
+(prove-lemma length-next (rewrite)
+  (implies (inf x)
+           (equal (length (next s n))
+                  (add1 (length s)))))
+
+(prove-lemma konig-tree-lemma-2 (rewrite)
+  (equal (length (k n)) (fix n)))
+
+(prove-lemma subseq-next (rewrite)
+  (implies (subseq s1 s2)
+           (subseq s1 (next s2 n))))
+
+(prove-lemma konig-tree-lemma-3 (rewrite)
+  (implies (not (lessp j i))
+           (subseq (k i) (k j)))
+  ((induct (k j))))
+
+(prove-lemma konig-tree-lemma nil
+  (and (node-p (k n))
+       (implies (not (lessp j i))
+                (subseq (k i) (k j)))
+       (equal (length (k n)) (fix n))))
+
+;; or, if one prefers:
+
+(prove-lemma konig-tree-lemma-again nil
+  (implies (numberp n)
+           (and (node-p (k n))
+                (implies (not (lessp j i))
+                         (subseq (k i) (k j)))
+                (equal (length (k n)) n))))
+

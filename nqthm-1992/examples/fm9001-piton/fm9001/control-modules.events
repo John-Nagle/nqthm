@@ -1,0 +1,779 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    CONTROL-MODULES.EVENTS
+;;;
+;;;    Small modules used to define the control logic.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;     UNARY-OP-CODE-P
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$unary-op-code-p (op)
+  (let ((op0 (car op))
+        (op1 (cadr op))
+        (op2 (caddr op))
+        (op3 (cadddr op)))
+    (let ((op0- (f-not op0))
+          (op1- (f-not op1))
+          (op2- (f-not op2))
+          (op3- (f-not op3)))
+      (let ((s0 (f-nand op3- op1-))
+            (s1 (f-nand op2- op1-))
+            (s2 (f-nand3 op3 op1 op0-))
+            (s3 (f-nand3 op3 op2 op1)))
+        (f-nand4 s0 s1 s2 s3)))))
+
+(disable f$unary-op-code-p)
+
+(prove-lemma f$unary-op-code-p=unary-op-code-p (rewrite)
+  (implies
+   (and
+    (bvp op) (equal (length op) 4))
+   (equal (f$unary-op-code-p op)
+          (unary-op-code-p op)))
+  ;;Hint
+  ((enable f$unary-op-code-p unary-op-code-p bvp-length bvp equal-length-add1)
+   (disable-theory f-gates)))
+
+(defn unary-op-code-p* ()
+  '(unary-op-code-p (op0 op1 op2 op3) (z)
+                     ((g0 (op0-) b-not   (op0))
+                      (g1 (op1-) b-not   (op1))
+                      (g2 (op2-) b-not   (op2))
+                      (g3 (op3-) b-not   (op3))
+                      (g4 (s0)   b-nand  (op3- op1-))
+                      (g5 (s1)   b-nand  (op2- op1-))
+                      (g6 (s2)   b-nand3 (op3 op1 op0-))
+                      (g7 (s3)   b-nand3 (op3 op2 op1))
+                      (g8 (z)    b-nand4 (s0 s1 s2 s3)))
+                    nil))
+
+
+(module-predicate unary-op-code-p*)
+
+(module-netlist unary-op-code-p*)
+
+(prove-lemma unary-op-code-p$value (rewrite)
+  (implies
+   (unary-op-code-p& netlist)
+   (equal (dual-eval 0 'unary-op-code-p op-code state netlist)
+          (list (f$unary-op-code-p op-code))))
+  ;;Hint
+  ((enable unary-op-code-p& f$unary-op-code-p
+           b-not$value
+           b-nand$value b-nand3$value b-nand4$value list-elim-4)
+   (disable-theory f-gates)))
+
+(disable unary-op-code-p$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    DECODE-REG-MODE
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$decode-reg-mode (m)
+  (let ((m0 (car m))
+        (m1 (cadr m)))
+    (list (f-nor m0 m1)
+          (f-nor m0 (f-not m1))
+          (id m1))))
+
+(disable f$decode-reg-mode)
+
+(defn decode-reg-mode* ()
+  '(decode-reg-mode (m0 m1) (direct pre-dec side-effect)
+                    ((g0 (direct) b-nor (m0 m1))
+                     (g1 (m1-) b-not (m1))
+                     (g2 (pre-dec) b-nor (m0 m1-))
+                     (g3 (side-effect) id (m1)))
+                    nil))
+
+(module-predicate decode-reg-mode*)
+
+(module-netlist decode-reg-mode*)
+
+(prove-lemma decode-reg-mode$value (rewrite)
+  (implies
+   (decode-reg-mode& netlist)
+   (equal (dual-eval 0 'decode-reg-mode mode state netlist)
+          (f$decode-reg-mode mode)))
+  ;;Hint
+  ((enable decode-reg-mode& b-nor$value id$value b-not$value
+           f$decode-reg-mode)))
+
+(disable decode-reg-mode$value)
+
+(prove-lemma f$decode-reg-mode-as-reg-mode (rewrite)
+  (implies
+   (and (bvp mode)
+        (equal (length mode) 2))
+   (equal (f$decode-reg-mode mode)
+          (list (reg-direct-p mode)
+                (pre-dec-p mode)
+                (or (pre-dec-p mode)
+                    (post-inc-p mode)))))
+  ;;Hint
+  ((enable-theory reg-mode-theory)
+   (enable f$decode-reg-mode equal-length-add1 bvp)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    SELECT-OP-CODE
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$select-op-code (select dec op)
+  (let ((op0 (car op))
+        (op1 (cadr op))
+        (op2 (caddr op))
+        (op3 (cadddr op)))
+    (list (f-nand select (f-not op0))
+          (f-and select op1)
+          (f-if select op2 dec)
+          (f-and select op3))))
+
+(disable f$select-op-code)
+
+(prove-lemma properp-length-f$select-op-code (rewrite)
+  (and (properp (f$select-op-code select dec op))
+       (equal (length (f$select-op-code select dec op)) 4))
+  ;;Hint
+  ((enable f$select-op-code)
+   (disable-theory f-gates)))
+
+(prove-lemma f$select-op-code-selects (rewrite)
+  (implies
+   (and (boolp select)
+        (boolp dec)
+        (bvp op)
+        (equal (length op) 4))
+   (equal (f$select-op-code select dec op)
+          (v-if select
+                op
+                (v-if dec
+                      (alu-dec-op)
+                      (alu-inc-op)))))
+  ;;Hint
+  ((enable f$select-op-code bvp-length equal-length-add1 boolp-b-gates
+           alu-inc-op alu-dec-op v-if)
+   (disable-theory f-gates)))
+
+(defn select-op-code* ()
+  '(select-op-code (select dec op0 op1 op2 op3) (z0 z1 z2 z3)
+                   ((i0 (op0-) b-not (op0))
+                    (g0 (z0)   b-nand (select op0-))
+                    (g1 (z1)   b-and  (select op1))
+                    (g2 (z2)   b-if   (select op2 dec))
+                    (g3 (z3)   b-and  (select op3)))
+                   nil))
+
+(module-predicate select-op-code*)
+
+(module-netlist select-op-code*)
+
+(prove-lemma select-op-code$value (rewrite)
+  (implies
+   (and (select-op-code& netlist)
+        (properp op)
+        (equal (length op) 4))
+   (equal (dual-eval 0 'select-op-code (list* select dec op) state netlist)
+          (f$select-op-code select dec op)))
+  ;;Hint
+  ((enable select-op-code& f$select-op-code bvp-length equal-length-add1
+           b-not$value b-and$value b-nand$value b-if$value)
+   (disable-theory f-gates)))
+
+(disable select-op-code$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    V-IF-F-4
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn v-if-f-4* ()
+  '(v-if-f-4 (c a0 a1 a2 a3) (z0 z1 z2 z3)
+             ((cb (c-) b-not (c))
+              (g0 (z0) b-and (c- a0))
+              (g1 (z1) b-and (c- a1))
+              (g2 (z2) b-and (c- a2))
+              (g3 (z3) b-and (c- a3)))
+             nil))
+
+(module-predicate v-if-f-4*)  
+
+(module-netlist v-if-f-4*)
+
+(defn f$v-if-f-4 (c a)
+  (list (f-and (f-not c) (car a))
+        (f-and (f-not c) (cadr a))
+        (f-and (f-not c) (caddr a))
+        (f-and (f-not c) (cadddr a))))
+
+(disable f$v-if-f-4)
+
+(prove-lemma properp-length-f$v-if-f-4 (rewrite)
+  (and (properp (f$v-if-f-4 c a))
+       (equal (length (f$v-if-f-4 c a)) 4))
+  ;;Hint
+  ((enable f$v-if-f-4)
+   (disable-theory f-gates)))
+
+(prove-lemma v-if-f-4$value (rewrite)
+  (implies
+   (v-if-f-4& netlist)
+   (equal (dual-eval 0 'v-if-f-4 (cons c a) state netlist)
+          (f$v-if-f-4 c a)))
+  ;;Hint
+  ((enable v-if-f-4& b-not$value b-and$value f$v-if-f-4)
+   (disable-theory f-gates)))
+
+(prove-lemma f$v-if-f-4=fv-if (rewrite)
+  (implies
+   (boolp c)
+   (equal (f$v-if-f-4 c a)
+          (fv-if c (make-list 4 f) a)))
+  ;;Hint
+  ((enable f$v-if-f-4 fv-if boolp-b-gates)))
+
+(prove-lemma v-if-f-4$reset-value (rewrite)
+  (implies
+   (v-if-f-4& netlist)
+   (equal (dual-eval 0 'v-if-f-4 (list* t a) state netlist)
+          (make-list 4 f)))
+  ;;Hint
+  ((enable v-if-f-4& b-not$value b-and$value)))
+
+(disable v-if-f-4$reset-value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    FANOUT-4
+;;;    FANOUT-5
+;;;    FANOUT-32
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn fanout-4* ()
+  '(fanout-4 (a) (z0 z1 z2 z3)
+             ((aa (aa) b-buf (a))
+              (g0 (z0) id (aa))
+              (g1 (z1) id (aa))
+              (g2 (z2) id (aa))
+              (g3 (z3) id (aa)))
+             nil))
+
+(module-predicate fanout-4*)
+
+(module-netlist fanout-4*)
+
+(prove-lemma fanout-4$value (rewrite)
+  (implies
+   (fanout-4& netlist)
+   (equal (dual-eval 0 'fanout-4 (list a) state netlist)
+          (make-list 4 (threefix a))))
+  ;;Hint
+  ((enable fanout-4& b-buf$value id$value open-make-list)))
+
+(disable fanout-4$value)
+
+(defn fanout-5* ()
+  '(fanout-5 (a) (z0 z1 z2 z3 z4)
+             ((aa (aa) b-buf (a))
+              (g0 (z0) id (aa))
+              (g1 (z1) id (aa))
+              (g2 (z2) id (aa))
+              (g3 (z3) id (aa))
+              (g4 (z4) id (aa)))
+             nil))
+
+(module-predicate fanout-5*)
+
+(module-netlist fanout-5*)
+
+(prove-lemma fanout-5$value (rewrite)
+  (implies
+   (fanout-5& netlist)
+   (equal (dual-eval 0 'fanout-5 (list a) state netlist)
+          (make-list 5 (threefix a))))
+  ;;Hint
+  ((enable fanout-5& b-buf$value id$value open-make-list)))
+
+(disable fanout-5$value)
+
+(defn fanout-32* ()
+  '(fanout-32 (a)
+              (s0 s1 s2 s3 s4 s5 s6 s7
+                  s8 s9 s10 s11 s12 s13 s14 s15
+                  s16 s17 s18 s19 s20 s21 s22 s23
+                  s24 s25 s26 s27 s28 s29 s30 s31 )
+              ((ga (aa) b-buf-pwr (a))
+               (g0 (s0) id (aa))  
+               (g1 (s1) id (aa))  
+               (g2 (s2) id (aa))  
+               (g3 (s3) id (aa))  
+               (g4 (s4) id (aa))  
+               (g5 (s5) id (aa))  
+               (g6 (s6) id (aa))  
+               (g7 (s7) id (aa))  
+               (g8 (s8) id (aa))  
+               (g9 (s9) id (aa))  
+               (g10 (s10) id (aa))  
+               (g11 (s11) id (aa))  
+               (g12 (s12) id (aa))  
+               (g13 (s13) id (aa))  
+               (g14 (s14) id (aa))  
+               (g15 (s15) id (aa))  
+               (g16 (s16) id (aa))  
+               (g17 (s17) id (aa))  
+               (g18 (s18) id (aa))  
+               (g19 (s19) id (aa))  
+               (g20 (s20) id (aa))  
+               (g21 (s21) id (aa))  
+               (g22 (s22) id (aa))  
+               (g23 (s23) id (aa))  
+               (g24 (s24) id (aa))  
+               (g25 (s25) id (aa))  
+               (g26 (s26) id (aa))  
+               (g27 (s27) id (aa))  
+               (g28 (s28) id (aa))  
+               (g29 (s29) id (aa))  
+               (g30 (s30) id (aa))  
+               (g31 (s31) id (aa)))
+              nil))
+
+(module-predicate fanout-32*)
+
+(module-netlist fanout-32*)
+
+(prove-lemma fanout-32$value (rewrite)
+  (implies
+   (fanout-32& netlist)
+   (equal (dual-eval 0 'fanout-32 (list a) state netlist)
+          (make-list 32 (threefix a))))
+  ;;Hint
+  ((enable fanout-32& b-buf-pwr$value id$value open-make-list)))
+
+(disable fanout-32$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    DECODE-5
+;;;
+;;;    A 5-to-32 , one-hot decoder.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$decode-5 (s)
+  (let ((s0 (car s))
+        (s1 (cadr s))
+        (s2 (caddr s))
+        (s3 (cadddr s))
+        (s4 (caddddr s)))
+    (let ((s0- (f-not s0))
+          (s1- (f-not s1))
+          (s2- (f-not s2))
+          (s3- (f-not s3))
+          (s4- (f-not s4)))
+      (let ((s0 (f-not s0-))
+            (s1 (f-not s1-))
+            (s2 (f-not s2-))
+            (s3 (f-not s3-))
+            (s4 (f-not s4-)))
+        (let ((l0 (f-nand s0- s1-))
+              (l1 (f-nand s0 s1-))
+              (l2 (f-nand s0- s1))
+              (l3 (f-nand s0 s1))
+              (h0 (f-nand3 s2- s3- s4-))
+              (h1 (f-nand3 s2 s3- s4-))
+              (h2 (f-nand3 s2- s3 s4-))
+              (h3 (f-nand3 s2 s3 s4-))
+              (h4 (f-nand3 s2- s3- s4))
+              (h5 (f-nand3 s2 s3- s4))
+              (h6 (f-nand3 s2- s3 s4))
+              (h7 (f-nand3 s2 s3 s4)))
+          (let ((x00 (f-nor l0 h0)) 
+                (x10 (f-nor l1 h0)) 
+                (x20 (f-nor l2 h0)) 
+                (x30 (f-nor l3 h0)) 
+                (x01 (f-nor l0 h1)) 
+                (x11 (f-nor l1 h1)) 
+                (x21 (f-nor l2 h1)) 
+                (x31 (f-nor l3 h1)) 
+                (x02 (f-nor l0 h2)) 
+                (x12 (f-nor l1 h2)) 
+                (x22 (f-nor l2 h2)) 
+                (x32 (f-nor l3 h2)) 
+                (x03 (f-nor l0 h3)) 
+                (x13 (f-nor l1 h3)) 
+                (x23 (f-nor l2 h3)) 
+                (x33 (f-nor l3 h3)) 
+                (x04 (f-nor l0 h4)) 
+                (x14 (f-nor l1 h4)) 
+                (x24 (f-nor l2 h4)) 
+                (x34 (f-nor l3 h4)) 
+                (x05 (f-nor l0 h5)) 
+                (x15 (f-nor l1 h5)) 
+                (x25 (f-nor l2 h5)) 
+                (x35 (f-nor l3 h5)) 
+                (x06 (f-nor l0 h6)) 
+                (x16 (f-nor l1 h6)) 
+                (x26 (f-nor l2 h6)) 
+                (x36 (f-nor l3 h6)) 
+                (x07 (f-nor l0 h7)) 
+                (x17 (f-nor l1 h7)) 
+                (x27 (f-nor l2 h7)) 
+                (x37 (f-nor l3 h7)))
+            (list x00 x10 x20 x30 x01 x11 x21 x31 x02 x12 x22 x32 x03 x13 x23
+                  x33 x04 x14 x24 x34 x05 x15 x25 x35 x06 x16 x26 x36 x07 x17
+                  x27 x37)))))))
+
+(disable f$decode-5)
+
+(defn decode-5 (s)
+  (let ((s0 (car s))
+        (s1 (cadr s))
+        (s2 (caddr s))
+        (s3 (cadddr s))
+        (s4 (caddddr s)))
+    (let ((s0- (b-not s0))
+          (s1- (b-not s1))
+          (s2- (b-not s2))
+          (s3- (b-not s3))
+          (s4- (b-not s4)))
+      (let ((s0 (b-not s0-))
+            (s1 (b-not s1-))
+            (s2 (b-not s2-))
+            (s3 (b-not s3-))
+            (s4 (b-not s4-)))
+        (let ((l0 (b-nand s0- s1-))
+              (l1 (b-nand s0 s1-))
+              (l2 (b-nand s0- s1))
+              (l3 (b-nand s0 s1))
+              (h0 (b-nand3 s2- s3- s4-))
+              (h1 (b-nand3 s2 s3- s4-))
+              (h2 (b-nand3 s2- s3 s4-))
+              (h3 (b-nand3 s2 s3 s4-))
+              (h4 (b-nand3 s2- s3- s4))
+              (h5 (b-nand3 s2 s3- s4))
+              (h6 (b-nand3 s2- s3 s4))
+              (h7 (b-nand3 s2 s3 s4)))
+          (let ((x00 (b-nor l0 h0)) 
+                (x10 (b-nor l1 h0)) 
+                (x20 (b-nor l2 h0)) 
+                (x30 (b-nor l3 h0)) 
+                (x01 (b-nor l0 h1)) 
+                (x11 (b-nor l1 h1)) 
+                (x21 (b-nor l2 h1)) 
+                (x31 (b-nor l3 h1)) 
+                (x02 (b-nor l0 h2)) 
+                (x12 (b-nor l1 h2)) 
+                (x22 (b-nor l2 h2)) 
+                (x32 (b-nor l3 h2)) 
+                (x03 (b-nor l0 h3)) 
+                (x13 (b-nor l1 h3)) 
+                (x23 (b-nor l2 h3)) 
+                (x33 (b-nor l3 h3)) 
+                (x04 (b-nor l0 h4)) 
+                (x14 (b-nor l1 h4)) 
+                (x24 (b-nor l2 h4)) 
+                (x34 (b-nor l3 h4)) 
+                (x05 (b-nor l0 h5)) 
+                (x15 (b-nor l1 h5)) 
+                (x25 (b-nor l2 h5)) 
+                (x35 (b-nor l3 h5)) 
+                (x06 (b-nor l0 h6)) 
+                (x16 (b-nor l1 h6)) 
+                (x26 (b-nor l2 h6)) 
+                (x36 (b-nor l3 h6)) 
+                (x07 (b-nor l0 h7)) 
+                (x17 (b-nor l1 h7)) 
+                (x27 (b-nor l2 h7)) 
+                (x37 (b-nor l3 h7)))
+            (list x00 x10 x20 x30 x01 x11 x21 x31 x02 x12 x22 x32 x03 x13 x23
+                  x33 x04 x14 x24 x34 x05 x15 x25 x35 x06 x16 x26 x36 x07 x17
+                  x27 x37)))))))
+
+(disable decode-5)
+
+(prove-lemma bvp-length-decode-5 (rewrite)
+  (and (bvp (decode-5 s))
+       (equal (length (decode-5 s)) 32))
+  ;;Hint
+  ((enable decode-5 boolp-b-gates)
+   (disable-theory b-gates)))
+
+(defn decode-5* ()
+  '(decode-5 (s0 s1 s2 s3 s4)
+             (x00 x10 x20 x30 x01 x11 x21 x31 x02 x12 x22 x32
+                  x03 x13 x23 x33 x04 x14 x24 x34 x05 x15 x25 x35
+                  x06 x16 x26 x36 x07 x17 x27 x37)
+             ((gs0- (s0-) b-not   (s0))
+              (gs1- (s1-) b-not   (s1))
+              (gs2- (s2-) b-not   (s2))
+              (gs3- (s3-) b-not   (s3))
+              (gs4- (s4-) b-not   (s4))
+              (gs0  (bs0)  b-not   (s0-))
+              (gs1  (bs1)  b-not   (s1-))
+              (gs2  (bs2)  b-not   (s2-))
+              (gs3  (bs3)  b-not   (s3-))
+              (gs4  (bs4)  b-not   (s4-))
+              (gl0  (l0)  b-nand  (s0- s1-))
+              (gl1  (l1)  b-nand  (bs0 s1-))
+              (gl2  (l2)  b-nand  (s0- bs1))
+              (gl3  (l3)  b-nand  (bs0 bs1))
+              (gh0  (h0)  b-nand3 (s2- s3- s4-))
+              (gh1  (h1)  b-nand3 (bs2 s3- s4-))
+              (gh2  (h2)  b-nand3 (s2- bs3 s4-))
+              (gh3  (h3)  b-nand3 (bs2 bs3 s4-))
+              (gh4  (h4)  b-nand3 (s2- s3- bs4))
+              (gh5  (h5)  b-nand3 (bs2 s3- bs4))
+              (gh6  (h6)  b-nand3 (s2- bs3 bs4))
+              (gh7  (h7)  b-nand3 (bs2 bs3 bs4))
+              (gx00 (x00) b-nor   (l0 h0)) 
+              (gx10 (x10) b-nor   (l1 h0)) 
+              (gx20 (x20) b-nor   (l2 h0)) 
+              (gx30 (x30) b-nor   (l3 h0)) 
+              (gx01 (x01) b-nor   (l0 h1)) 
+              (gx11 (x11) b-nor   (l1 h1)) 
+              (gx21 (x21) b-nor   (l2 h1)) 
+              (gx31 (x31) b-nor   (l3 h1)) 
+              (gx02 (x02) b-nor   (l0 h2)) 
+              (gx12 (x12) b-nor   (l1 h2)) 
+              (gx22 (x22) b-nor   (l2 h2)) 
+              (gx32 (x32) b-nor   (l3 h2)) 
+              (gx03 (x03) b-nor   (l0 h3)) 
+              (gx13 (x13) b-nor   (l1 h3)) 
+              (gx23 (x23) b-nor   (l2 h3)) 
+              (gx33 (x33) b-nor   (l3 h3)) 
+              (gx04 (x04) b-nor   (l0 h4)) 
+              (gx14 (x14) b-nor   (l1 h4)) 
+              (gx24 (x24) b-nor   (l2 h4)) 
+              (gx34 (x34) b-nor   (l3 h4)) 
+              (gx05 (x05) b-nor   (l0 h5)) 
+              (gx15 (x15) b-nor   (l1 h5)) 
+              (gx25 (x25) b-nor   (l2 h5)) 
+              (gx35 (x35) b-nor   (l3 h5)) 
+              (gx06 (x06) b-nor   (l0 h6)) 
+              (gx16 (x16) b-nor   (l1 h6)) 
+              (gx26 (x26) b-nor   (l2 h6)) 
+              (gx36 (x36) b-nor   (l3 h6)) 
+              (gx07 (x07) b-nor   (l0 h7)) 
+              (gx17 (x17) b-nor   (l1 h7)) 
+              (gx27 (x27) b-nor   (l2 h7)) 
+              (gx37 (x37) b-nor   (l3 h7)))
+             nil))
+
+(module-predicate decode-5*)
+
+(module-netlist decode-5*)
+
+(prove-lemma properp-length-f$decode-5 (rewrite)
+  (and (properp (f$decode-5 s))
+       (equal (length (f$decode-5 s)) 32))
+  ;;Hint
+  ((enable f$decode-5)
+   (disable-theory f-gates)))
+
+(prove-lemma decode-5$value (rewrite)
+  (implies
+   (and (decode-5& netlist)
+        (equal (length s) 5))
+   (equal (dual-eval 0 'decode-5 s state netlist)
+          (f$decode-5 s)))
+  ;;Hint
+  ((enable f$decode-5 decode-5& equal-length-add1
+           b-not$value b-nand$value b-nand3$value b-nor$value)
+   (disable-theory f-gates b-gates)
+   (disable cons-equal)))
+
+(prove-lemma f$decode-5=decode-5 (rewrite)
+  (implies
+   (and (bvp s)
+        (equal (length s) 5))
+   (equal (f$decode-5 s)
+          (decode-5 s)))
+  ;;Hint
+  ((enable f$decode-5 decode-5 boolp-b-gates equal-length-add1 bvp)
+   (disable-theory f-gates b-gates)
+   (disable cons-equal)))
+
+(disable decode-5$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    ENCODE-32
+;;;
+;;;    A 32-to-5 encoder, assuming a one-hot input vector.
+;;;
+;;;    This encoder is optimized to eliminate encoding of the unused
+;;;    states S26, S27, and S31.
+;;;    
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn encode-32 (
+                 s0 s1 s2 s3 s4 s5 s6 s7
+                 s8 s9 s10 s11 s12 s13 s14 s15
+                 s16 s17 s18 s19 s20 s21 s22 s23
+                 s24 s25 s26 s27 s28 s29 s30 s31)
+
+  (let ((x0a (b-nor4 s1 s3 s5 s7))
+        (x0b (b-nor4 s9 s11 s13 s15))
+        (x0c (b-nor4 s17 s19 s21 s23))
+        (x0d (b-nor  s25 s29))
+        (x1a (b-nor4 s2 s3 s6 s7))
+        (x1b (b-nor4 s10 s11 s14 s15))
+        (x1c (b-nor4 s18 s19 s22 s23))
+        (x1d (b-not  s30))
+        (x2a (b-nor4 s4 s5 s6 s7))
+        (x2b (b-nor4 s12 s13 s14 s15))
+        (x2c (b-nor4 s20 s21 s22 s23))
+        (x2d (b-nor3 s28 s29 s30))
+        (x3a (b-nor4 s8 s9 s10 s11))
+        (x3b (b-nor4 s12 s13 s14 s15))
+        (x3c (b-nor  s24 s25))
+        (x3d (b-nor3 s28 s29 s30))
+        (x4a (b-nor4 s16 s17 s18 s19))
+        (x4b (b-nor4 s20 s21 s22 s23))
+        (x4c (b-nor  s24 s25))
+        (x4d (b-nor3 s28 s29 s30)))
+    (let ((x0 (b-nand4 x0a x0b x0c x0d))
+          (x1 (b-nand4 x1a x1b x1c x1d))
+          (x2 (b-nand4 x2a x2b x2c x2d))
+          (x3 (b-nand4 x3a x3b x3c x3d))
+          (x4 (b-nand4 x4a x4b x4c x4d)))
+      (list x0 x1 x2 x3 x4))))
+
+(disable encode-32)
+
+(defn-to-module encode-32)
+
+(prove-lemma bvp-length-encode-32 (rewrite)
+  (and
+   (bvp (encode-32 s0 s1 s2 s3 s4 s5 s6 s7
+                   s8 s9 s10 s11 s12 s13 s14 s15
+                   s16 s17 s18 s19 s20 s21 s22 s23
+                   s24 s25 s26 s27 s28 s29 s30 s31))
+   (equal (length (encode-32 s0 s1 s2 s3 s4 s5 s6 s7
+                             s8 s9 s10 s11 s12 s13 s14 s15
+                             s16 s17 s18 s19 s20 s21 s22 s23
+                             s24 s25 s26 s27 s28 s29 s30 s31))
+          5))
+  ;;Hint
+  ((enable encode-32)))
+
+(prove-lemma properp-length-f$encode-32 (rewrite)
+  (and
+   (properp (f$encode-32 s0 s1 s2 s3 s4 s5 s6 s7
+                   s8 s9 s10 s11 s12 s13 s14 s15
+                   s16 s17 s18 s19 s20 s21 s22 s23
+                   s24 s25 s26 s27 s28 s29 s30 s31))
+   (equal (length (f$encode-32 s0 s1 s2 s3 s4 s5 s6 s7
+                             s8 s9 s10 s11 s12 s13 s14 s15
+                             s16 s17 s18 s19 s20 s21 s22 s23
+                             s24 s25 s26 s27 s28 s29 s30 s31))
+          5))
+  ;;Hint
+  ((enable f$encode-32)
+   (disable-theory f-gates)))
+
+(prove-lemma dual-eval-on-collected-nth-32 ()
+  (implies
+   (and (equal (length args) 32)
+        (properp args))
+   (equal (dual-eval flag name args state netlist)
+          (dual-eval flag name
+                     (list (nth 0 args) 
+                           (nth 1 args) 
+                           (nth 2 args) 
+                           (nth 3 args) 
+                           (nth 4 args) 
+                           (nth 5 args) 
+                           (nth 6 args) 
+                           (nth 7 args) 
+                           (nth 8 args) 
+                           (nth 9 args) 
+                           (nth 10 args) 
+                           (nth 11 args) 
+                           (nth 12 args) 
+                           (nth 13 args) 
+                           (nth 14 args) 
+                           (nth 15 args) 
+                           (nth 16 args) 
+                           (nth 17 args) 
+                           (nth 18 args) 
+                           (nth 19 args) 
+                           (nth 20 args) 
+                           (nth 21 args) 
+                           (nth 22 args) 
+                           (nth 23 args) 
+                           (nth 24 args) 
+                           (nth 25 args) 
+                           (nth 26 args) 
+                           (nth 27 args) 
+                           (nth 28 args) 
+                           (nth 29 args) 
+                           (nth 30 args) 
+                           (nth 31 args))
+                     state netlist)))
+  ;;hint
+  ((use (equal-length-32-as-collected-nth (l args)))))
+
+(prove-lemma encode-32$value-on-a-vector (rewrite)
+  (implies
+   (and (encode-32& netlist)
+        (properp args)
+        (equal (length args) 32))
+   (equal (dual-eval 0 'encode-32 args state netlist)
+          (f$encode-32 (nth 0 args) 
+                       (nth 1 args) 
+                       (nth 2 args) 
+                       (nth 3 args) 
+                       (nth 4 args) 
+                       (nth 5 args) 
+                       (nth 6 args) 
+                       (nth 7 args) 
+                       (nth 8 args) 
+                       (nth 9 args) 
+                       (nth 10 args) 
+                       (nth 11 args) 
+                       (nth 12 args) 
+                       (nth 13 args) 
+                       (nth 14 args) 
+                       (nth 15 args) 
+                       (nth 16 args) 
+                       (nth 17 args) 
+                       (nth 18 args) 
+                       (nth 19 args) 
+                       (nth 20 args) 
+                       (nth 21 args) 
+                       (nth 22 args) 
+                       (nth 23 args) 
+                       (nth 24 args) 
+                       (nth 25 args) 
+                       (nth 26 args) 
+                       (nth 27 args) 
+                       (nth 28 args) 
+                       (nth 29 args) 
+                       (nth 30 args) 
+                       (nth 31 args))))
+  ;;hint
+  ((disable f$encode-32 *1*encode-32)
+   (enable encode-32$value)
+   (use (dual-eval-on-collected-nth-32
+         (flag 0)
+         (name 'encode-32)
+         (args args)
+         (state state)
+         (netlist netlist)))))
+
+(disable encode-32$value-on-a-vector)

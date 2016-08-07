@@ -1,0 +1,1101 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    CONTROL.EVENTS
+;;;
+;;;    Many of the events used to define that control logic are created
+;;;    automatically, from macros and functions defined in "control.lisp".
+;;;    
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;   Some preliminary definitions.
+
+;;;  SET-SOME-FLAGS
+
+(defn set-some-flags (set-flags)
+  (or (z-set set-flags)
+      (n-set set-flags)
+      (v-set set-flags)
+      (c-set set-flags)))
+
+(disable set-some-flags)
+
+(prove-lemma not-set-some-flags-make-list-4-f (rewrite)
+  (not (set-some-flags (make-list 4 f))))
+
+(defn flags-hyps (flags)
+  (and (equal (length flags) 4)
+       (bvp flags)))
+
+(prove-lemma not-set-some-flags-update-flags (rewrite)
+  (implies
+   (and (flags-hyps flags)
+        (not (set-some-flags set-flags)))
+   (equal (update-flags flags set-flags cvzbv)
+          flags))
+  ;;Hint
+  ((enable set-some-flags update-flags open-nth
+           c-flag v-flag n-flag z-flag
+           equal-length-add1)))
+
+(prove-lemma boolp-c-flag (rewrite)
+  (implies
+   (flags-hyps flags)
+   (boolp (c-flag flags)))
+  ;;Hint
+  ((enable c-flag)))
+
+(defn f$set-some-flags (set-flags)
+  (f-or4 (car set-flags)
+         (cadr set-flags)
+         (caddr set-flags)
+         (cadddr set-flags)))
+
+(disable f$set-some-flags)
+
+(prove-lemma f$set-some-flags=set-some=flags (rewrite)
+  (implies
+   (and (bvp set-flags)
+        (equal (length set-flags) 4))
+   (equal (f$set-some-flags set-flags)
+          (set-some-flags set-flags)))
+  ;;Hint
+  ((enable f$set-some-flags set-some-flags equal-length-add1 open-nth
+           c-set v-set n-set z-set boolp-b-gates)
+   (disable-theory f-gates)))
+
+(prove-lemma b-or4$value-as-f$set-some-flags (rewrite)
+  (implies
+   (and (b-or4& netlist)
+        (properp set-flags)
+        (equal (length set-flags) 4))
+   (equal (dual-eval 0 'b-or4 set-flags state netlist)
+          (list (f$set-some-flags set-flags))))
+  ;;Hint
+  ((enable b-or4$value equal-length-add1 f$set-some-flags)))
+
+(disable b-or4$value-as-f$set-some-flags)
+
+(defn f$all-t-regs-address (regs-address)
+  (f-and4 (car regs-address)
+          (cadr regs-address)
+          (caddr regs-address)
+          (cadddr regs-address)))
+
+(disable f$all-t-regs-address)
+
+(prove-lemma f$all-t-regs-address=set-some=flags (rewrite)
+  (implies
+   (and (bvp regs-address)
+        (equal (length regs-address) 4))
+   (equal (f$all-t-regs-address regs-address)
+          (equal regs-address (make-list 4 t))))
+  ;;Hint
+  ((enable f$all-t-regs-address equal-length-add1 boolp-b-gates open-make-list)
+   (disable-theory f-gates)))
+
+(prove-lemma b-and4$value-as-f$all-t-regs-address (rewrite)
+  (implies
+   (and (b-and4& netlist)
+        (properp regs-address)
+        (equal (length regs-address) 4))
+   (equal (dual-eval 0 'b-and4 regs-address state netlist)
+          (list (f$all-t-regs-address regs-address))))
+  ;;Hint
+  ((enable b-and4& b-and4$value equal-length-add1 f$all-t-regs-address
+           properp)))
+
+(disable b-and4$value-as-f$all-t-regs-address)
+
+;;;    CV-HYPS rw- regs-address i-reg flags pc-reg
+;;;
+;;;    The hyps that allow the CV_state functions to be opened nicely.
+
+(defn cv-hyps (rw- regs-address i-reg flags pc-reg)
+  (and (boolp rw-)
+       (equal (length regs-address) 4)
+       (bvp regs-address)
+       (equal (length i-reg) 32)
+       (bvp i-reg)
+       (flags-hyps flags)
+       (equal (length pc-reg) 4)
+       (bvp pc-reg)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    MACRO EXECUTION
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  The first two macros generate numerous simple events.
+
+(define-control-states)
+
+(define-control-state-accessors)
+
+;;;  This macro creates events that define the control vector for each state.
+
+(define-control-vector-functions)
+
+(prove-lemma cv_fetch1$rw-doan-matta (rewrite)
+  (equal (cv_fetch1 F REGS-ADDRESS I-REG FLAGS PC-REG)
+         (cv_fetch1 T REGS-ADDRESS I-REG FLAGS PC-REG))
+  ;;Hint
+  ((enable cv_fetch1)))
+
+(prove-lemma properp-length-cv_fetch1 (rewrite)
+  (and
+   (implies
+    (cv-hyps rw- regs-address i-reg flags pc-reg)
+    (equal (length (cv_fetch1 rw- regs-address i-reg flags pc-reg))
+           40))
+   (properp (cv_fetch1 rw- regs-address i-reg flags pc-reg)))
+  ;;Hint
+  ((enable cv_fetch1 v_fetch1)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    CONTROL-LET
+;;;
+;;;    CONTROL-LET computes a number of intermediate results that are used both
+;;;    to determine the next control state, and the values of the control
+;;;    lines.
+;;;    
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn f$control-let (i-reg flags regs-address)
+  (let ((a-immediate-p (a-immediate-p i-reg))
+        (mode-a        (mode-a        i-reg))
+        (rn-a          (rn-a          i-reg))
+        (mode-b        (mode-b        i-reg))
+        (rn-b          (rn-b          i-reg))
+        (set-flags     (set-flags     i-reg))
+        (store-cc      (store-cc      i-reg))
+        (op-code       (op-code       i-reg)))
+    (let
+      ((a-immediate-p (id a-immediate-p)))
+      (let
+        ((a-immediate-p- (f-not a-immediate-p))
+         (store (f$b-store-resultp store-cc flags))
+         (set-some-flags (f$set-some-flags set-flags))
+         (decode-reg-a-mode (f$decode-reg-mode mode-a))
+         (decode-reg-b-mode (f$decode-reg-mode mode-b)))
+        (let
+          ((almost-direct-a (car decode-reg-a-mode))
+           (pre-dec-a (cadr decode-reg-a-mode))
+           (almost-side-effect-a (caddr decode-reg-a-mode))
+           (direct-b (car decode-reg-b-mode))
+           (pre-dec-b (cadr decode-reg-b-mode))
+           (side-effect-b (caddr decode-reg-b-mode))
+           (unary (f$unary-op-code-p op-code))
+           (c (id (c-flag flags)))
+           (all-t-regs-address (f$all-t-regs-address regs-address)))
+          (let
+            ((side-effect-a (f-and a-immediate-p- almost-side-effect-a))
+             (direct-a (f-or a-immediate-p almost-direct-a)))
+            (list a-immediate-p store set-some-flags direct-a direct-b unary
+                  pre-dec-a pre-dec-b c all-t-regs-address
+                  side-effect-a side-effect-b)))))))
+
+(disable f$control-let)
+
+(defn control-let* ()
+  (let ((i-reg #i(i-reg 0 32))
+        (flags #i(flags 0 4))
+        (regs-address #i(regs-address 0 4)))
+    (let ((a-immediate-p (a-immediate-p i-reg))
+          (mode-a        (mode-a        i-reg))
+          (rn-a          (rn-a          i-reg))
+          (mode-b        (mode-b        i-reg))
+          (rn-b          (rn-b          i-reg))
+          (set-flags     (set-flags     i-reg))
+          (store-cc      (store-cc      i-reg))
+          (op-code       (op-code       i-reg)))
+      (list
+       'control-let
+       (append i-reg (append flags regs-address))
+       '(a-immediate-p store set-some-flags direct-a direct-b unary
+                       pre-dec-a pre-dec-b c all-t-regs-address
+                       side-effect-a side-effect-b)
+       (list
+        (list 'g0 '(a-immediate-p) 'id (list a-immediate-p))
+        (list 'g1 '(a-immediate-p-) 'b-not '(a-immediate-p))
+        (list 'g2 '(store) 'b-store-resultp (append store-cc flags))
+        (list 'g3 '(set-some-flags) 'b-or4 set-flags)
+        (list 'g4 '(almost-direct-a pre-dec-a almost-side-effect-a)
+              'decode-reg-mode mode-a)
+        (list 'g5 '(direct-b pre-dec-b side-effect-b) 'decode-reg-mode mode-b)
+        (list 'g6 '(unary) 'unary-op-code-p op-code)
+        (list 'g7 '(c) 'id (list (c-flag flags)))
+        (list 'g8 '(all-t-regs-address) 'b-and4 regs-address)
+        (list 'g9 '(side-effect-a) 'b-and
+              '(a-immediate-p- almost-side-effect-a))
+        (list 'ga '(direct-a) 'b-or '(a-immediate-p almost-direct-a)))
+       nil))))
+
+(module-predicate control-let*)
+
+(module-netlist control-let*)
+
+(prove-lemma control-let$value (rewrite)
+  (implies
+   (and (control-let& netlist)
+        (properp i-reg) (equal (length i-reg) 32)
+        (properp flags) (equal (length flags) 4)
+        (properp regs-address) (equal (length regs-address) 4))
+   (equal (dual-eval 0 'control-let (append i-reg (append flags regs-address))
+                     state netlist)
+          (f$control-let i-reg flags regs-address)))
+  ;;Hint
+  (#.`(enable f$control-let control-let& nth-indices c-flag
+              b-or4$value-as-f$set-some-flags
+              b-and4$value-as-f$all-t-regs-address
+              ,@(submodule-value-lemmas 'control-let*))
+   (disable open-indices *1*indices indices)
+   (enable-theory ir-fields-theory)
+   (disable-theory f-gates)))
+
+(disable control-let$value)   
+
+(prove-lemma f$control-let=control-let (rewrite)
+  (implies
+   (and (bvp i-reg) (equal (length i-reg) 32)
+        (bvp flags) (equal (length flags) 4)
+        (bvp regs-address) (equal (length regs-address) 4))
+   (equal (f$control-let i-reg flags regs-address)
+           #.(control-let
+             '(list a-immediate-p store set-some-flags direct-a direct-b unary
+                    pre-dec-a pre-dec-b c all-t-regs-address
+                    side-effect-a side-effect-b))))
+  ;;Hint
+  ((enable f$control-let boolp-b-gates expand-*-connectives nth-indices
+           bvp-length c-flag)
+   (disable open-indices *1*indices indices)
+   (enable-theory ir-fields-theory)
+   (disable-theory f-gates)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;  NEXT-STATE
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  The NEXT-STATE logic is synthesized from the *STATE-TABLE* (defined in
+;;;  "control.lisp"). 
+
+(define-next-state)
+
+(prove-lemma bvp-length-next-state (rewrite)
+  (let ((next-state
+         (next-state
+          decoded-state store set-some-flags unary direct-a direct-b 
+          side-effect-a side-effect-b all-t-regs-address
+          dtack- hold-)))
+  (and (equal (length next-state) 32)
+       (implies
+        (and (bvp decoded-state)
+             (equal (length decoded-state) 32))
+        (bvp next-state))))
+
+  ;;Hint
+  ((enable bvp next-state)))
+
+(prove-lemma properp-length-f$next-state (rewrite)
+  (let ((next-state
+         (f$next-state
+          decoded-state store set-some-flags unary direct-a direct-b 
+          side-effect-a side-effect-b all-t-regs-address
+          dtack- hold-)))
+  (and (equal (length next-state) 32)
+       (properp next-state)))
+
+  ;;Hint
+  ((enable f$next-state)
+   (disable-theory f-gates)))
+
+(prove-lemma next-state$value (rewrite)
+  (implies
+   (and (next-state& netlist)
+        (properp decoded-state)
+        (equal (length decoded-state) 32))
+   (equal (dual-eval 0 'next-state
+                     (append decoded-state
+                             (list store set-some-flags
+                                   unary direct-a direct-b
+                                   side-effect-a side-effect-b
+                                   all-t-regs-address
+                                   dtack- hold-))
+                     state netlist)
+          (f$next-state decoded-state store set-some-flags
+                        unary direct-a direct-b
+                        side-effect-a side-effect-b
+                        all-t-regs-address
+                        dtack- hold-)))
+  ;;hint
+  (#.`(enable next-state& f$next-state
+              ,@(submodule-value-lemmas 'next-state*))
+   (disable open-indices *1*indices indices)
+   (disable-theory f-gates)))
+
+(disable next-state$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;   CV
+;;;
+;;;   CV computes the 40-bit control vector.
+;;;   
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#.
+(let ((statelist (mapcar #'car *control-states*)))
+  `(DEFN CV (DECODED-STATE
+             RN-A RN-B OP-CODE
+             PC-REG REGS-ADDRESS SET-FLAGS
+             STORE C A-IMMEDIATE-P RW-
+             DIRECT-A SIDE-EFFECT-A SIDE-EFFECT-B
+             PRE-DEC-A PRE-DEC-B)
+     (LET ,(iterate for state in statelist for i from 0
+             collect `(,state (NTH ,i DECODED-STATE)))
+       (LET ((STORE- (B-NOT STORE)))
+         (LET ((ALU-ZERO  (B-OR4 FETCH0 RESET0 RESET1 RESET2))
+               (ALU-SWAP  (B-OR3 READB2 WRITE1 SEFB1))
+               (INCDECA   (B-OR READA1 SEFA1)))
+           (LET ((ALU-OP (V-IF (B-NOR4 FETCH2 INCDECA ALU-SWAP ALU-ZERO)
+                               OP-CODE
+                               (V-IF (B-NAND (B-NAND INCDECA PRE-DEC-A)
+                                             (B-NAND ALU-SWAP PRE-DEC-B))
+                                     (ALU-DEC-OP)
+                                     (ALU-INC-OP)))))
+             (LIST*
+              ;;RW-
+              (B-AND (B-NAND (B-NOT RW-) FETCH0)
+                     (B-NOR3 WRITE1 WRITE2 WRITE3))
+              ;;STROBE-
+              (B-NOR8 FETCH2 FETCH3 READA2 READA3
+                      READB2 READB3 WRITE2 WRITE3)
+              ;;HDACK-
+              (B-NOT HOLD0)
+              ;;WE-REGS 
+              (B-NAND5 (B-NAND STORE UPDATE)
+                       (B-NAND SIDE-EFFECT-A READA1) 
+                       (B-NAND3 STORE- SIDE-EFFECT-B READB2) 
+                       (B-NAND SIDE-EFFECT-B WRITE1) 
+                       (B-NOR5 FETCH2 SEFA1 SEFB1 RESET0 RESET2))
+              ;;WE-A-REG 
+              (B-NAND (B-NAND DIRECT-A READB1) 
+                      (B-NOR6 FETCH0 REGA READA0 READA3 SEFA0 RESET1))
+              ;;WE-B-REG 
+              (B-NAND (B-NOR4 REGB UPDATE READA2 READB0)
+                      (B-NOR4 READB3 WRITE0 SEFB0 RESET1))
+              ;;WE-I-REG
+              (B-OR FETCH3 RESET1)
+              ;;WE-DATA-OUT
+              (B-OR WRITE0 RESET0)
+              ;;WE-ADDR-OUT
+              (B-NAND (B-NOR3 FETCH0 READA0 READB0)
+                      (B-NOR WRITE0 RESET1))
+              ;;WE-HOLD-
+              (B-OR3 FETCH0 HOLD0 RESET0)
+              ;;WE-PC-REG
+              (B-OR HOLD0 RESET0)
+              ;;DATA-IN-SELECT
+              (B-OR3 FETCH3 READA3 READB3)
+              ;;DEC-ADDR-OUT 
+              (B-NAND (B-NAND PRE-DEC-A READA0) 
+                      (B-NAND PRE-DEC-B (B-OR READB0 WRITE0)))
+              ;;SELECT-IMMEDIATE
+              (B-AND A-IMMEDIATE-P (B-OR REGA READB1))
+              ;;ALU-C 
+              (CARRY-IN-HELP (CONS C (CONS ALU-ZERO ALU-OP)))
+              ;;ALU-ZERO
+              ALU-ZERO
+              (APPEND
+               ;;STATE
+               (ENCODE-32 ,@statelist)
+               (APPEND
+                ;;WE-FLAGS
+                (V-IF (B-NOR UPDATE WRITE0)
+                      (V-IF RESET0
+                            (MAKE-LIST 4 T)
+                            (MAKE-LIST 4 F))
+                      SET-FLAGS)
+                (APPEND
+                 ;;REGS-ADDRESS
+                 (V-IF (B-NAND (B-NOR3 REGA READA0 READA1)
+                               (B-NOR3 READB1 SEFA0 SEFA1))
+                       RN-A
+                       (V-IF (B-NAND (B-NOR5 REGB UPDATE READA2 READB0 READB2)
+                                     (B-NOR4 WRITE0 WRITE1 SEFB0 SEFB1))
+                             RN-B
+                             (V-IF (B-OR RESET0 RESET1)
+                                   (MAKE-LIST 4 F)
+                                   (V-IF RESET2
+                                         (V-INC REGS-ADDRESS)
+                                         PC-REG))))
+ 
+                 (APPEND
+                  ;;ALU-OP 
+                  ALU-OP
+                  ;;ALU-MPG
+                  (MPG (CONS ALU-ZERO (CONS ALU-SWAP ALU-OP))))))))))))))
+
+
+(disable cv)
+
+#.
+(let ((statelist (mapcar #'car *control-states*)))
+  `(DEFN F$CV (DECODED-STATE
+               RN-A RN-B OP-CODE
+               PC-REG REGS-ADDRESS SET-FLAGS
+               STORE C A-IMMEDIATE-P RW-
+               DIRECT-A SIDE-EFFECT-A SIDE-EFFECT-B
+               PRE-DEC-A PRE-DEC-B)
+     (LET ,(iterate for state in statelist for i from 0
+             collect `(,state (NTH ,i DECODED-STATE)))
+       (LET ((STORE- (F-NOT STORE)))
+         (LET ((ALU-ZERO  (F-OR4 FETCH0 RESET0 RESET1 RESET2))
+               (ALU-SWAP  (F-OR3 READB2 WRITE1 SEFB1))
+               (INCDECA   (F-OR READA1 SEFA1)))
+           (LET ((ALU-OP (F$SELECT-OP-CODE
+                          (F-NOR4 FETCH2 INCDECA ALU-SWAP ALU-ZERO)
+                          (F-NAND (F-NAND INCDECA PRE-DEC-A)
+                                  (F-NAND ALU-SWAP PRE-DEC-B))
+                          OP-CODE)))
+
+             (LIST*
+              ;;RW-
+              (F-AND (F-NAND (F-NOT RW-) FETCH0)
+                     (F-NOR3 WRITE1 WRITE2 WRITE3))
+              ;;STROBE-
+              (F-NOR8 FETCH2 FETCH3 READA2 READA3
+                      READB2 READB3 WRITE2 WRITE3)
+              ;;HDACK-
+              (F-NOT HOLD0)
+              ;;WE-REGS 
+              (F-NAND5 (F-NAND STORE UPDATE)
+                       (F-NAND SIDE-EFFECT-A READA1) 
+                       (F-NAND3 STORE- SIDE-EFFECT-B READB2) 
+                       (F-NAND SIDE-EFFECT-B WRITE1) 
+                       (F-NOR5 FETCH2 SEFA1 SEFB1 RESET0 RESET2))
+              ;;WE-A-REG 
+              (F-NAND (F-NAND DIRECT-A READB1) 
+                      (F-NOR6 FETCH0 REGA READA0 READA3 SEFA0 RESET1))
+              ;;WE-B-REG 
+              (F-NAND (F-NOR4 REGB UPDATE READA2 READB0)
+                      (F-NOR4 READB3 WRITE0 SEFB0 RESET1))
+              ;;WE-I-REG
+              (F-OR FETCH3 RESET1)
+              ;;WE-DATA-OUT
+              (F-OR WRITE0 RESET0)
+              ;;WE-ADDR-OUT
+              (F-NAND (F-NOR3 FETCH0 READA0 READB0)
+                      (F-NOR WRITE0 RESET1))
+              ;;WE-HOLD-
+              (F-OR3 FETCH0 HOLD0 RESET0)
+              ;;WE-PC-REG
+              (F-OR HOLD0 RESET0)
+              ;;DATA-IN-SELECT
+              (F-OR3 FETCH3 READA3 READB3)
+              ;;DEC-ADDR-OUT 
+              (F-NAND (F-NAND PRE-DEC-A READA0) 
+                      (F-NAND PRE-DEC-B (F-OR READB0 WRITE0)))
+              ;;SELECT-IMMEDIATE
+              (F-AND A-IMMEDIATE-P (F-OR REGA READB1))
+              ;;ALU-C 
+              (F$CARRY-IN-HELP (CONS C (CONS ALU-ZERO ALU-OP)))
+              ;;ALU-ZERO
+              ALU-ZERO
+              (APPEND
+               ;;STATE
+               (F$ENCODE-32 ,@statelist)
+               (APPEND
+                ;;WE-FLAGS
+                (FV-IF (F-NOR UPDATE WRITE0)
+                       (MAKE-LIST 4 (THREEFIX RESET0))
+                       SET-FLAGS)
+                (APPEND
+                 ;;REGS-ADDRESS
+                 (FV-IF (F-NAND (F-NOR3 REGA READA0 READA1)
+                                (F-NOR3 READB1 SEFA0 SEFA1))
+                        RN-A
+                        (FV-IF
+                         (F-NAND (F-NOR5 REGB UPDATE READA2 READB0 READB2)
+                                 (F-NOR4 WRITE0 WRITE1 SEFB0 SEFB1))
+                         RN-B
+                         (F$V-IF-F-4 (F-OR RESET0 RESET1)
+                                     (FV-IF RESET2
+                                            (F$V-INC4$V REGS-ADDRESS)
+                                            PC-REG))))
+ 
+                 (APPEND
+                  ;;ALU-OP 
+                  ALU-OP
+                  ;;ALU-MPG
+                  (F$MPG (CONS ALU-ZERO (CONS ALU-SWAP ALU-OP))))))))))))))
+
+(disable f$cv)
+
+(prove-lemma make-list-crock-for-f$cv=cv (rewrite)
+  (implies
+   (boolp v)
+   (equal (make-list 4 v)
+          (if v (list t t t t) (list f f f f))))
+  ;;Hint
+  ((enable open-make-list boolp)))
+
+(disable make-list-crock-for-f$cv=cv)
+
+(prove-lemma f$cv=cv (rewrite)
+  (implies
+   (and (bvp decoded-state) (equal (length decoded-state) 32)
+        (bvp rn-a) (equal (length rn-a) 4)
+        (bvp rn-b) (equal (length rn-b) 4)
+        (bvp op-code) (equal (length op-code) 4)
+        (bvp pc-reg) (equal (length pc-reg) 4)
+        (bvp regs-address) (equal (length regs-address) 4)
+        (bvp set-flags) (equal (length set-flags) 4)
+        (boolp store) (boolp c) (boolp a-immediate-p) (boolp rw-)
+        (boolp direct-a) (boolp side-effect-a) (boolp side-effect-b)
+        (boolp pre-dec-a) (boolp pre-dec-b))
+   (equal (f$cv decoded-state
+                rn-a rn-b op-code
+                pc-reg regs-address set-flags
+                store c a-immediate-p rw-
+                direct-a side-effect-a side-effect-b
+                pre-dec-a pre-dec-b)
+          (cv decoded-state
+              rn-a rn-b op-code
+              pc-reg regs-address set-flags
+              store c a-immediate-p rw-
+              direct-a side-effect-a side-effect-b
+              pre-dec-a pre-dec-b)))
+  ;;Hint
+  ((enable f$cv cv boolp-b-gates if* make-list-crock-for-f$cv=cv)
+   (disable if*-cons if*-c-x-x open-v-threefix)
+   (disable-theory f-gates b-gates)))
+
+(prove-lemma bvp-length-cv (rewrite)
+  (let ((cv (cv decoded-state
+                rn-a rn-b op-code
+                pc-reg regs-address set-flags
+                store c a-immediate-p rw-
+                direct-a side-effect-a side-effect-b
+                pre-dec-a pre-dec-b)))
+    (and
+     (implies
+      (and (equal (length set-flags) 4)
+           (equal (length rn-a) 4)
+           (equal (length rn-b) 4)
+           (equal (length op-code) 4))
+      (equal (length cv) 40))
+     (implies
+      (and (bvp decoded-state)
+           (equal (length decoded-state) 32))
+      (bvp cv))))
+  ;;Hint
+  ((enable cv)))
+
+(prove-lemma properp-length-f$cv (rewrite)
+  (let ((f$cv (f$cv decoded-state
+                    rn-a rn-b op-code
+                    pc-reg regs-address set-flags
+                    store c a-immediate-p rw-
+                    direct-a side-effect-a side-effect-b
+                    pre-dec-a pre-dec-b)))
+    (and
+     (implies
+      (and (equal (length set-flags) 4)
+           (equal (length rn-a) 4)
+           (equal (length rn-b) 4)
+           (equal (length op-code) 4))
+      (equal (length f$cv) 40))
+     (implies
+      (and (properp decoded-state)
+           (equal (length decoded-state) 32))
+      (properp f$cv))))
+  ;;Hint
+  ((enable f$cv)
+   (disable-theory f-gates)))
+
+
+#.`
+(DEFN CV* ()
+  (LIST
+   'CV 
+   (APPEND8 #i(DECODED-STATE 0 32)
+            #i(RN-A 0 4)
+            #i(RN-B 0 4)
+            #i(OP-CODE 0 4)
+            #i(PC-REG 0 4)
+            #i(REGS-ADDRESS 0 4)
+            #i(SET-FLAGS 0 4)
+            '(STORE C A-IMMEDIATE-P RW- DIRECT-A SIDE-EFFECT-A SIDE-EFFECT-B
+                    PRE-DEC-A PRE-DEC-B))
+
+   (APPEND6 '(NEW-RW- STROBE- HDACK- 
+                      WE-REGS WE-A-REG WE-B-REG WE-I-REG
+                      WE-DATA-OUT WE-ADDR-OUT WE-HOLD- WE-PC-REG
+                      DATA-IN-SELECT DEC-ADDR-OUT SELECT-IMMEDIATE
+                      ALU-C ALU-ZERO)
+            #i(STATE 0 5)
+            #i(WE-FLAGS 0 4)
+            #i(NEW-REGS-ADDRESS 0 4)
+            #i(ALU-OP 0 4)
+            #i(ALU-MPG 0 7))
+                  
+   (list
+    ;;  Decoded state
+    ,@(iterate for (state . value) in *control-states*
+        for i from 0
+        collecting `(LIST ',(unstring "G-" state) '(,state) 'ID
+                          (list #i(DECODED-STATE ,i))))
+    ;;  Common subexpressions
+    '(g0 (store-) b-not (store))
+    '(g1 (alu-zero) b-or4 (fetch0 reset0 reset1 reset2))
+    '(g2 (alu-swap) b-or3 (readb2 write1 sefb1))
+    '(g3 (incdeca) b-or (reada1 sefa1))
+    ;;  ALU-OP
+    '(g4 (s4) b-nor4 (fetch2 incdeca alu-swap alu-zero))
+    '(g5 (s5) b-nand (incdeca pre-dec-a))
+    '(g6 (s6) b-nand (alu-swap pre-dec-b))
+    '(g7 (s7) b-nand (s5 s6))
+    (list 'g8 #i(alu-op 0 4) 'select-op-code (list* 's4 's7 #i(op-code 0 4)))
+    ;;G9 was optimized away.
+    ;;RW-
+    '(g10 (s10) b-not (rw-))
+    '(g11 (s11) b-nand (s10 fetch0))
+    '(g12 (s12) b-nor3 (write1 write2 write3))
+    '(g13 (new-rw-) b-and (s11 s12))    
+    ;;STROBE-
+    '(g14 (strobe-) b-nor8
+          (fetch2 fetch3 reada2 reada3 readb2 readb3 write2 write3))
+    ;;HDACK-
+    '(g15 (hdack-) b-not (hold0))
+    ;;G 16 was the old DRIVE-ADDR-OUT.
+    ;;WE-REGS
+    '(g17 (s17) b-nand (store update))
+    '(g18 (s18) b-nand (side-effect-a reada1)) 
+    '(g19 (s19) b-nand3 (store- side-effect-b readb2)) 
+    '(g20 (s20) b-nand (side-effect-b write1)) 
+    '(g21 (s21) b-nor5 (fetch2 sefa1 sefb1 reset0 reset2))
+    '(g22 (we-regs) b-nand5 (s17 s18 s19 s20 s21))
+    ;;WE-A-REG
+    '(g23 (s23) b-nand (direct-a readb1)) 
+    '(g24 (s24) b-nor6 (fetch0 rega reada0 reada3 sefa0 reset1))
+    '(g25 (we-a-reg) b-nand (s23 s24))
+    ;;WE-B-REG
+    '(g26 (s26) b-nor4 (regb update reada2 readb0))
+    '(g27 (s27) b-nor4 (readb3 write0 sefb0 reset1))
+    '(g28 (we-b-reg) b-nand (s26 s27))
+    ;;WE-I-REG
+    '(g29 (we-i-reg) b-or (fetch3 reset1))
+    ;;WE-DATA-OUT
+    '(g30 (we-data-out) b-or (write0 reset0))
+    ;;WE-ADDR-OUT
+    '(g31 (s31) b-nor3 (fetch0 reada0 readb0))
+    '(g32 (s32) b-nor (write0 reset1))
+    '(g33 (we-addr-out) b-nand (s31 s32))
+    ;;WE-HOLD-
+    '(g34 (we-hold-) b-or3 (fetch0 hold0 reset0))
+    ;;WE-PC-REG
+    '(g35 (we-pc-reg) b-or (hold0 reset0))
+    ;;DATA-IN-SELECT
+    '(g36 (data-in-select) b-or3 (fetch3 reada3 readb3))
+    ;;DEC-ADDR-OUT
+    '(g37 (s37) b-nand (pre-dec-a reada0))
+    '(g38 (s38) b-or (readb0 write0))
+    '(g39 (s39) b-nand (pre-dec-b s38))
+    '(g40 (dec-addr-out) b-nand (s37 s39))
+    ;;SELECT-IMMEDIATE
+    '(g41 (s41) b-or (rega readb1)) 
+    '(g42 (select-immediate) b-and (a-immediate-p s41))
+    ;;ALU-C
+    (list 'g43 '(alu-c) 'carry-in-help
+          (cons 'c (cons 'alu-zero #i(alu-op 0 4))))
+    ;;ALU-ZERO (above)
+    ;;STATE
+    (list 'g44 #i(state 0 5) 'encode-32 #i(decoded-state 0 32))
+    ;;WE-FLAGS
+    (list 'g45 #i(fanout-reset0 0 4) 'fanout-4 '(reset0))
+    '(g46 (s46) b-nor (update write0))
+    (list 'g47 #i(we-flags 0 4) #i(tv-if (tree-number (make-tree 4)))
+          (cons 's46 (append #i(fanout-reset0 0 4) #i(set-flags 0 4))))
+    ;;REGS-ADDRESS
+    '(g48 (s48) b-nor3 (rega reada0 reada1))
+    '(g49 (s49) b-nor3 (readb1 sefa0 sefa1))
+    '(g50 (select-rn-a) b-nand (s48 s49))
+    '(g51 (s51) b-nor5 (regb update reada2 readb0 readb2))
+    '(g52 (s52) b-nor4 (write0 write1 sefb0 sefb1))
+    '(g53 (select-rn-b) b-nand (s51 s52))
+    '(g54 (select-all-f) b-or (reset0 reset1))
+    (list 'g55 #i(v-inc-regs-address 0 4) 'v-inc4 #i(regs-address 0 4))
+    (list 'g56 #i(s56 0 4) #i(tv-if (tree-number (make-tree 4)))
+          (cons 'reset2 (append #i(v-inc-regs-address 0 4) #i(pc-reg 0 4))))
+    (list 'g57 #i(s57 0 4) 'v-if-f-4 (cons 'select-all-f #i(s56 0 4)))
+    (list 'g58 #i(s58 0 4) #i(tv-if (tree-number (make-tree 4)))
+          (cons 'select-rn-b (append #i(rn-b 0 4) #i(s57 0 4))))
+    (list 'g59 #i(new-regs-address 0 4) #i(tv-if (tree-number (make-tree 4)))
+          (cons 'select-rn-a (append #i(rn-a 0 4) #i(s58 0 4))))
+    ;;ALU-OP (above)
+    ;;ALU-MPG
+    (list 'g60 #i(alu-mpg 0 7) 'mpg
+          (list* 'alu-zero 'alu-swap #i(alu-op 0 4))))
+   NIL))
+
+(defn cv& (netlist)
+  (and (equal (lookup-module 'cv netlist) (cv*))
+       (let ((netlist (delete-module 'cv netlist)))
+         (and (id& netlist)
+              (b-not& netlist)
+              (b-or& netlist)
+              (b-or3& netlist)
+              (b-or4& netlist)
+              (b-nand& netlist)
+              (b-nand3& netlist)
+              (b-nand5& netlist)
+              (b-nor& netlist)
+              (b-nor3& netlist)
+              (b-nor4& netlist)
+              (b-nor5& netlist)
+              (b-nor6& netlist)
+              (b-nor8& netlist)
+              (b-and& netlist)
+              (select-op-code& netlist)
+              (tv-if& netlist (make-tree 4))
+              (carry-in-help& netlist)
+              (encode-32& netlist)
+              (fanout-4& netlist)
+              (v-inc4& netlist)
+              (v-if-f-4& netlist)
+              (mpg& netlist)))))
+
+(disable cv&)
+
+(defn cv$netlist ()
+  (cons (cv*)
+        (union (union (union (union (union (id$netlist)
+                                           (b-not$netlist))
+                                    (union (b-or$netlist)
+                                           (union (b-or3$netlist)
+                                                  (b-or4$netlist))))
+                             (union (union (b-nand$netlist)
+                                           (b-nand3$netlist))
+                                    (union (b-nor$netlist)
+                                           (b-nor3$netlist))))
+                      (union (union (union (b-nor4$netlist)
+                                           (b-nor5$netlist))
+                                    (union (b-nor6$netlist)
+                                           (b-nor8$netlist)))
+                             (union (union (b-and$netlist)
+                                           (select-op-code$netlist))
+                                    (union (tv-if$netlist (make-tree 4))
+                                           (carry-in-help$netlist)))))
+               (union (union (union (encode-32$netlist)
+                                    (fanout-4$netlist))
+                             (union (v-inc4$netlist)
+                                    (v-if-f-4$netlist)))
+                      (union (mpg$netlist)
+                             (b-nand5$netlist))))))
+
+(prove-lemma check-cv$netlist ()
+  (cv& (cv$netlist)))
+
+(prove-lemma cv$value (rewrite)
+  (implies
+   (and (cv& netlist)
+        (properp decoded-state) (equal (length decoded-state) 32)
+        (properp rn-a) (equal (length rn-a) 4)
+        (properp rn-b) (equal (length rn-b) 4)
+        (properp op-code) (equal (length op-code) 4)
+        (properp pc-reg) (equal (length pc-reg) 4)
+        (properp regs-address) (equal (length regs-address) 4)
+        (properp set-flags) (equal (length set-flags) 4))
+   (equal (dual-eval 0 'cv
+                     (append
+                      decoded-state
+                      (append
+                       rn-a
+                       (append
+                        rn-b
+                        (append
+                         op-code
+                         (append
+                          pc-reg
+                          (append
+                           regs-address
+                           (append
+                            set-flags
+                            (list store c a-immediate-p rw- direct-a
+                                  side-effect-a side-effect-b
+                                  pre-dec-a pre-dec-b))))))))
+                     state netlist)
+          (f$cv decoded-state
+                rn-a rn-b op-code
+                pc-reg regs-address set-flags
+                store c a-immediate-p rw-
+                direct-a side-effect-a side-effect-b
+                pre-dec-a pre-dec-b)))
+  ;;Hint
+  ((enable f$cv cv&
+           id$value b-not$value b-or$value b-or3$value b-or4$value b-nand$value
+           b-nand5$value b-nand3$value b-nor$value b-nor3$value b-nor4$value
+           b-nor5$value b-nor6$value b-nor8$value b-and$value
+           select-op-code$value tv-if$value carry-in-help$value
+           encode-32$value-on-a-vector
+           fanout-4$value
+           v-inc4$value v-if-f-4$value mpg$value)
+   (disable f-gates=b-gates open-indices *1*indices indices mpg *1*mpg
+            encode-32 *1*encode-32 tree-number *1*tree-number
+            make-tree *1*make-tree)
+   (disable-theory f-gates)))
+
+(disable cv$value)
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    NEXT-CNTL-STATE
+;;;
+;;;    The control logic.
+;;;    
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn next-cntl-state (reset- dtack- hold- rw-
+                             state i-reg flags pc-reg regs-address)
+  #.(control-let
+     ;;  This forces an illegal state if RESET- is asserted, thus sending the
+     ;;  machine to RESET0.
+     '(let ((decoded-state (decode-5 (v-if reset- state (v_v11111)))))
+        (let ((next-state
+               (next-state decoded-state store set-some-flags unary direct-a
+                           direct-b side-effect-a side-effect-b
+                           all-t-regs-address dtack- hold-)))
+          (cv next-state
+              rn-a rn-b op-code
+              pc-reg regs-address set-flags
+              store c a-immediate-p rw-
+              direct-a side-effect-a side-effect-b
+              pre-dec-a pre-dec-b)))))
+
+(disable next-cntl-state)
+
+(prove-lemma bvp-length-next-cntl-state (rewrite)
+  (and
+   (equal (length (next-cntl-state
+                   reset- dtack- hold- rw-
+                   state i-reg flags pc-reg regs-address))
+          40)
+   (bvp (next-cntl-state
+         reset- dtack- hold- rw-
+         state i-reg flags pc-reg regs-address)))
+  ;;Hint
+  ((enable next-cntl-state)))
+
+(defn f$next-cntl-state (reset- dtack- hold- rw-
+                                state i-reg flags pc-reg regs-address)
+  (let ((control-let (f$control-let i-reg flags regs-address))
+        (set-flags (set-flags i-reg))
+        (op-code (op-code i-reg))
+        (rn-a (rn-a i-reg))
+        (rn-b (rn-b i-reg)))
+    (let
+      ((a-immediate-p      (car control-let))
+       (store              (cadr control-let))
+       (set-some-flags     (caddr control-let))
+       (direct-a           (cadddr control-let))
+       (direct-b           (caddddr control-let))
+       (unary              (cadddddr control-let))
+       (pre-dec-a          (caddddddr control-let))
+       (pre-dec-b          (cadddddddr control-let))
+       (c                  (caddddddddr control-let))
+       (all-t-regs-address (cadddddddddr control-let))
+       (side-effect-a      (caddddddddddr control-let))
+       (side-effect-b      (cadddddddddddr control-let)))
+      ;;  this forces an illegal state if reset- is asserted, thus sending the
+      ;;  machine to reset0.
+      (let ((decoded-state (f$decode-5 (fv-or
+                                        (make-list 5 (f-not reset-))
+                                        state))))
+        (let ((next-state
+               (f$next-state decoded-state store set-some-flags unary direct-a
+                             direct-b side-effect-a side-effect-b
+                             all-t-regs-address dtack- hold-)))
+          (f$cv next-state
+                rn-a rn-b op-code
+                pc-reg regs-address set-flags
+                store c a-immediate-p rw-
+                direct-a side-effect-a side-effect-b
+                pre-dec-a pre-dec-b))))))
+
+(disable f$next-cntl-state)
+
+(prove-lemma properp-length-f$next-cntl-state (rewrite)
+  (and
+   (equal (length (f$next-cntl-state
+                   reset- dtack- hold- rw-
+                   state i-reg flags pc-reg regs-address))
+          40)
+   (properp (f$next-cntl-state
+             reset- dtack- hold- rw-
+             state i-reg flags pc-reg regs-address)))
+  ;;Hint
+  ((enable f$next-cntl-state)
+   (disable-theory f-gates)))
+
+(prove-lemma v-or-crock-for-f$next-cntl-state (rewrite)
+  (implies
+   (and (equal (length state) 5)
+        (bvp state))
+   (and (equal (v-or (list f f f f f) state)
+               state)
+        (equal (v-or (list t t t t t) state)
+               (list t t t t t))))
+  ;;Hint
+  ((enable v-or equal-length-add1)))
+
+(disable v-or-crock-for-f$next-cntl-state)
+
+(prove-lemma f$next-cntl-state=next-cntl-state (rewrite)
+  (implies
+   (and (boolp reset-) (boolp dtack-) (boolp hold-) (boolp rw-)
+        (bvp state) (equal (length state) 5)
+        (bvp i-reg) (equal (length i-reg) 32)
+        (bvp flags) (equal (length flags) 4)
+        (bvp pc-reg) (equal (length pc-reg) 4)
+        (bvp regs-address) (equal (length regs-address) 4))
+   (equal (f$next-cntl-state
+             reset- dtack- hold- rw-
+             state i-reg flags pc-reg regs-address)
+          (next-cntl-state
+             reset- dtack- hold- rw-
+             state i-reg flags pc-reg regs-address)))
+  ;;Hint
+  ((enable f$next-cntl-state next-cntl-state boolp-b-gates
+           fv-if-rewrite v_v11111 v-or-crock-for-f$next-cntl-state)
+   (disable next-state)
+   (enable-theory ir-fields-theory)
+   (disable-theory f-gates)))
+
+(defn next-cntl-state* ()
+  (list
+   'next-cntl-state
+   (append6 '(reset- dtack- hold- rw-)
+            #i(state 0 5)
+            #i(i-reg 0 32)
+            #i(flags 0 4)
+            #i(pc-reg 0 4)
+            #i(regs-address 0 4))
+   #i(next-cntl-state 0 40)
+   (list
+    ;;  Decoded control lines.
+    (list 'control-signals
+          '(a-immediate-p store set-some-flags direct-a direct-b unary
+                          pre-dec-a pre-dec-b c all-t-regs-address
+                          side-effect-a side-effect-b)
+          'control-let
+          (append #i(i-reg 0 32) (append #i(flags 0 4) #i(regs-address 0 4))))
+    ;;  Illegal state on RESET.
+    (list 'not-reset
+          '(reset)
+          'b-not
+          '(reset-))
+    (list 'reset5x
+          #i(reset5x 0 5)
+          'fanout-5
+          '(reset))
+    (list 'xstate
+          #i(xstate 0 5)
+          #i(v-or 5)
+          (append #i(reset5x 0 5) #i(state 0 5)))
+    ;;  The decoded state.
+    (list 'dstate
+          #i(decoded-state 0 32)
+          'decode-5
+          #i(xstate 0 5))
+    ;;  The next state
+    (list 'nxstate
+          #i(next-state 0 32)
+          'next-state
+          (append #i(decoded-state 0 32)
+                  '(store set-some-flags unary direct-a direct-b
+                          side-effect-a side-effect-b all-t-regs-address
+                          dtack- hold-)))
+    ;;  The control vector.
+    (list 'cvector
+          #i(next-cntl-state 0 40)
+          'cv
+          (append8 #i(next-state 0 32)
+                   (rn-a #i(i-reg 0 32))
+                   (rn-b #i(i-reg 0 32))
+                   (op-code #i(i-reg 0 32))
+                   #i(pc-reg 0 4)
+                   #i(regs-address 0 4)
+                   (set-flags #i(i-reg 0 32))
+                   '(store c a-immediate-p rw- direct-a
+                           side-effect-a side-effect-b
+                           pre-dec-a pre-dec-b))))
+   nil))
+          
+(defn next-cntl-state& (netlist)
+  (and (equal (lookup-module 'next-cntl-state netlist)
+              (next-cntl-state*))
+       (let ((netlist (delete-module 'next-cntl-state netlist)))
+         (and (control-let& netlist)
+              (b-not& netlist)
+              (fanout-5& netlist)
+              (v-or& netlist 5)
+              (decode-5& netlist)
+              (next-state& netlist)
+              (cv& netlist)))))
+
+(disable next-cntl-state&)
+
+(defn next-cntl-state$netlist ()
+  (cons (next-cntl-state*)
+        (union (union (union (union (control-let$netlist)
+                                    (b-not$netlist))
+                             (union (fanout-5$netlist)
+                                    (v-or$netlist 5)))
+                      (union (decode-5$netlist)
+                             (next-state$netlist)))
+               (cv$netlist))))
+
+(prove-lemma check-next-cntl-state$netlist ()
+  (next-cntl-state& (next-cntl-state$netlist)))
+
+(prove-lemma next-cntl-state$value (rewrite)
+  (implies
+   (and (next-cntl-state& netlist)
+        (properp state) (equal (length state) 5)
+        (properp i-reg) (equal (length i-reg) 32)
+        (properp flags) (equal (length flags) 4)
+        (properp pc-reg) (equal (length pc-reg) 4)
+        (properp regs-address) (equal (length regs-address) 4))
+   (equal (dual-eval 0 'next-cntl-state
+                     (list* reset- dtack- hold- rw-
+                            (append
+                             state
+                             (append
+                              i-reg
+                              (append flags (append pc-reg regs-address)))))
+                     dual-eval-state netlist)
+          (f$next-cntl-state reset- dtack- hold- rw-
+                             state i-reg flags pc-reg regs-address)))
+  ;;Hint
+  ((enable next-cntl-state& f$next-cntl-state
+           control-let$value b-not$value fanout-5$value v-or$value
+           decode-5$value next-state$value cv$value
+           c-flag v_v11111)
+   (enable-theory ir-fields-theory)
+   (disable indices *1*indices open-indices decode-5 *1*decode-5
+            cv *1*cv f$next-state *1*f$next-state)))
+
+(disable next-cntl-state$value)
+
+;;;  This macro generates that lemmas that prove that the control logic
+;;;  produces the desired control vectors.
+
+(generate-next-cntl-state-lemmas)

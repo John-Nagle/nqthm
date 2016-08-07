@@ -1,0 +1,26 @@
+(load "fortran-vcg.lsp")
+(compile-file "fortran-vcg.lsp")
+(load "fortran-vcg")
+(load "fortran.events")
+
+(note-lib "fortran")
+(load "fsrch.lsp")
+(add-fsrch)
+(note-lib "fortran")
+(load "fsrch.vcs")
+(do-events vcs)
+
+
+(note-lib "fortran")
+(load "mjrty.lsp")
+(add-mjrty)
+(note-lib "fortran")
+(load "mjrty.vcs")
+(do-events vcs)
+
+(note-lib "fortran")
+(load "isqrt.lsp")
+(add-isqrt)
+(note-lib "fortran")
+(load "fsrch.vcs")
+(do-events vcs)

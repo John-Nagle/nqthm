@@ -1,0 +1,625 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;    HIGH-LEVEL-SPEC.EVENTS
+;;;
+;;;    Bishop C. Brock & Warren A. Hunt, Jr.
+;;;
+;;;    This file contains the minimal set of events necessary to define the
+;;;    high-level specification for the FM9001, FM9001-INTERPRETER.  The events
+;;;    are presented in a top-down fashion.  A Common Lisp "wrapper" around the
+;;;    events allows this file to be loaded as-is into an Nqthm session.  After
+;;;    loading this file, one is able to execute the instruction-interpreter
+;;;    model of the FM9001.
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;  A reader macro for bit vectors.
+
+(defun bit-vector-reader (stream subchar arg)
+  ;;  We "unread" the vector character, and reread to get a symbol.  Otherwise
+  ;;  the number following the vector character might be read as a leading zero
+  ;;  integer. 
+  (unread-char #\v stream)
+  (let ((symbol (read stream t nil t)))
+    ;;  Get rid of the vector character, reverse, and list for NQTHM.
+    `(LIST ,@(map 'list #'(lambda (x)
+                            (if (equal x #\1)
+                                't
+                              (if (equal x #\0)
+                                  'f
+                                (error "Non-binary digits in --> ~s."
+                                       symbol))))
+                  (reverse (subseq (symbol-name symbol) 1))))))
+
+(eval-when (load eval)
+  (set-dispatch-macro-character #\# #\v #'bit-vector-reader))
+
+#.`(PROGN ,@(reverse '(
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;  The FM9001 instruction interpreter.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  FM9001-INTERPRETER -- Simulates N instructions with any 4-bit PC.
+
+(defn FM9001-interpreter (state pc-reg n)
+  (if (zerop n)
+      state
+    (FM9001-interpreter (FM9001-step state pc-reg) pc-reg (sub1 n))))
+
+;;;  FM9001 -- Simulates N instructions, using register 15 as the PC.
+
+(defn FM9001 (state n)
+  (if (zerop n)
+      state
+    (FM9001 (FM9001-step state (nat-to-v 15 (reg-size))) (sub1 n))))
+
+;;;  FM9001-STEP -- Unpacks the state.
+
+(defn FM9001-step (state pc-reg)
+  (let ((p-state (car state))
+        (mem     (cadr state)))
+    (FM9001-fetch (regs p-state) (flags p-state) mem pc-reg)))
+
+(defn regs  (state) (nth 0 state))
+(defn flags (state) (nth 1 state))
+
+;;;  FM9001-FETCH -- Fetches the instruction and increments the PC.
+
+(defn FM9001-FETCH (regs flags mem pc-reg)
+  (let ((pc (read-mem pc-reg regs)))
+    (let ((ins (read-mem pc mem)))
+      (let ((pc+1 (v-inc pc)))
+        (let ((new-regs (write-mem pc-reg regs pc+1)))
+          (FM9001-operand-a new-regs flags mem ins))))))
+
+;;;  FM9001-OPERAND-A -- Readies the A operand, and side-effects the operand A
+;;;  register. 
+
+(defn fm9001-operand-a (regs flags mem ins)
+  (let ((a-immediate-p (a-immediate-p ins))
+        (a-immediate   (sign-extend (a-immediate ins) 32))
+        (mode-a        (mode-a ins))
+        (rn-a          (rn-a  ins)))
+    (let ((reg (read-mem rn-a regs)))
+      (let ((reg- (v-dec reg))
+            (reg+ (v-inc reg)))
+        (let ((operand-a (if a-immediate-p
+                             a-immediate
+                           (if (reg-direct-p mode-a)
+                               reg
+                             (if (pre-dec-p mode-a)
+                                 (read-mem reg- mem)
+                               (read-mem reg mem))))))
+          (let ((new-regs (if a-immediate-p
+                              regs
+                            (if (pre-dec-p mode-a)
+                                (write-mem rn-a regs reg-)
+                              (if (post-inc-p mode-a)
+                                  (write-mem rn-a regs reg+)
+                                regs)))))
+
+            (FM9001-operand-b new-regs flags mem ins operand-a)))))))
+
+
+
+
+
+;;;  FM9001-OPERAND-B -- Readies the B operand, and side-effects the operand B
+;;;  register.  The B-ADDRESS is held for the final stage.
+
+(defn fm9001-operand-b (regs flags mem ins operand-a)
+  (let ((mode-b (mode-b ins))
+        (rn-b   (rn-b  ins)))
+    (let ((reg (read-mem rn-b regs)))
+      (let ((reg- (v-dec reg))
+            (reg+ (v-inc reg)))
+        (let ((b-address (if (pre-dec-p mode-b)
+                             reg-
+                           reg)))
+          (let ((operand-b (if (reg-direct-p mode-b)
+                               reg
+                             (read-mem b-address mem)))
+                (new-regs (if (pre-dec-p mode-b)
+                              (write-mem rn-b regs reg-)
+                            (if (post-inc-p mode-b)
+                                (write-mem rn-b regs reg+)
+                              regs))))
+          
+            (FM9001-alu-operation new-regs flags mem ins operand-a operand-b
+                                  b-address)))))))
+
+;;; FM9001-ALU-OPERATION -- Computes, and conditionally stores the result.
+
+(defn fm9001-alu-operation (regs flags mem ins operand-a operand-b b-address)
+  (let ((op-code   (op-code ins))
+        (store-cc  (store-cc ins))
+        (set-flags (set-flags ins))
+        (mode-b    (mode-b   ins))
+        (rn-b      (rn-b    ins)))
+    (let ((cvzbv  (v-alu (c-flag flags) operand-a operand-b op-code))
+          (storep (store-resultp store-cc flags)))
+      (let ((bv (bv cvzbv)))
+        (let ((new-regs   (if (and storep (reg-direct-p mode-b))
+                              (write-mem rn-b regs bv)
+                            regs))
+              (new-flags  (update-flags flags set-flags cvzbv))
+              (new-mem    (if (and storep (not (reg-direct-p mode-b)))
+                              (write-mem b-address mem bv)
+                            mem)))
+
+          (list (list new-regs new-flags) new-mem))))))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Condition Codes
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  Interpretation of STORE-CC
+
+(defn store-resultp (store-cc flags)
+  (let ((c (c-flag flags))
+        (v (v-flag flags))
+        (n (n-flag flags))
+        (z (z-flag flags)))
+    (let ((c~ (not c))
+          (v~ (not v))
+          (n~ (not n))
+          (z~ (not z)))
+
+      (cond ((equal store-cc #v0000) c~)
+            ((equal store-cc #v0001) c)
+            ((equal store-cc #v0010) v~)
+            ((equal store-cc #v0011) v)
+            ((equal store-cc #v0100) n~)
+            ((equal store-cc #v0101) n)
+            ((equal store-cc #v0110) z~)
+            ((equal store-cc #v0111) z)
+            ((equal store-cc #v1000) (and c~ z~))
+            ((equal store-cc #v1001) (or c z))
+            ((equal store-cc #v1010) (or (and n v) (and n~ v~)))
+            ((equal store-cc #v1011) (or (and n v~) (and n~ v)))
+            ((equal store-cc #v1100) (or (and n v z~) (and n~ v~ z~)))
+            ((equal store-cc #v1101) (or z (and n v~) (and n~ v)))
+            ((equal store-cc #v1110) t)
+            (t                       f)))))
+
+;;  UPDATE-FLAGS set-flags cvzbv
+
+(defn update-flags (flags set-flags cvzbv)
+  (list (b-if (z-set set-flags) (zb cvzbv) (z-flag flags))
+        (b-if (n-set set-flags) (n  cvzbv) (n-flag flags))
+        (b-if (v-set set-flags) (v  cvzbv) (v-flag flags))
+        (b-if (c-set set-flags) (c  cvzbv) (c-flag flags))))
+
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Instruction Word Decoding
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  Instruction Fields
+
+(defn reg-size () 4)
+
+(defn a-immediate   (instruction) (subrange instruction 0 8))
+(defn rn-a          (instruction) (subrange instruction 0 3))
+(defn mode-a        (instruction) (subrange instruction 4 5))
+(defn a-immediate-p (instruction) (nth 9 instruction))
+(defn rn-b          (instruction) (subrange instruction 10 13))
+(defn mode-b        (instruction) (subrange instruction 14 15))
+(defn set-flags     (instruction) (subrange instruction 16 19))
+(defn store-cc      (instruction) (subrange instruction 20 23))
+(defn op-code       (instruction) (subrange instruction 24 27))
+
+;;;  SET-FLAGS fields
+
+(defn z-set (set-flags) (nth 0 set-flags))
+(defn n-set (set-flags) (nth 1 set-flags))
+(defn v-set (set-flags) (nth 2 set-flags))
+(defn c-set (set-flags) (nth 3 set-flags))
+
+;;;  Flags fields
+
+(defn z-flag (flags) (nth 0 flags))
+(defn n-flag (flags) (nth 1 flags))
+(defn v-flag (flags) (nth 2 flags))
+(defn c-flag (flags) (nth 3 flags))
+
+;;  Register Modes.
+
+(defn reg-direct-p   (mode) (equal mode #v00))
+(defn reg-indirect-p (mode) (equal mode #v01))
+(defn pre-dec-p      (mode) (equal mode #v10))
+(defn post-inc-p     (mode) (equal mode #v11))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Memory Model
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;    READ-MEM v-addr mem
+
+(defn read-mem (v-addr mem)
+  (read-mem1 (reverse v-addr) mem))
+
+(defn read-mem1 (v-addr mem)
+  (if (stubp mem)
+      (stub-guts mem)
+      (if (nlistp v-addr)
+          (cond ((ramp mem) (ram-guts mem))
+                ((romp mem) (rom-guts mem))
+                (t 0))
+          (if (nlistp mem)
+              0
+              (if (car v-addr)
+                  (read-mem1 (cdr v-addr) (cdr mem))
+                  (read-mem1 (cdr v-addr) (car mem)))))))
+
+;;;   WRITE-MEM v-addr mem
+
+(defn write-mem (v-addr mem value)
+  (write-mem1 (reverse v-addr) mem value))
+
+(defn write-mem1 (v-addr mem value)
+  (if (stubp mem)
+      mem
+      (if (nlistp v-addr)
+          (cond ((ramp mem) (ram value))
+                (t mem))
+          (if (nlistp mem)
+              mem
+              (if (car v-addr)
+                  (cons (car mem)
+                        (write-mem1 (cdr v-addr) (cdr mem) value))
+                  (cons (write-mem1 (cdr v-addr) (car mem) value)
+                        (cdr mem)))))))
+
+
+;;;   Memory elements
+
+(add-shell rom () romp
+  ((rom-guts (none-of) zero)))
+
+(add-shell ram () ramp
+  ((ram-guts (none-of) zero)))
+
+(add-shell stub () stubp
+  ((stub-guts (none-of) zero)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    High-Level ALU Specification
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  The programmers view of the ALU.
+
+(defn v-alu (c a b op)
+  (cond ((equal op #v0000) (cvzbv f f (v-buf a)))
+        ((equal op #v0001) (cvzbv-inc a))                   
+        ((equal op #v0010) (cvzbv-v-adder c a b))           
+        ((equal op #v0011) (cvzbv-v-adder f a b))           
+        ((equal op #v0100) (cvzbv-neg a))                   
+        ((equal op #v0101) (cvzbv-dec a))                   
+        ((equal op #v0110) (cvzbv-v-subtracter c a b))      
+        ((equal op #v0111) (cvzbv-v-subtracter f a b))      
+        ((equal op #v1000) (cvzbv-v-ror c a))               
+        ((equal op #v1001) (cvzbv-v-asr a))   
+        ((equal op #v1010) (cvzbv-v-lsr a))
+        ((equal op #v1011) (cvzbv f f (v-xor a b)))         
+        ((equal op #v1100) (cvzbv f f (v-or  a b)))
+        ((equal op #v1101) (cvzbv f f (v-and a b)))         
+        ((equal op #v1110) (cvzbv-v-not a))           
+        (t                 (cvzbv f f (v-buf a)))))
+
+;;;  Specification abbreviations for V-ALU.
+
+(defn cvzbv-inc (a)
+  (cvzbv-v-adder t a (nat-to-v 0 (length a))))
+
+(defn cvzbv-neg (a)
+  (cvzbv-v-subtracter f a (nat-to-v 0 (length a))))
+
+(defn cvzbv-dec (a)
+  (cvzbv-v-subtracter t (nat-to-v 0 (length a)) a))
+
+(defn cvzbv-v-adder (c a b)
+  (cvzbv (v-adder-carry-out c a b)
+         (v-adder-overflowp c a b)
+         (v-adder-output    c a b)))
+
+(defn cvzbv-v-subtracter (c a b)
+  (cvzbv (v-subtracter-carry-out c a b)
+         (v-subtracter-overflowp c a b)
+         (v-subtracter-output    c a b)))
+
+(defn cvzbv-v-not (a)
+  (cvzbv f f (v-not a)))
+
+(defn cvzbv-v-ror (c a)
+  (cvzbv (if (nlistp a) c (nth 0 a)) f (v-ror a c)))
+
+(defn cvzbv-v-asr (a)
+  (cvzbv (if (listp a) (nth 0 a) f) f (v-asr a)))
+
+(defn cvzbv-v-lsr (a)
+  (cvzbv (if (listp a) (nth 0 a) f) f (v-lsr a)))
+
+
+
+
+
+;;;  The constructor CVZBV
+
+(defn cvzbv (carry overflow vector)
+  (cons carry (cons overflow (cons (v-zerop vector) vector))))
+
+(defn c (cvzbv)  (car cvzbv))
+(defn v (cvzbv)  (cadr cvzbv))
+(defn n (cvzbv)  (v-negp (bv cvzbv)))
+(defn bv (cvzbv) (cdddr cvzbv))
+(defn zb (cvzbv) (caddr cvzbv))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Low Level ALU Specification
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;;  Flag Functions
+
+(defn v-zerop (x)
+  (not (v-nzerop x)))
+
+(defn v-nzerop (x)
+  (if (nlistp x)
+      f
+      (or (car x)
+          (v-nzerop (cdr x)))))
+
+(defn v-negp (x)
+  (if (nlistp x)
+      f
+      (if (nlistp (cdr x))
+          (car x)
+          (v-negp (cdr x)))))
+
+
+;;;  Addition and Subtraction
+
+(defn v-dec (x)
+  (v-subtracter-output t (nat-to-v 0 (length x)) x))
+
+(defn v-subtracter-output (c a b)
+  (v-adder-output (b-not c) (v-not a) b))
+
+(defn v-subtracter-carry-out (c a b)
+  (b-not (v-adder-carry-out (b-not c) (v-not a) b)))
+
+(defn v-subtracter-overflowp (c a b)
+  (v-adder-overflowp (b-not c) (v-not a) b))
+
+(defn v-inc (x)
+  (v-adder-output t x (nat-to-v 0 (length x))))
+
+(defn v-adder-overflowp (c a b)
+  (b-and (b-equv (nth (sub1 (length a)) a)
+                 (nth (sub1 (length b)) b))
+         (b-xor (nth (sub1 (length a)) a)
+                (nth (sub1 (length a)) (v-adder-output c a b)))))
+
+(defn v-adder-carry-out (c a b)
+  (nth (length a) (v-adder c a b)))
+
+(defn v-adder-output (c a b)
+  (firstn (length a) (v-adder c a b)))
+
+(defn v-adder (c a b)
+  (if (nlistp a)
+      (cons (boolfix c) nil)
+    (cons (b-xor3 c (car a) (car b))
+          (v-adder (b-or (b-and (car a) (car b))
+                         (b-or (b-and (car a) c)
+                               (b-and (car b) c)))
+                   (cdr a)
+                   (cdr b)))))
+
+;;;  Logical Functions
+
+(defn v-not (x)
+  (if (nlistp x)
+      nil
+    (cons (b-not (car x))
+          (v-not (cdr x)))))
+
+(defn v-and (x y)
+  (if (nlistp x)
+      nil
+    (cons (b-and (car x) (car y))
+          (v-and (cdr x) (cdr y)))))
+
+(defn v-or (x y)
+  (if (nlistp x)
+      nil
+    (cons (b-or (car x) (car y))
+          (v-or (cdr x) (cdr y)))))
+
+(defn v-xor (x y)
+  (if (nlistp x)
+      nil
+    (cons (b-xor (car x) (car y))
+          (v-xor (cdr x) (cdr y)))))
+
+(defn v-lsr (a)
+  (v-shift-right a f))
+
+(defn v-ror (a si)
+  (v-shift-right a si))
+
+(defn v-asr (a)
+  (v-shift-right a (nth (sub1 (length a)) a)))
+
+(defn v-shift-right (a si)
+  (if (nlistp a)
+      nil
+    (append (v-buf (cdr a))
+            (cons (boolfix si) nil))))
+
+(defn v-buf (x)
+  (if (nlistp x)
+      nil
+    (cons (b-buf (car x))
+          (v-buf (cdr x)))))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    List Operations and Misc.
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn properp (l)
+  (if (listp l)
+      (properp (cdr l))
+    (equal l nil)))
+
+(defn nat-to-v (x n)
+  (if (zerop n)
+      nil
+    (cons (not (zerop (remainder x 2)))
+          (nat-to-v (quotient x 2) (sub1 n)))))
+
+(defn sign-extend (v n)
+  (if (zerop n)
+      nil
+    (if (nlistp v)
+        (make-list n f)
+      (if (nlistp (cdr v))
+          (cons (boolfix (car v)) (make-list (sub1 n) (boolfix (car v))))
+        (cons (boolfix (car v)) (sign-extend (cdr v) (sub1 n)))))))
+
+(defn firstn (n l)
+  (if (listp l)
+      (if (zerop n)
+          nil
+        (cons (car l) (firstn (sub1 n) (cdr l))))
+    nil))
+
+(defn restn (n l)
+  (if (listp l)
+      (if (zerop n)
+          l
+        (restn (sub1 n) (cdr l)))
+    l))
+
+(defn nth (n list)
+  (if (zerop n)
+      (car list)
+    (nth (sub1 n) (cdr list))))
+
+(defn length (l)
+  (if (listp l)
+      (add1 (length (cdr l)))
+    0))
+
+(defn make-list (n value)
+  (if (zerop n)
+      nil
+    (cons value (make-list (sub1 n) value))))
+
+(defn subrange (l n m)
+  (if (lessp m n)
+      nil
+    (if (zerop n)
+        (if (zerop m)
+            (list (car l))
+          (cons (car l) (subrange (cdr l) 0 (sub1 m))))
+      (subrange (cdr l) (sub1 n) (sub1 m)))))
+
+(defn reverse (x)
+  (rev1 x nil))
+
+(defn rev1 (x sponge)
+  (if (nlistp x)
+      sponge
+      (rev1 (cdr x) (cons (car x) sponge))))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Boolean Logic
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(defn boolfix (x)
+  (if x t f))
+
+(defn b-buf  (x)     (if x t f))
+(defn b-not  (x)     (not x))
+(defn b-nand (a b)   (not (and a b)))
+(defn b-or   (a b)   (or a b))
+(defn b-xor3 (a b c) (b-xor (b-xor a b) c))
+(defn b-xor  (x y)   (if x (if y f t) (if y t f)))
+(defn b-equv (x y)   (if x (if y t f) (if y f t)))
+(defn b-and  (a b)   (and a b))
+(defn b-nor  (a b)   (not (or a b)))
+(defn b-if   (c a b) (if c (if a t f) (if b t f)))
+
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;;;
+;;;    Nqthm Built-ins
+;;;
+;;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#|
+(defn append (x y)
+  (if (listp x)
+      (cons (car x) (append (cdr x) y))
+    y))
+
+(defn remainder (i j)
+  (if (zerop j)
+      (fix i)
+    (if (lessp i j)
+        (fix i)
+      (remainder (difference i j) j))))
+
+(defn quotient (i j)
+  (if (zerop j)
+      0
+    (if (lessp i j)
+        0
+      (add1 (quotient (difference i j) j)))))
+
+(defn difference (i j)
+  (if (zerop i)
+      0
+    (if (zerop j)
+        i
+      (difference (sub1 i) (sub1 j)))))
+
+(defn zerop (x)
+      (if (equal x 0)
+          t
+          (if (numberp x) f t)))
+
+(defn lessp (x y)
+  (if (or (equal y 0) (not (numberp y)))
+      (false)
+    (if (or (equal x 0) (not (numberp x)))
+        (true)
+      (lessp (sub1 x) (sub1 y)))))
+|#
+
+;;;  closing #. above
+
+)))

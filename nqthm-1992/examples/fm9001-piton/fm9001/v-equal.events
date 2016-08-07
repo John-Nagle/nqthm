@@ -1,0 +1,73 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    V-EQUAL.EVENTS
+;;;
+;;;  An n-bit equality circuit -- An XOR vector and a zero detector.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(module-generator
+ (v-equal* n)
+ (index 'V-EQUAL n)
+ (append (indices 'A 0 n) (indices 'B 0 n))
+ '(EQUAL)
+ (list
+  (list 'G0
+        (indices 'X 0 n)
+        (index 'V-XOR n)
+        (append (indices 'A 0 n) (indices 'B 0 n)))
+  (list 'G1
+        '(EQUAL)
+        (index 'TV-ZEROP (tree-number (make-tree n)))
+        (indices 'X 0 n)))
+ nil)
+
+(defn v-equal& (netlist n)
+  (and (equal (lookup-module (index 'V-EQUAL n) netlist)
+              (v-equal* n))
+       (let ((netlist (delete-module (index 'V-EQUAL n) netlist)))
+         (and (v-xor& netlist n)
+              (tv-zerop& netlist (make-tree n)))))) 
+
+(disable v-equal&)                
+
+(defn v-equal$netlist (n)
+  (cons (v-equal* n)
+        (union (v-xor$netlist n)
+               (tv-zerop$netlist (make-tree n)))))
+
+(defn f$v-equal (a b)
+  (f$tv-zerop (fv-xor a b) (make-tree (length a))))
+
+(disable f$v-equal)
+
+(prove-lemma v-equal$value (rewrite)
+  (implies
+   (and (v-equal& netlist n)
+        (not (zerop n))
+        (properp a) (properp b)
+        (equal (length a) n)
+        (equal (length b) n))
+   (equal (dual-eval 0 (index 'V-EQUAL n) (append a b) state netlist)
+          (list (f$v-equal a b))))
+  ;;Hint
+  ((enable v-equal& v-xor$value tv-zerop$value v-equal*$destructure
+           f$v-equal)
+   (disable open-indices)))
+
+(disable v-equal$value)
+
+(prove-lemma f$v-equal=equal* (rewrite)
+  (implies
+   (and (not (zerop (length a)))
+        (bvp a)
+        (bvp b)
+        (equal (length a) (length b)))
+   (equal (f$v-equal a b)
+          (equal a b)))
+  ;;Hint
+  ((enable f$v-equal)))

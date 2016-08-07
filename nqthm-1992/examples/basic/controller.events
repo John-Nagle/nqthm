@@ -1,0 +1,300 @@
+#|
+
+ Copyright (C) 1994 by Robert S. Boyer, J Strother Moore, and Mike Green.  All
+ Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Robert S. Boyer, J Strother Moore, and Mike Green PROVIDE ABSOLUTELY NO
+ WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
+ EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE
+ ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SCRIPT IS WITH YOU.
+ SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY
+ SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Robert S. Boyer, J Strother Moore, or Mike Green BE LIABLE
+ TO YOU FOR ANY DAMAGES, ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL,
+ INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE
+ THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED
+ INACCURATE OR LOSSES SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US
+ OF THE POSSIBILITY OF SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.''
+
+|#
+
+(NOTE-LIB "fortran" T)
+(COMPILE-UNCOMPILED-DEFNS "tmp")
+(PROVE-LEMMA ZPLUS-COMM1 (REWRITE)
+             (EQUAL (ZPLUS X Y)
+                    (ZPLUS Y X)))
+(PROVE-LEMMA ZPLUS-COMM2 (REWRITE)
+             (EQUAL (ZPLUS X (ZPLUS Y Z))
+                    (ZPLUS Y (ZPLUS X Z))))
+(PROVE-LEMMA ZPLUS-ASSOC (REWRITE)
+             (EQUAL (ZPLUS (ZPLUS X Y)
+                           Z)
+                    (ZPLUS X (ZPLUS Y Z))))
+(DISABLE ZPLUS)
+(ADD-SHELL VEHICLE-STATE NIL VEHICLE-STATEP ((W (NONE-OF)
+                                                ZERO)
+                                             (Y (NONE-OF)
+                                                ZERO)
+                                             (V (NONE-OF)
+                                                ZERO)))
+(DEFN HD (X)
+  (CAR X))
+(DEFN TL (X)
+  (CDR X))
+(DEFN EMPTY (X)
+  (NOT (LISTP X)))
+(PROVE-LEMMA TL-REWRITE (REWRITE)
+             (EQUAL (TL X)
+                    (CDR X)))
+(DISABLE TL)
+(PROVE-LEMMA DOWN-ON-TL (REWRITE)
+             (IMPLIES (NOT (EMPTY X))
+                      (LESSP (COUNT (TL X))
+                             (COUNT X))))
+(DEFN RANDOM-DELTA-WS (LST)
+  (IF (EMPTY LST)
+      T
+      (AND (OR (EQUAL (HD LST)
+                      -1)
+               (EQUAL (HD LST)
+                      0)
+               (EQUAL (HD LST)
+                      1))
+           (RANDOM-DELTA-WS (TL LST)))))
+(DEFN CONTROLLER (SGN-Y SGN-OLD-Y)
+  (ZPLUS (ZTIMES -3 SGN-Y)
+         (ZTIMES 2 SGN-OLD-Y)))
+(DISABLE CONTROLLER)
+(DEFN SGN (X)
+  (IF (NEGATIVEP X)
+      (IF (EQUAL (NEGATIVE-GUTS X)
+                 0)
+          0 -1)
+      (IF (ZEROP X)
+          0 1)))
+(DISABLE SGN)
+(DEFN
+  NEXT-STATE
+  (DELTA-W STATE)
+  (VEHICLE-STATE
+    (ZPLUS (W STATE)
+           DELTA-W)
+    (ZPLUS (Y STATE)
+           (ZPLUS (V STATE)
+                  (ZPLUS (W STATE)
+                         DELTA-W)))
+    (ZPLUS (V STATE)
+           (CONTROLLER (SGN (ZPLUS (Y STATE)
+                                   (ZPLUS (V STATE)
+                                          (ZPLUS (W STATE)
+                                                 DELTA-W))))
+                       (SGN (Y STATE))))))
+(DEFN FINAL-STATE-OF-VEHICLE (DELTA-WS STATE)
+  (IF (EMPTY DELTA-WS)
+      STATE
+      (FINAL-STATE-OF-VEHICLE (TL DELTA-WS)
+                              (NEXT-STATE (HD DELTA-WS)
+                                          STATE))))
+(DEFN
+  GOOD-STATEP
+  (STATE)
+  (IF
+    (EQUAL (Y STATE)
+           0)
+    (OR (EQUAL (ZPLUS (V STATE)
+                      (W STATE))
+               -1)
+        (EQUAL (ZPLUS (V STATE)
+                      (W STATE))
+               0)
+        (EQUAL (ZPLUS (V STATE)
+                      (W STATE))
+               1))
+    (IF
+      (EQUAL (Y STATE)
+             1)
+      (OR (EQUAL (ZPLUS (V STATE)
+                        (W STATE))
+                 -2)
+          (EQUAL (ZPLUS (V STATE)
+                        (W STATE))
+                 -3))
+      (IF
+        (EQUAL (Y STATE)
+               2)
+        (OR (EQUAL (ZPLUS (V STATE)
+                          (W STATE))
+                   -1)
+            (EQUAL (ZPLUS (V STATE)
+                          (W STATE))
+                   -2))
+        (IF (EQUAL (Y STATE)
+                   3)
+            (EQUAL (ZPLUS (V STATE)
+                          (W STATE))
+                   -1)
+            (IF (EQUAL (Y STATE)
+                       -3)
+                (EQUAL (ZPLUS (V STATE)
+                              (W STATE))
+                       1)
+                (IF (EQUAL (Y STATE)
+                           -2)
+                    (OR (EQUAL (ZPLUS (V STATE)
+                                      (W STATE))
+                               1)
+                        (EQUAL (ZPLUS (V STATE)
+                                      (W STATE))
+                               2))
+                    (IF (EQUAL (Y STATE)
+                               -1)
+                        (OR (EQUAL (ZPLUS (V STATE)
+                                          (W STATE))
+                                   2)
+                            (EQUAL (ZPLUS (V STATE)
+                                          (W STATE))
+                                   3))
+                        F))))))))
+(PROVE-LEMMA NEXT-GOOD-STATE (REWRITE)
+             (IMPLIES (AND (GOOD-STATEP STATE)
+                           (OR (EQUAL R -1)
+                               (EQUAL R 0)
+                               (EQUAL R 1)))
+                      (GOOD-STATEP (NEXT-STATE R STATE))))
+(DEFN ZERO-DELTA-WS (LST)
+  (IF (EMPTY LST)
+      T
+      (AND (EQUAL (HD LST)
+                  0)
+           (ZERO-DELTA-WS (TL LST)))))
+(DEFN CONCAT (X Y)
+  (IF (EMPTY X)
+      Y
+      (CONS (HD X)
+            (CONCAT (TL X)
+                    Y))))
+(DEFN LENGTH (X)
+  (IF (EMPTY X) 0 (ADD1 (LENGTH (TL X)))))
+(PROVE-LEMMA LENGTH-0 (REWRITE)
+             (EQUAL (EQUAL (LENGTH X)
+                           0)
+                    (EMPTY X)))
+(PROVE-LEMMA
+  DECOMPOSE-LIST-OF-LENGTH-4
+  (REWRITE)
+  (IMPLIES (ZERO-DELTA-WS LST)
+           (EQUAL (LESSP (LENGTH LST)
+                         4)
+                  (NOT (EQUAL LST (CONCAT (QUOTE (0 0 0 0))
+                                          (CDDDDR LST)))))))
+(PROVE-LEMMA DRIFT-TO-0-IN-4 (REWRITE)
+             (IMPLIES
+               (GOOD-STATEP STATE)
+               (EQUAL (Y (FINAL-STATE-OF-VEHICLE
+                           (QUOTE (0 0 0 0))
+                           STATE))
+                      0)))
+(PROVE-LEMMA
+  CANCEL-WIND-IN-4
+  (REWRITE)
+  (IMPLIES (GOOD-STATEP STATE)
+           (EQUAL (ZPLUS (V (FINAL-STATE-OF-VEHICLE
+                              (QUOTE (0 0 0 0))
+                              STATE))
+                         (W (FINAL-STATE-OF-VEHICLE
+                              (QUOTE (0 0 0 0))
+                              STATE)))
+                  0)))
+(PROVE-LEMMA
+  ONCE-0-ALWAYS-0
+  (REWRITE)
+  (IMPLIES
+    (AND (ZERO-DELTA-WS LST)
+         (EQUAL (Y STATE)
+                0)
+         (EQUAL (ZPLUS (W STATE)
+                       (V STATE))
+                0))
+    (AND (EQUAL (Y (FINAL-STATE-OF-VEHICLE LST STATE))
+                0)
+         (EQUAL (ZPLUS (V (FINAL-STATE-OF-VEHICLE LST STATE))
+                       (W (FINAL-STATE-OF-VEHICLE LST STATE)))
+                0))))
+(PROVE-LEMMA FINAL-STATE-OF-VEHICLE-CONCAT (REWRITE)
+             (EQUAL (FINAL-STATE-OF-VEHICLE (CONCAT A B)
+                                            STATE)
+                    (FINAL-STATE-OF-VEHICLE
+                      B
+                      (FINAL-STATE-OF-VEHICLE A STATE))))
+(PROVE-LEMMA ZERO-DELTA-WS-CONCAT (REWRITE)
+             (EQUAL (ZERO-DELTA-WS (CONCAT (QUOTE (0 0 0 0))
+                                           V))
+                    (ZERO-DELTA-WS V)))
+(DISABLE CONCAT)
+(DISABLE NEXT-STATE)
+(PROVE-LEMMA GOOD-STATEP-BOUNDED-ABOVE (REWRITE)
+             (IMPLIES (GOOD-STATEP STATE)
+                      (NOT (ZLESSP 3 (Y STATE)))))
+(PROVE-LEMMA GOOD-STATEP-BOUNDED-BELOW (REWRITE)
+             (IMPLIES (GOOD-STATEP STATE)
+                      (NOT (ZLESSP (Y STATE)
+                                   -3))))
+(DISABLE GOOD-STATEP)
+(PROVE-LEMMA ZLESSP-IS-LESSP (REWRITE)
+             (IMPLIES (AND (NUMBERP X)
+                           (NUMBERP Y))
+                      (EQUAL (ZLESSP X Y)
+                             (LESSP X Y))))
+(DISABLE ZLESSP)
+(DEFN FSV (D S)
+  (IF (EMPTY D)
+      S
+      (FSV (TL D)
+           (NEXT-STATE (HD D)
+                       S))))
+(PROVE-LEMMA ALL-GOOD-STATES (REWRITE)
+                       (IMPLIES (AND (RANDOM-DELTA-WS LST)
+                                     (GOOD-STATEP STATE))
+                                (GOOD-STATEP
+                                  (FINAL-STATE-OF-VEHICLE LST STATE)))
+                       ((INDUCT (FSV LST STATE))))
+(PROVE-LEMMA VEHICLE-STAYS-WITHIN-3-OF-COURSE NIL
+             (IMPLIES
+               (AND (RANDOM-DELTA-WS LST)
+                    (EQUAL STATE (FINAL-STATE-OF-VEHICLE
+                                   LST
+                                   (VEHICLE-STATE 0 0 0))))
+               (AND (ZLESSEQP -3 (Y STATE))
+                    (ZLESSEQP (Y STATE)
+                              3))))
+(DISABLE FINAL-STATE-OF-VEHICLE)
+(PROVE-LEMMA ZERO-DELTA-WS-CDDDDR (REWRITE)
+             (IMPLIES (ZERO-DELTA-WS X)
+                      (ZERO-DELTA-WS (CDDDDR X))))
+(PROVE-LEMMA GOOD-STATES-FIND-AND-STAY-AT-0 (REWRITE)
+             (IMPLIES
+               (AND (GOOD-STATEP STATE)
+                    (ZERO-DELTA-WS LST2)
+                    (NOT (LESSP (LENGTH LST2)
+                                4)))
+               (EQUAL (Y (FINAL-STATE-OF-VEHICLE LST2 STATE))
+                      0)))
+(PROVE-LEMMA VEHICLE-GETS-ON-COURSE-IN-STEADY-WIND NIL
+             (IMPLIES
+               (AND (RANDOM-DELTA-WS LST1)
+                    (ZERO-DELTA-WS LST2)
+                    (ZGREATEREQP (LENGTH LST2)
+                                 4)
+                    (EQUAL STATE (FINAL-STATE-OF-VEHICLE
+                                   (CONCAT LST1 LST2)
+                                   (VEHICLE-STATE 0 0 0))))
+               (EQUAL (Y STATE)
+                      0))
+             NIL)

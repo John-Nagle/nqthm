@@ -1,0 +1,1347 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    INTRO.EVENTS
+;;;
+;;;    Definitions of list manipulation functions, and lemmas about these
+;;;    functions.  Also some arithmetic.
+;;;
+;;;  Some of the lemmas in this file are redundant in the sense that they exist
+;;;  in some of the "standard" libraries.  However, when we began the proof
+;;;  effort we did not do so in the context of these libraries.  For various
+;;;  reasons it was easier to rename our redundant lemmas than completely
+;;;  eliminate them.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;    IF*, OR*, AND*, NOT*  -- IF, OR, AND, and NOT, renamed to avoid
+;;;    normalization explosion. 
+
+(defn if* (a b c) (if a b c))
+
+(disable if*)
+
+(defn or* (a b) (if* a t (if* b t f)))
+
+(disable or*)
+
+(defn and* (a b) (if* a (if* b t f) f))
+
+(disable and*)
+
+(defn not* (a) (if* a f t))
+
+(disable not*)
+
+(deftheory prop*-theory (or* and* not*))
+
+(prove-lemma simplify-if* (rewrite)
+  (and
+   (implies
+    c
+    (equal (if* c a b)
+           a))
+   (implies
+    (not c)
+    (equal (if* c a b)
+           b)))
+  ;;Hint
+  ((enable if*)))
+
+(prove-lemma if*-c-x-x (rewrite)
+  (equal (if* c x x) x)
+  ;;Hint
+  ((enable if*)))
+
+(prove-lemma if*-cons (rewrite)
+  (equal (if* a (cons b c) (cons d e))
+         (cons (if* a b d) (if* a c e)))
+  ;;Hint
+  ((enable if*)))
+
+(prove-lemma rewrite-not* (rewrite)
+  (and
+   (implies
+    x
+    (equal (not* x)
+           f))
+   (implies
+    (not x)
+    (equal (not* x)
+           t)))
+  ;;Hint
+  ((enable if* not*)))
+
+(prove-lemma rewrite-and* (rewrite)
+  (and (equal (and* f x) f)
+       (equal (and* x f) f)
+       (implies
+        y
+        (and (equal (and* y x) (if* x t f))
+             (equal (and* x y) (if* x t f)))))
+  ;;Hint
+  ((enable if* and*)))
+
+(prove-lemma rewrite-or* (rewrite)
+  (and (equal (or* f x) (if* x t f))
+       (equal (or* x f) (if* x t f))
+       (implies
+        y
+        (and (equal (or* y x) t)
+             (equal (or* x y) t))))
+  ;;Hint
+  ((enable if* or*)))
+
+(prove-lemma expand-*-connectives (rewrite)
+  (and
+   (equal (if* c a b) (if c a b))
+   (equal (or* a b) (if a t (if b t f)))
+   (equal (and* a b) (if a (if b t f) f))
+   (equal (not* a) (not a)))
+  ;;Hint
+  ((enable if* and* or* not*)))
+
+(disable expand-*-connectives)
+
+;;;    CAR,CDR
+
+;;;  This redundant looking lemma helps avoid case splitting in certain cases.
+
+(prove-lemma car-cdr-if-cons (rewrite)
+  (and
+   (equal (car (if x (cons a b) (cons c d)))
+          (if x a c))
+   (equal (cdr (if x (cons a b) (cons c d)))
+          (if x b d))))
+
+;;;  Essential for extremely esoteric events.
+
+(prove-lemma our-car-cdr-elim (rewrite)
+  (equal (equal l (cons (car l) x))
+         (and (listp l)
+              (equal x (cdr l)))))
+
+(disable our-car-cdr-elim)
+
+;;;   PLUS
+
+(disable plus)
+
+(prove-lemma plus-0 (rewrite)
+  (and
+   (implies
+    (zerop zero)
+    (equal (plus x zero)
+           (fix x)))
+   (implies
+    (zerop zero)
+    (equal (plus zero x)
+           (fix x))))
+  ;;Hint
+  ((enable plus)))
+
+(prove-lemma plus-add1 (rewrite)
+  (and
+   (equal (plus (add1 x) y)
+          (add1 (plus x y)))
+   (equal (plus x (add1 y))
+          (add1 (plus x y)))))
+
+(prove-lemma plus-bottom (rewrite)
+  (equal (equal (plus a b) 0)
+         (and (zerop a) (zerop b))))
+
+(prove-lemma plus-add1-sub1 (rewrite)
+  (and
+   (implies
+    (not (zerop n))
+    (equal (plus (sub1 n) (add1 m))
+           (plus n m)))
+   (implies
+    (not (zerop n))
+    (equal (plus (add1 m) (sub1 n))
+           (plus m n)))))
+
+
+;;;    DIFFERENCE
+
+(disable difference)
+
+(prove-lemma difference-x-1 (rewrite)
+  (equal (difference x 1)
+         (sub1 x))
+  ;;Hint
+  ((enable difference)))
+
+;#-libraries
+(prove-lemma our-difference-x-x (rewrite)
+  (equal (difference x x) 0)
+  ;;Hint
+  ((enable difference)))
+
+;#-libraries
+(prove-lemma our-equal-difference-0 (rewrite)
+  (equal (equal (difference x y) 0)
+         (leq x y))
+  ;;Hint
+  ((enable difference)))
+
+(prove-lemma difference-0 (rewrite)
+  (implies
+   (zerop z)
+   (equal (difference x z)
+          (fix x)))
+  ;;Hint
+  ((enable difference)))
+                
+(prove-lemma difference-add1-add1 (rewrite)
+  (equal (difference (add1 x) (add1 y))
+         (difference x y))
+  ;;Hint
+  ((enable difference)))
+
+(prove-lemma not-lessp-difference (rewrite)
+  (equal (lessp x (difference x y))
+         f))
+
+(prove-lemma lessp-difference=0 (rewrite)
+  (implies
+   (leq x y)
+   (equal (difference x y)
+          0)))
+
+
+;;;   TIMES
+
+(prove-lemma times-bottom (rewrite)
+  (equal (equal (times x y) 0)
+         (or (zerop x) (zerop y))))
+
+(prove-lemma times-1 (rewrite)
+  (and (equal (times a 1)
+              (fix a))
+       (equal (times 1 a)
+              (fix a))))
+
+(prove-lemma times-add1-AGAIN (rewrite)
+  ;; ***** renamed to avoid conflict with name TIMES-ADD1 in
+  ;; naturals library
+   (equal (times a (add1 b))
+          (plus a (times a b))))
+
+
+(prove-lemma times-commutes (rewrite)
+  (equal (times a b)
+         (times b a))
+  ;;Hint
+  ((enable plus)))
+
+
+;;;   QUOTIENT
+
+(prove-lemma quotient-lessp (rewrite)
+  (implies
+   (and (lessp 1 base)
+        (not (zerop n)))
+   (lessp (quotient n base)
+          n)))
+
+(prove-lemma zerop-quotient (rewrite)
+  (equal (equal (quotient n m) 0)
+         (or (zerop n) (zerop m) (lessp n m))))
+
+
+;;;  LESSP
+
+(prove-lemma lessp-x-x (rewrite)
+  (equal (lessp x x)
+         f)
+  ;;Hint
+  ((enable lessp)))
+
+(prove-lemma lessp-sub1-x-y-crock (rewrite)
+  (implies
+   (equal x y)
+   (equal (lessp (sub1 x) y)
+          (not (zerop x))))
+  ;;Hint
+  ((enable lessp)))
+
+(prove-lemma lessp-sub1-x-x (rewrite)
+  (equal (lessp (sub1 x) x)
+         (not (zerop x)))
+  ;;Hint
+  ((enable lessp)))
+
+(prove-lemma lessp-x-1 (rewrite)
+  (equal (lessp x 1)
+         (zerop x))
+  ;;Hint
+  ((enable lessp)))
+
+(prove-lemma leq-lessp-difference (rewrite)
+  (implies
+   (and (leq x y)
+        (not (zerop z))
+        (not (zerop y)))
+   (equal (lessp (difference x z) y)
+          t))
+  ;;Hint
+  ((enable difference)))
+
+;;;  APPEND
+
+(disable append)
+
+(defn append5 (a b c d e)
+  (append a (append b (append c (append d e)))))
+
+(defn append6 (a b c d e g)
+  (append a (append b (append c (append d (append e g))))))
+
+(defn append7 (a b c d e g h)
+  (append a (append b (append c (append d (append e (append g h)))))))
+
+(defn append8 (a b c d e g h i)
+  (append a
+          (append b (append c (append d (append e (append g (append h i))))))))
+
+(prove-lemma append-nlistp (rewrite)
+  (implies
+   (nlistp a)
+   (equal (append a b)
+          b))
+  ;;Hint
+  ((enable append)))
+
+(prove-lemma append-cons (rewrite)
+  (equal (append (cons a b) c)
+         (cons a (append b c)))
+  ;;Hint
+  ((enable append)))
+
+;#-libraries
+(prove-lemma our-member-append (rewrite)
+  (equal (member a (append b c))
+         (or (member a b) (member a c)))
+  ;;Hint
+  ((enable append)))
+
+(prove-lemma associativity-of-append (rewrite)
+  (equal (append (append a b) c)
+         (append a (append b c)))
+  ;;Hint
+  ((enable append)))
+
+(prove-lemma equal-append-x-x (rewrite)
+  (equal (equal (append a b) (append a c))
+         (equal b c))
+  ;;Hint
+  ((enable append)))
+
+
+;;;   PROPERP
+
+(defn properp (l)
+  (if (listp l)
+      (properp (cdr l))
+    (equal l nil)))
+
+(disable properp)
+
+(prove-lemma properp-if (rewrite)
+  (implies
+   (and (properp a)
+        (properp b))
+   (properp (if c a b))))
+
+(prove-lemma properp-nlistp (rewrite)
+  (implies
+   (nlistp l)
+   (equal (properp l)
+          (equal l nil)))
+  ;;Hint
+  ((enable properp)))
+
+(prove-lemma properp-cons (rewrite)
+  (equal (properp (cons x y))
+         (properp y))
+  ;;Hint
+  ((enable properp)))
+
+(prove-lemma properp-append (rewrite)
+  (equal (properp (append a b))
+         (properp b))
+  ;;Hint
+  ((enable properp append)))
+
+(prove-lemma properp-append-nil (rewrite)
+  (implies
+   (properp a)
+   (equal (append a nil)
+          a))
+  ;;Hint
+  ((enable append)))
+
+(prove-lemma properp-if* (rewrite)
+  (implies
+   (and (properp a)
+        (properp b))
+   (properp (if* c a b)))
+  ;;Hint
+  ((enable if*)))
+
+
+;;;   POSITION
+
+(defn position (x l)
+  (if (nlistp l)
+      f
+    (if (equal x (car l))
+        0
+      (if (position x (cdr l))
+          (add1 (position x (cdr l)))
+        f))))
+
+(disable position)
+
+(prove-lemma member==>position (rewrite)
+  (implies
+   (member x l)
+   (position x l))
+  ;;Hint
+  ((enable member position)))
+
+
+
+;;;   LENGTH
+
+(defn length (l)
+  (if (listp l)
+      (add1 (length (cdr l)))
+    0))
+
+(disable length)
+
+(prove-lemma length-nlistp (rewrite)
+  (implies
+   (nlistp l)
+   (equal (length l)
+          0))
+  ;;Hint
+  ((enable length)))
+
+(prove-lemma length-bottom (rewrite)
+  (equal (equal (length x) 0)
+         (nlistp x))
+  ;;Hint
+  ((enable length)))
+
+(prove-lemma length-1 (rewrite)
+  (equal (equal (length a) 1)
+         (and (listp a) (nlistp (cdr a))))
+  ;;Hint
+  ((enable length)))
+
+(prove-lemma length-cons (rewrite)
+  (equal (length (cons x y))
+         (add1 (length y)))
+  ;;Hint
+  ((enable length)))
+
+(prove-lemma length-append (rewrite)
+  (equal (length (append a b))
+         (plus (length a) (length b)))
+  ;;Hint
+  ((enable length plus append)))
+
+(prove-lemma length-cdr-lemmas (rewrite)
+  (and
+   (equal (equal (length (cdr x)) (length x))
+          (nlistp x))
+   (equal (lessp (length (cdr x)) (length x))
+          (listp x)))
+  ;;Hint
+  ((enable lessp length)))
+
+(prove-lemma equal-length-add1 (rewrite)
+  (equal (equal (length x) (add1 y))
+         (and (listp x)
+              (equal (length (cdr x)) (fix y))))
+  ;;Hint
+  ((enable length)))
+
+(disable equal-length-add1)
+
+(prove-lemma length-cdr (rewrite)
+  (equal (equal (length (cdr v))
+                (sub1 (length v)))
+         t))
+
+(prove-lemma equal-length-cdr (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (equal (equal (length (cdr a))
+                 (length (cdr b)))
+          t))
+  ;;Hint
+  ((enable length)))
+
+(prove-lemma length-if (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (equal (length (if c a b))
+          (length a))))
+
+(prove-lemma length-if* (rewrite)
+  (implies
+   (equal (length a) (length b))
+   (equal (length (if* c a b))
+          (length a)))
+  ;;Hint
+  ((enable if*)))
+
+
+;;;   REVERSE
+
+(defn rev1 (x sponge)
+  (if (nlistp x)
+      sponge
+      (rev1 (cdr x) (cons (car x) sponge))))
+
+(disable rev1)
+                          
+(defn reverse (x)
+  (rev1 x nil))
+
+(disable reverse)
+
+(prove-lemma length-rev1 (rewrite)
+  (equal (length (rev1 x sponge))
+         (plus (length x)
+               (length sponge)))
+  ;;Hint
+  ((enable rev1)))
+
+(prove-lemma length-reverse (rewrite)
+  (equal (length (reverse x))
+         (length x))
+  ;;Hint
+  ((enable reverse)))
+
+
+;;;  The standard DELETE deletes only 1 occurrence; DELETE* deletes all.
+
+(defn delete* (x l)
+  (if (nlistp l)
+      l
+    (if (equal x (car l))
+        (delete* x (cdr l))
+      (cons (car l) (delete* x (cdr l))))))
+
+(disable delete*)
+
+
+;;;   SUBSET 
+
+(defn subset (l1 l2)
+  (if (nlistp l1)
+      t
+    (and (member (car l1) l2)
+         (subset (cdr l1) l2))))
+
+(disable subset)
+
+(prove-lemma subset-nlistp (rewrite)
+  (implies
+   (nlistp x)
+   (subset x y))
+  ;;Hint
+  ((enable subset)))
+
+(prove-lemma subset-cons (rewrite)
+  (equal (subset (cons x y) z)
+         (and (member x z)
+              (subset y z)))
+  ;;Hint
+  ((enable subset)))
+
+(prove-lemma subset-x-cons-y-z (rewrite)
+  (equal (subset x (cons y z))
+         (or (subset x z)
+             (and (member y x)
+                  (subset (delete* y x) z))))
+  ;;Hint
+  ((enable subset delete*)))
+
+(prove-lemma subset-append (rewrite)
+  (implies
+   (or (subset a b) (subset a c))
+   (subset a (append b c)))
+  ;;Hint
+  ((enable subset append)))
+
+(prove-lemma subset-x-x (rewrite)
+   (subset x x)
+   ;;Hint
+   ((enable subset)))
+
+
+
+;;;   DISJOINT
+
+(defn disjoint (l1 l2)
+  (if (nlistp l1)
+      t
+    (and (not (member (car l1) l2))
+         (disjoint (cdr l1) l2))))
+
+(disable disjoint)
+
+(prove-lemma disjoint-nlistp (rewrite)
+  (implies
+   (or (nlistp x) (nlistp y))
+   (disjoint x y))
+  ;;Hint
+  ((enable disjoint)))
+
+(prove-lemma disjoint-cons (rewrite)
+  (and
+   (equal (disjoint (cons x y) z)
+          (and (not (member x z))
+               (disjoint y z)))
+   (equal (disjoint z (cons x y))
+          (and (not (member x z))
+               (disjoint z y))))
+  ;;Hint
+  ((enable disjoint)))
+
+(prove-lemma disjoint-append (rewrite)
+  (and
+   (equal (disjoint x (append y z))
+          (and (disjoint x y)
+               (disjoint x z)))
+   (equal (disjoint (append y z) x)
+          (and (disjoint y x)
+               (disjoint z x))))
+  ;;Hint
+  ((enable disjoint)))
+
+
+;;;   DUPLICATES?
+
+(defn duplicates? (l)
+  (if (nlistp l)
+      f
+    (or (member (car l) (cdr l))
+        (duplicates? (cdr l)))))
+
+(disable duplicates?)
+
+(prove-lemma duplicates?-cons (rewrite)
+  (equal (duplicates? (cons x y))
+         (or (member x y)
+             (duplicates? y)))
+  ;;Hint
+  ((enable duplicates?)))
+
+(prove-lemma duplicates-append (rewrite)
+  (equal (duplicates? (append a b))
+         (or (duplicates? a)
+             (duplicates? b)
+             (not (disjoint a b))))
+  ;;Hint
+  ((enable duplicates? disjoint append)))
+
+
+;;;   FIRSTN
+
+(defn firstn (n l)
+  (if (listp l)
+      (if (zerop n)
+          nil
+        (cons (car l) (firstn (sub1 n) (cdr l))))
+    nil))
+
+(disable firstn)
+
+(prove-lemma length-firstn (rewrite)
+       (equal (length (firstn n l))
+              (if (leq n (length l))
+                  (fix n)
+                  (length l)))
+       ((enable firstn length lessp)))
+
+(prove-lemma length-firstn1 (rewrite)
+       (implies (leq n (length l))
+                (equal (length (firstn n l))
+                       (fix n)))
+       ((enable length-firstn)))
+
+(prove-lemma length-firstn2 (rewrite)
+       (implies (not (leq n (length l)))
+                (equal (length (firstn n l))
+                       (length l)))
+       ((enable length-firstn)))
+
+(prove-lemma car-firstn (rewrite)
+  (equal (car (firstn n a))
+         (if (and (listp a) (not (zerop n)))
+             (car a)
+           0))
+  ;;Hint
+  ((enable firstn)))
+
+(prove-lemma not-member-firstn (rewrite)
+  (implies
+   (not (member x y))
+   (not (member x (firstn n y))))
+  ;;Hint
+  ((enable firstn)))
+
+(prove-lemma not-duplicates?-firstn (rewrite)
+  (implies
+   (not (duplicates? x))
+   (not (duplicates? (firstn n x))))
+  ;;Hint
+  ((enable duplicates? firstn)))
+
+(prove-lemma subset-firstn (rewrite)
+  (subset (firstn n l) l)
+  ;;Hint
+  ((enable subset firstn)))
+
+(prove-lemma firstn-bottom (rewrite)
+  (equal (equal (firstn n l) nil)
+         (or (nlistp l) (zerop n)))
+  ;;Hint
+  ((enable firstn)))
+
+(prove-lemma disjoint-firstn (rewrite)
+  (implies
+   (disjoint x y)
+   (disjoint (firstn n x) y))
+  ;;Hint
+  ((enable disjoint firstn)))
+
+(prove-lemma disjoint-firstn1 (rewrite)
+  (implies
+   (disjoint y x)
+   (disjoint y (firstn n x)))
+  ;;Hint
+  ((enable disjoint firstn)))
+
+(prove-lemma properp-firstn (rewrite)
+  (properp (firstn n l))
+  ;;Hint
+  ((enable properp firstn)))
+
+(prove-lemma firstn-append (rewrite)
+  (equal (firstn n (append a b))
+         (append (firstn n a) (firstn (difference n (length a)) b)))
+  ;;Hint
+  ((induct (firstn n a))
+   (enable firstn append length)))
+
+
+;;;   RESTN
+
+(defn restn (n l)
+  (if (listp l)
+      (if (zerop n)
+          l
+        (restn (sub1 n) (cdr l)))
+    l))
+
+(disable restn)
+
+(prove-lemma length-restn (rewrite)
+  (equal (length (restn n l))
+         (difference (length l) n))
+  ((enable restn length difference)))
+
+(prove-lemma not-duplicates?-restn (rewrite)
+  (implies
+   (not (duplicates? x))
+   (not (duplicates? (restn n x))))
+  ;;Hint
+  ((enable duplicates? restn)))
+
+(prove-lemma not-member-restn (rewrite)
+  (implies
+   (not (member x y))
+   (not (member x (restn n y))))
+  ;;Hint
+  ((enable restn)))
+
+(prove-lemma subset-restn (rewrite)
+  (subset (restn n l) l)
+  ;;Hint
+  ((enable subset restn)))
+
+(prove-lemma disjoint-restn (rewrite)
+  (implies
+   (disjoint x y)
+   (disjoint (restn n x) y))
+  ;;Hint
+  ((enable disjoint restn)))
+
+(prove-lemma disjoint-restn1 (rewrite)
+  (implies
+   (disjoint y x)
+   (disjoint y (restn n x)))
+  ;;Hint
+  ((enable disjoint restn)))
+
+(prove-lemma properp-restn (rewrite)
+  (equal (properp (restn n l))
+         (properp l))
+  ;;Hint
+  ((enable properp restn)))
+
+(prove-lemma restn-append  (rewrite)
+  (equal (restn n (append a b))
+         (append (restn n a) (restn (difference n (length a)) b)))
+  ;;Hint
+  ((induct (restn n a))
+   (enable restn append)))
+
+(prove-lemma too-many-restns (rewrite)
+  (implies
+   (and (properp l)
+        (leq (length l) n))
+   (equal (restn n l)
+          nil))
+  ;;Hint
+  ((induct (restn n l))
+   (enable restn properp)))
+
+(prove-lemma cdr-restn (rewrite)
+  (implies
+   (lessp n (length v))
+   (equal (cdr (restn n v))
+          (restn (add1 n) v)))
+  ;;Hint
+  ((enable restn length)))
+
+(disable cdr-restn)
+
+
+;;;   FIRSTN/RESTN
+
+(prove-lemma disjoint-firstn-restn-lemmas (rewrite)
+  (and
+   (implies
+    (disjoint x y)
+    (disjoint (firstn n x) (firstn m y)))
+   (implies
+    (disjoint x y)
+    (disjoint (firstn n x) (restn m y)))
+   (implies
+    (disjoint x y)
+    (disjoint (restn n x) (firstn m y)))
+   (implies
+    (disjoint x y)
+    (disjoint (restn n x) (restn m y))))
+  ;;Hint
+  ((enable disjoint firstn restn)))
+
+(prove-lemma no-duplicates-disjoint-firstn-restn (rewrite)
+  (and
+   (implies
+    (not (duplicates? x))
+    (disjoint (firstn n x) (restn n x)))
+   (implies
+    (not (duplicates? x))
+    (disjoint (restn n x) (firstn n x))))
+  ;;Hint
+  ((enable duplicates? disjoint restn firstn)))
+
+(prove-lemma append-firstn-restn (rewrite)
+  (equal (append (firstn n l) (restn n l))
+         l)
+  ;;Hint
+  ((enable append firstn restn)))
+
+
+;;;   PAIRLIST
+
+(disable pairlist)
+
+(prove-lemma pairlist-nlistp (rewrite)
+  (implies
+   (nlistp a)
+   (equal (pairlist a b)
+          nil))
+  ;;Hint
+  ((enable pairlist)))
+
+(prove-lemma pairlist-cons (rewrite)
+  (equal (pairlist (cons x y) z)
+         (cons (cons x (car z))
+               (pairlist y (cdr z))))
+  ;;Hint
+  ((enable pairlist)))
+
+(prove-lemma pairlist-append (rewrite)
+  (implies
+   (equal (length a) (length c))
+   (equal (pairlist (append a b) (append c d))
+          (append (pairlist a c)
+                  (pairlist b d))))
+  ;;Hint
+  ((enable pairlist append length)))
+
+;;;  Lifted from DUAL-EVAL-BEHAVIORAL.EVENTS
+
+(prove-lemma properp-pairlist (rewrite)
+  (properp (pairlist x y))
+  ((enable pairlist)))
+
+;;;  This rather redundant looking lemma is needed because there is no way to
+;;;  "normalize" an argument of a function without the possibility of infinite
+;;;  rewriting  (Except by meta-lemma).   This lemma is "used" by
+;;;  EQUAL-COLLECT-EVAL-NAME-PROMOTE-ALISTS. 
+
+(prove-lemma pairlists-are-equal-when-their-2nd-lists-are-nlistp (rewrite)
+  (implies
+   (and (nlistp l1)
+        (nlistp l2))
+   (equal (equal (pairlist a l1) (pairlist a l2))
+          t))
+  ;;Hint
+  ((enable pairlist)))
+
+
+;;;  NTH
+
+;;;  NTH - The Nth element of a list.
+
+(defn nth (n list)
+  (if (zerop n)
+      (car list)
+    (nth (sub1 n) (cdr list))))
+
+(disable nth)
+
+;;; At one point, this lemma seemed to be more trouble than it was worth, but
+;;; that may have been due to the poor way that NTH had been defined.  We'll
+;;; keep it off, just in case.
+
+(prove-lemma open-nth (rewrite)
+  (and
+   (implies
+    (zerop n) 
+    (equal (nth n list) (car list)))
+   (implies
+    (not (zerop n))
+    (equal (nth n list)
+           (nth (sub1 n) (cdr list)))))
+  ;;Hint
+  ((enable nth)))
+
+(disable open-nth)
+
+;;;  This funny lemma is used in conjunction with OPEN-NTH, to keep OPEN-NTH
+;;;  from being applied through IF's.
+
+(prove-lemma nth-if (rewrite)
+  (equal (nth n (if a b c))
+         (if a (nth n b) (nth n c))))
+
+(disable nth-if)
+
+(prove-lemma nth-restn (rewrite)
+  (equal (nth n v)
+         (car (restn n v)))
+  ;;Hint
+  ((enable length nth restn)))
+
+(disable nth-restn)
+
+(prove-lemma nth-append (rewrite)
+  (implies
+   (lessp n (length a))
+   (equal (nth n (append a b))
+          (nth n a)))
+  ;;Hint
+  ((induct (nth n a))
+   (enable nth append)))
+
+(prove-lemma nth-append-too (rewrite)
+  (implies
+   (leq (length a) n)
+   (equal (nth n (append a b))
+          (nth (difference n (length a)) b)))
+  ;;Hint
+  ((induct (nth n a))
+   (enable nth append)))
+
+
+;;;   NTHCDR
+
+(defn nthcdr (n l)
+  (if (zerop n)
+      l
+    (nthcdr (sub1 n) (cdr l))))
+
+(disable nthcdr)
+
+(prove-lemma open-nthcdr (rewrite)
+  (and
+   (implies
+    (zerop n)
+    (equal (nthcdr n l)
+           l))
+   (implies
+    (not (zerop n))
+    (equal (nthcdr n l)
+           (nthcdr (sub1 n) (cdr l)))))
+  ;;Hint
+  ((enable nthcdr)))
+
+(prove-lemma properp-as-null-nthcdr (rewrite)
+  (equal (properp l)
+         (equal (nthcdr (length l) l) nil))
+  ;;Hint
+  ((enable properp length nthcdr)))
+
+(disable properp-as-null-nthcdr)
+
+;;;  A dangerous lemma if NTHCDR is enabled.
+
+(prove-lemma cdr-nthcdr (rewrite)
+  (equal (cdr (nthcdr n l))
+         (nthcdr (add1 n) l))
+  ;;Hint
+  ((enable nthcdr)))
+
+(disable cdr-nthcdr)
+
+(prove-lemma listp-nthcdr (rewrite)
+  (equal (listp (nthcdr n l))
+         (lessp n (length l)))
+  ;;Hint
+  ((enable nthcdr length)))
+
+
+;;;  SUBRANGE
+
+(defn subrange (l n m)
+  (if (lessp m n)
+      nil
+    (if (zerop n)
+        (if (zerop m)
+            (list (car l))
+          (cons (car l) (subrange (cdr l) 0 (sub1 m))))
+      (subrange (cdr l) (sub1 n) (sub1 m)))))
+
+(disable subrange)
+
+(prove-lemma properp-subrange (rewrite)
+  (properp (subrange v n m))
+  ;;Hint
+  ((enable subrange)))
+
+;;;  We only use this lemma in special cases.
+
+(prove-lemma subrange-cons (rewrite)
+  (equal (subrange (cons car cdr) n m)
+         (cond ((lessp m n) nil)
+               ((zerop n)
+                (if (zerop m)
+                    (list car)
+                  (cons car
+                        (subrange cdr 0 (sub1 m)))))
+               (t (subrange cdr
+                            (sub1 n)
+                            (sub1 m)))))
+  ;;hint
+  ((enable subrange)))
+
+(disable subrange-cons)
+
+(prove-lemma length-subrange (rewrite)
+  (equal (length (subrange l n m))
+         (if (lessp m n)
+             0
+           (add1 (difference m n))))
+  ;;Hint
+  ((enable subrange)))
+
+(prove-lemma subrange-append-right (rewrite)
+  (implies
+   (and (not (lessp m n))
+        (leq (length a) n))
+   (equal (subrange (append a b) n m)
+          (subrange b (difference n (length a)) (difference m (length a)))))
+  ;;Hint
+  ((induct (subrange a n m))
+   (enable subrange append length)
+   (expand (difference n (length a))
+           (difference m (length a)))))
+
+(prove-lemma subrange-append-left (rewrite)
+  (implies
+   (and (not (lessp m n))
+        (lessp n (length a))
+        (lessp m (length a)))
+   (equal (subrange (append a b) n m)
+          (subrange a n m)))
+  ;;Hint
+  ((induct (subrange a n m))
+   (enable subrange append length)))
+
+(prove-lemma subrange-0 (rewrite)
+  (implies
+   (and (equal m (sub1 (length a)))
+        (properp a)
+        (not (zerop (length a))))
+   (equal (subrange a 0 m)
+          a))
+  ;;Hint
+  ((enable subrange properp)))
+          
+(prove-lemma listp-subrange (rewrite)
+  (equal (listp (subrange l n m))
+         (not (lessp m n)))
+  ;;Hint
+  ((enable subrange)))
+
+(prove-lemma subset-subrange (rewrite)
+  (implies
+   (lessp n (length v))
+   (subset (subrange v m n) v))
+  ;;Hint
+  ((enable length subset subrange)
+   (expand (subrange v m 0))))
+
+(prove-lemma not-member-subrange (rewrite)
+  (implies
+   (and (lessp n (length v))
+        (not (member x v)))
+   (not (member x (subrange v m n))))
+  ;;Hint
+  ((enable length member subrange)))
+
+(prove-lemma disjoint-subrange (rewrite)
+  (implies
+   (and (disjoint x y)
+        (lessp m (length y)))
+   (and (disjoint x (subrange y n m))
+        (disjoint (subrange y n m) x)))
+  ;;Hint
+  ((enable disjoint subrange)))
+
+;;;  A rarely used lemma
+(prove-lemma open-subrange (rewrite)
+  (and
+   (implies
+    (lessp m n)
+    (equal (subrange l n m)
+           nil))
+   (implies
+    (and (not (lessp m n))
+         (zerop n)
+         (zerop m))
+    (equal (subrange l n m)
+           (list (car l))))
+   (implies
+    (and (not (lessp m n))
+         (zerop n)
+         (not (zerop m)))
+    (equal (subrange l n m)
+           (cons (car l) 
+                 (subrange (cdr l) 0 (sub1 m)))))
+   (implies
+    (and (not (lessp m n))
+         (not (zerop n)))
+    (equal (subrange l n m)
+           (subrange (cdr l) 
+                     (sub1 n) 
+                     (sub1 m)))))
+  ;;hint
+  ((enable subrange)))
+
+(disable open-subrange)
+
+
+;;;  UPDATE-NTH
+
+(defn update-nth (n lst value)
+  (if (listp lst)
+      (if (zerop n)
+          (cons value (cdr lst))
+          (cons (car lst)
+                (update-nth (sub1 n) (cdr lst) value)))
+      lst))
+
+(disable update-nth)
+
+
+;;;  MAKE-LIST
+
+(defn make-list (n value)
+  (if (zerop n)
+      nil
+    (cons value (make-list (sub1 n) value))))
+
+(disable make-list)
+
+(prove-lemma open-make-list (rewrite)
+  (and
+  (implies
+   (zerop n)
+   (equal (make-list n x)
+          nil))
+  (implies
+   (not (zerop n))
+   (equal (make-list n x)
+          (cons x (make-list (sub1 n) x)))))
+  ;;Hint
+  ((enable make-list)))
+
+(disable open-make-list)
+
+(prove-lemma length-make-list (rewrite)
+  (equal (length (make-list n value))
+         (fix n))
+  ;;Hint
+  ((enable make-list)))
+
+(prove-lemma make-list-append (rewrite)
+  (equal (append (make-list n value)
+                 (make-list m value))
+         (make-list (plus n m) value))
+  ;;Hint
+  ((enable make-list)))
+
+(prove-lemma properp-make-list (rewrite)
+  (properp (make-list n value))
+  ;;Hint
+  ((enable make-list)))
+
+(prove-lemma firstn-make-list (rewrite)
+  (implies
+   (leq n m)
+   (equal (firstn n (make-list m v))
+          (make-list n v)))
+  ;;Hint
+  ((enable firstn make-list)))
+
+
+;;;  TREE-SIZE
+
+(defn tree-size (tree)
+  (if (nlistp tree)
+      1
+    (plus (tree-size (car tree))
+          (tree-size (cdr tree)))))
+
+(disable tree-size)
+
+(prove-lemma tree-size-nlistp (rewrite)
+  (implies
+   (nlistp tree)
+   (equal (tree-size tree)
+          1))
+  ;;Hint
+  ((enable tree-size)))
+
+(prove-lemma not-equal-tree-size-tree-0 (rewrite)
+  (not (equal (tree-size tree) 0))
+  ;;Hint
+  ((enable tree-size)))
+
+(prove-lemma tree-size-1-crock (rewrite)
+  (not (equal 1 (tree-size (cons a b))))
+  ;;Hint
+  ((enable tree-size)))
+
+(prove-lemma a-helpful-lemma-for-tree-inductions (rewrite)
+  (implies
+   (equal (length a) (tree-size tree))
+   (equal (lessp (length a) (tree-size (car tree)))
+          f))
+  ;;Hint
+  ((enable tree-size lessp)))
+
+(prove-lemma tree-size-lemmas (rewrite)
+  (and
+   (implies
+    (and (listp tree)
+         (equal size (tree-size tree)))
+    (equal (difference size (tree-size (car tree))) 
+           (tree-size (cdr tree))))
+   (implies
+    (and (listp tree)
+         (equal size (tree-size tree)))
+    (equal (difference size (tree-size (cdr tree))) 
+           (tree-size (car tree)))))
+  ;;Hint
+  ((expand (tree-size tree))))
+
+(prove-lemma make-list-append-tree-crock (rewrite)
+  (implies
+   (listp tree)
+   (equal (make-list (plus (tree-size (car tree))
+                           (tree-size (cdr tree)))
+                     value)
+          (make-list (tree-size tree) value)))
+   ;;Hint
+   ((enable tree-size)))
+
+(disable make-list-append-tree-crock)
+
+;;;  TFIRSTN
+
+(defn tfirstn (list tree)
+  (firstn (tree-size (car tree)) list))
+
+;;;  TRESTN
+
+(defn trestn (list tree)
+  (restn (tree-size (car tree)) list))
+
+
+;;;   TREE-HEIGHT
+
+(defn tree-height (tree)
+  (if (nlistp tree)
+      1
+    (add1 (max (tree-height (car tree))
+               (tree-height (cdr tree))))))
+
+(disable tree-height)              
+
+
+
+;;;   MAKE-TREE n  -- Makes a tree of size N.
+
+(defn make-tree (n)
+  (if (zerop n)
+      0
+    (if (equal n 1)
+        0
+      (cons (make-tree (quotient n 2))
+            (make-tree (difference n (quotient n 2)))))))
+
+(disable make-tree)
+
+(prove-lemma tree-size-make-tree (rewrite)
+  (implies
+   (not (zerop n))
+   (equal (tree-size (make-tree n))
+          n))
+  ;;Hint
+  ((enable tree-size make-tree)))
+
+(prove-lemma listp-make-tree (rewrite)
+  (equal (listp (make-tree n))
+         (geq n 2))
+  ;;Hint
+  ((disable difference-0)
+   (enable make-tree)))

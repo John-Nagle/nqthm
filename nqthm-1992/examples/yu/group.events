@@ -1,0 +1,860 @@
+#|
+
+ Copyright (C) 1994 by Yuan Yu.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Yuan Yu PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS IS"
+ WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT
+ LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+ SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Yuan Yu BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST PROFITS,
+ LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT
+ OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT LIMITED TO LOSS
+ OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY THIRD
+ PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH DAMAGES, OR
+ FOR ANY CLAIM BY ANY OTHER PARTY.
+
+|#
+
+; Requires defn-sk.
+
+#|
+The following article is about this event file.
+
+@article{Yu89,
+        author="Yuan Yu",
+        title="Computer Proofs in Group Theory",
+        journal="Journal of Automated Reasoning",
+        volume="6",
+	number="3",
+        year=1990
+}
+|#
+
+
+
+(boot-strap)
+
+ 
+; First, several concepts on SET.
+
+; Set L has no duplicate element.
+(defn set-standard (l)
+  (if (listp l)
+      (and (not (member (car l) (cdr l)))
+           (set-standard (cdr l)))
+    t))
+
+; L1-L2.
+(defn set-minus (l1 l2)
+  (if (listp l1)
+      (if (member (car l1) l2)
+          (set-minus (cdr l1) l2)
+        (cons (car l1) (set-minus (cdr l1) l2)))
+    l1))
+
+; L1 and L2 are disjoint.
+(defn set-disjoint (l1 l2)
+  (if (listp l1)
+      (if (member (car l1) l2)
+          f
+        (set-disjoint (cdr l1) l2))
+    t))
+
+; remove the element x from L.
+(defn delete (x L)
+  (if (listp L)
+      (if (equal x (car L))
+          (cdr L)
+        (cons (car L) (delete x (cdr L))))
+    L))
+
+; L2 contains L1.
+(defn subset (l1 l2)
+  (if (listp l1)
+      (and (member (car l1) l2)
+           (subset (cdr l1) l2))
+    t))
+
+; The number of elements in L.
+(defn cardinal (l)
+  (if (listp l)
+      (add1 (cardinal (cdr l)))
+    0))
+
+; Lemmas based on the above concepts.
+(prove-lemma set-standard-lemma (rewrite)
+             (implies (set-standard A)
+                      (set-standard (set-minus A B)))
+             ((induct (set-minus A B))))
+
+(prove-lemma set-minus-lemma1 ()
+             (leq (count (set-minus S S1))
+                  (count S)))
+
+(prove-lemma set-minus-lemma2 (rewrite)
+             (implies (not (member c A))
+                      (equal (set-minus A (cons c B))
+                             (set-minus A B))))
+
+(prove-lemma set-minus-lemma3 ()
+             (equal (member x (set-minus s s1))
+                    (and (member x s)
+                         (not (member x s1)))))
+
+(prove-lemma set-minus-lemma ()
+             (implies (and (listp S)
+                           (member x S)
+                           (member x S1))
+                      (lessp (count (set-minus S S1))
+                             (count S)))
+             ((use (set-minus-lemma1 (S (cdr S)) (S1 S1)))
+              (induct (set-minus S S1))))
+
+(prove-lemma delete-lemma1 ()
+             (implies (member x A)
+                      (equal (cardinal A)
+                             (add1 (cardinal (delete x A))))))
+
+(prove-lemma delete-lemma2 (rewrite)
+        (implies (and (member y A)
+                      (not (equal x y)))
+                 (member y (delete x A))))
+
+(prove-lemma delete-lemma3 (rewrite)
+             (implies (and (member x A)
+                           (not (member x B))
+                           (subset B A))
+                      (subset B (delete x A)))
+             ((use (delete-lemma2 (y (car B))))
+              (induct (subset B A))))
+
+(prove-lemma subset-transitivity (rewrite)
+             (implies (and (subset A B)
+                           (subset B C))
+                      (subset A C)))
+
+(prove-lemma subset-lemma0 (rewrite)
+             (implies (and (subset s1 s)
+                           (member x s1))
+                      (member x s)))
+
+(prove-lemma subset-lemma1 (rewrite)
+             (implies (subset A B)
+                      (subset A (cons c B))))
+
+(prove-lemma subset-lemma2 (rewrite)
+             (implies (subset A B)
+                      (subset (set-minus A C) B)))
+
+(prove-lemma subset-reflexivity (rewrite)
+             (subset A A))
+
+(prove-lemma cardinal-lemma ()
+             (implies (member x s)
+                      (leq 1 (cardinal s))))
+
+(prove-lemma cardinal-equality ()
+             (implies (and (set-standard A)
+                           (not (member c B))
+                           (member c A))
+                      (equal (cardinal (set-minus A B))
+                             (add1 (cardinal (set-minus A (cons c B))))))
+             ((induct (set-minus A B))))
+
+; Induction hint for CARDINAL-INEQUALITY-LEMMA
+(defn cardinal-inequality-induct (B A)
+  (if (listp B)
+      (cardinal-inequality-induct (cdr B) (delete (car B) A))
+    t))
+
+(prove-lemma cardinal-inequality ()
+             (implies (and (set-standard B)
+                           (subset B A))
+                      (leq (cardinal B) (cardinal A)))
+             ((use (delete-lemma3 (x (car B)) (B (cdr B)))
+                   (delete-lemma1 (x (car B)) (A A)))
+              (induct (cardinal-inequality-induct B A))))
+
+(prove-lemma cardinal-subset (rewrite)
+             (implies (and (set-standard A)
+                           (set-standard B)
+                           (subset B A))
+                      (equal (cardinal (set-minus A B))
+                             (difference (cardinal A) (cardinal B))))
+             ((use (cardinal-equality (B (cdr B)) (c (car B)))
+                   (cardinal-inequality (B (cdr B)) (A A)))
+              (induct (subset B A))))
+
+; we will introduce the axioms for definition of group with operation OP.
+(dcl op (x y))
+
+(DEFN-SK GROUP-OP (G)
+   (AND (FORALL (X Y)
+                (IMPLIES (AND (MEMBER X G) (MEMBER Y G))
+                         (MEMBER (OP X Y) G)))
+        (FORALL (X Y Z)
+                (IMPLIES (AND (MEMBER X G) (MEMBER Y G) (MEMBER Z G))
+                         (EQUAL (OP (OP X Y) Z)
+                                (OP X (OP Y Z)))))
+        (EXISTS ID
+                (AND (MEMBER ID G)
+                     (FORALL X (IMPLIES (MEMBER X G)
+                                        (AND (EQUAL (OP ID X) X)
+                                             (EQUAL (OP X ID) X)
+                                             (EXISTS INV 
+                                                     (AND (MEMBER INV G)
+                                                          (EQUAL (OP INV X) ID)
+							  (EQUAL (OP X INV) ID))))))))))
+                                                             
+; the group has the "closed" property.
+(PROVE-LEMMA GROUP-OP-CLOSED (REWRITE)
+             (IMPLIES (AND (GROUP-OP G)
+                           (MEMBER X G)
+                           (MEMBER Y G))
+                      (MEMBER (OP X Y) G))
+             ((USE (GROUP-OP))))
+                      
+; the group has the "associativity" property.
+(prove-lemma group-op-associativity (rewrite)
+             (implies (and (group-op g)
+                           (member x g)
+                           (member y g)
+                           (member z g))
+                      (equal (op (op x y) z)
+                             (op x (op y z))))
+             ((use (group-op))))
+
+(prove-lemma group-op-associativity1 (rewrite)
+             (implies (and (group-op g)
+                           (member x g)
+                           (member y g)
+                           (member z g))
+                      (equal (op x (op y z))
+                             (op (op x y) z)))
+             ((use (group-op)))) 
+
+; the group has the "identity" property.
+(prove-lemma group-op-identity (rewrite)
+             (implies (group-op g)
+                      (and (member (id g) g)
+                           (implies (member x g)
+                                    (and (equal (op (id g) x) x)
+                                         (equal (op x (id g)) x)))))
+             ((use (group-op))))
+
+; the group has the "inverse" property.
+(prove-lemma group-op-inverse (rewrite)
+             (implies (and (group-op g)
+                           (member x g))
+                      (and (member (inv g x) g)
+                           (equal (op (inv g x) x) (id g))
+                           (equal (op x (inv g x)) (id g))))
+             ((use (group-op))))
+                           
+; introduce the concept of coset.
+(defn right-coset (s a)
+  (if (listp s)
+      (cons (op (car s) a)
+            (right-coset (cdr s) a))
+    nil))
+
+(prove-lemma right-coset-cardinal (rewrite)
+             (equal (cardinal (right-coset s a))
+                    (cardinal s)))
+                    
+(prove-lemma right-coset-nempty (rewrite)
+             (implies (and (group-op g)
+                           (member x g)
+                           (subset s g)
+                           (member (id g) s))
+                      (member x (right-coset s x))))
+
+; some simple equalities in group.
+; EQUALITY1: x*a=y*b-->x=y*(b*(inv g a)).
+(prove-lemma op-equality1 ()
+             (implies (and (group-op g)
+                           (member x g)
+                           (member y g)
+                           (member a g)
+                           (member b g)
+                           (equal (op x a) (op y b)))
+                      (equal x (op y (op b (inv g a))))))
+                           
+; EQUALITY2: x*a=y*b-->a=((inv g x)*y)*b.
+(prove-lemma op-equality2 ()
+             (implies (and (group-op g)
+                           (member x g)
+                           (member y g)
+                           (member a g)
+                           (member b g)
+                           (equal (op x a) (op y b)))
+                      (equal a (op (op (inv g x) y) b))))
+
+; cancellation: xa=ya-->x=y.
+(prove-lemma cancellation ()
+             (implies (and (group-op g)
+                           (member x g)
+                           (member y g)
+                           (member a g)
+                           (equal (op x a) (op y a)))
+                      (equal x y))
+             ((use (op-equality1 (b a)))))
+
+; some further simple equalities.
+(prove-lemma op-equality3 ()
+             (implies (and (group-op g)
+                           (member x g)
+                           (member a g)
+                           (equal (op x a) (id g)))
+                      (equal a (inv g x)))
+             ((use (op-equality2 (y (id g)) (b (id g))))))
+
+(prove-lemma op-equality4 ()
+             (implies (and (group-op g)
+                           (member x g)
+                           (equal (op x x) x))
+                      (equal x (id g)))
+             ((use (op-equality1 (a x) (y x) (b (id g))))))
+
+(defn subgroup-op (h g)
+  (and (group-op g)
+       (group-op h)
+       (subset h g)))
+
+; (id g)=(id h), if h is a subgroup of g.
+(prove-lemma op-identity-same ()
+             (implies (subgroup-op h g)
+                      (equal (id g) (id h)))
+             ((use (op-equality4 (x (id h))))))
+
+(prove-lemma op-identity-in-subgroup (rewrite)
+             (implies (subgroup-op h g)
+                      (member (id g) h))
+             ((use (op-identity-same)
+                   (group-op-identity (g h)))))
+              
+
+; (inv g x)=(inv h x), if h is a subgroup of g.
+(prove-lemma op-inverse-same ()
+             (implies (and (subgroup-op h g)
+                           (member x h))
+                      (equal (inv h x) (inv g x)))
+             ((use (op-equality3 (a (inv h x)))
+                   (op-identity-same))))
+
+(prove-lemma op-inverse-in-subgroup (rewrite)
+             (implies (and (subgroup-op h g)
+                           (member x h))
+                      (member (inv g x) h))
+             ((use (op-inverse-same)
+                   (group-op-inverse (g h)))))
+              
+(prove-lemma group-op-order ()
+             (implies (group-op g)
+                      (leq 1 (cardinal g)))
+             ((use (cardinal-lemma (s g) (x (id g))))))
+
+(disable group-op)
+(disable group-op-associativity1)
+; we will introduce the axioms for another group with operation OP1.
+(DCL OP1 (X Y))
+
+(DEFN-SK GROUP-OP1 (H)
+  (AND (FORALL (X Y)
+               (IMPLIES (AND (MEMBER X H) (MEMBER Y H))
+                        (MEMBER (OP1 X Y) H)))
+       (FORALL (X Y Z)
+               (IMPLIES (AND (MEMBER X H) (MEMBER Y H) (MEMBER Z H))
+                        (EQUAL (OP1 (OP1 X Y) Z)
+                               (OP1 X (OP1 Y Z)))))
+       (EXISTS ID
+               (AND (MEMBER ID H)
+                    (FORALL X (IMPLIES (MEMBER X H)
+                                       (AND (EQUAL (OP1 ID x) X)
+                                            (EQUAL (OP1 x ID) X)
+                                            (EXISTS INV 
+                                                    (AND (MEMBER INV H)
+                                                         (EQUAL (OP1 INV x) ID)
+                                                         (EQUAL (OP1 x INV)  ID))))))))))
+                                                             
+; the group has the "closed" property.
+(PROVE-LEMMA GROUP-OP1-CLOSED (REWRITE)
+             (IMPLIES (AND (GROUP-OP1 H)
+                           (MEMBER X H)
+                           (MEMBER Y H))
+                      (MEMBER (OP1 X Y) H))
+             ((USE (GROUP-OP1))))
+                      
+; the group has the "associativity" property.
+(prove-lemma group-op1-associativity (rewrite)
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (member y h)
+                           (member z h))
+                      (equal (op1 (op1 x y) z)
+                             (op1 x (op1 y z))))
+             ((use (group-op1))))
+
+(prove-lemma group-op1-associativity1 (rewrite)
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (member y h)
+                           (member z h))
+                      (equal (op1 x (op1 y z))
+                             (op1 (op1 x y) z)))
+             ((use (group-op1))))
+
+; the group has the "identity" property.
+(prove-lemma group-op1-identity (rewrite)
+             (implies (group-op1 h)
+                      (and (member (id-1 h) h)
+                           (implies (member x h)
+                                    (and (equal (op1 (id-1 h) x) x)
+                                         (equal (op1 x (id-1 h)) x)))))
+             ((use (group-op1))))
+
+; the group has the "inverse" property.
+(prove-lemma group-op1-inverse (rewrite)
+             (implies (and (group-op1 h)
+                           (member x h))
+                      (and (member (inv-1 h x) h)
+                           (equal (op1 (inv-1 h x) x) (id-1 h))
+                           (equal (op1 x (inv-1 h x)) (id-1 h))))
+             ((use (group-op1))))
+
+; some simple equalities in group.
+; OP1-EQUALITY1: x*a=y*b-->x=y*(b*(inv a)).
+(prove-lemma op1-equality1 ()
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (member y h)
+                           (member a h)
+                           (member b h)
+                           (equal (op1 x a) (op1 y b)))
+                      (equal x (op1 y (op1 b (inv-1 h a))))))
+                           
+; EQUALITY2: x*a=y*b-->a=((inv x)*y)*b.
+(prove-lemma op1-equality2 ()
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (member y h)
+                           (member a h)
+                           (member b h)
+                           (equal (op1 x a) (op1 y b)))
+                      (equal a (op1 (op1 (inv-1 h x) y) b))))
+
+(prove-lemma op1-equality3 ()
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (member a h)
+                           (equal (op1 x a) (id-1 h)))
+                      (equal a (inv-1 h x)))
+             ((use (op1-equality2 (y (id-1 h)) (b (id-1 h))))))
+
+(prove-lemma op1-equality4 ()
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (equal (op1 x x) x))
+                      (equal x (id-1 h)))
+             ((use (op1-equality1 (a x) (y x) (b (id-1 h))))))
+
+; cancellation: xa=ya-->x=y.
+(prove-lemma op1-cancellation ()
+             (implies (and (group-op1 h)
+                           (member x h)
+                           (member y h)
+                           (member a h)
+                           (equal (op1 x a) (op1 y a)))
+                      (equal x y))
+             ((use (op1-equality1 (b a)))))
+
+; we start to prove the kernel of a group homomorphism is a normal subgroup.
+; Introduce homomorphisms.
+(dcl phi (x))
+
+(defn-sk homo-phi (g h)
+  (forall (x y)
+          (implies (and (member x g) (member y g))
+                   (and (member (phi x) h)
+                        (member (phi y) h)
+                        (equal (phi (op x y))
+                               (op1 (phi x) (phi y)))))))
+
+(prove-lemma homomorphism-phi (rewrite)
+             (implies (and (homo-phi g h)
+                           (member x g)
+                           (member y g))
+                      (and (member (phi x) h)
+                           (member (phi y) h)
+                           (equal (phi (op x y))
+                                  (op1 (phi x) (phi y)))))
+             ((use (homo-phi))))
+
+(defn phi-inv (g a)
+  (if (listp g)
+      (if (equal (phi (car g)) a)
+          (cons (car g) (phi-inv (cdr g) a))
+        (phi-inv (cdr g) a))
+    nil))
+
+(prove-lemma basic-mapping1 (rewrite)
+             (implies (and (member x g)
+                           (equal (phi x) a))
+                      (member x (phi-inv g a))))
+
+(prove-lemma basic-mapping2 (rewrite)
+             (implies (member x (phi-inv g a))
+                      (equal (phi x) a)))
+
+(prove-lemma phi-inv-subset (rewrite)
+             (subset (phi-inv g a) g))
+
+(prove-lemma id-to-id ()
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h))
+                      (equal (phi (id g)) (id-1 h)))
+             ((use (homomorphism-phi (x (id g)) (y (id g)))
+                   (op1-equality4 (g h) (x (phi (id g)))))))
+
+(prove-lemma inv-to-inv ()
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h)
+                           (member x g))
+                      (equal (phi (inv g x)) (inv-1 h (phi x))))
+             ((use (homomorphism-phi (y (inv g x)))
+                   (op1-equality2 (x (phi x)) 
+                                  (a (phi (inv g x))) 
+                                  (y (id-1 h))
+                                  (b (id-1 h))
+                                  (g h))
+                   (id-to-id))))
+
+(prove-lemma ker-closed (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h)
+                           (member x (phi-inv g (id-1 h)))
+                           (member y (phi-inv g (id-1 h))))
+                      (member (op x y) (phi-inv g (id-1 h))))
+             ((use (subset-lemma0 (s1 (phi-inv g (id-1 h))) (s g))
+                   (subset-lemma0 (x y) (s1 (phi-inv g (id-1 h))) (s g)))))
+                   
+(prove-lemma ker-associativity (rewrite)
+             (implies (and (group-op g)
+                           (member x (phi-inv g a))
+                           (member y (phi-inv g a))
+                           (member z (phi-inv g a)))
+                      (equal (op (op x y) z)
+                             (op x (op y z))))
+             ((use (subset-lemma0 (s1 (phi-inv g a)) (s g))
+                   (subset-lemma0 (x y) (s1 (phi-inv g a)) (s g))
+                   (subset-lemma0 (x z) (s1 (phi-inv g a)) (s g)))))
+
+(prove-lemma ker-identity (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h))
+                      (member (id g) (phi-inv g (id-1 h))))
+             ((use (basic-mapping1 (x (id g)) (a (id-1 h)))
+                   (id-to-id))))
+                           
+ (prove-lemma id-inv-id (rewrite)
+             (implies (group-op1 h)
+                      (equal (inv-1 h (id-1 h)) (id-1 h)))
+             ((use (op1-cancellation (x (inv-1 h (id-1 h))) (y (id-1 h)) (a (id-1 h)) (b (id-1 h))))))
+
+(prove-lemma ker-inverse (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h)
+                           (member x (phi-inv g (id-1 h))))
+                      (member (inv g x) (phi-inv g (id-1 h))))
+             ((use (basic-mapping1 (x (inv g x)) (a (id-1 h)))
+                   (inv-to-inv)
+                   (subset-lemma0 (s1 (phi-inv g (id-1 h))) (s g)))))
+
+(prove-lemma ker-identity-inverse (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h))
+                      (implies (member x (phi-inv g (id-1 h)))
+                               (and (equal (op (id g) x) x)
+                                    (equal (op x (id g)) x)
+                                    (member (inv g x) (phi-inv g (id-1 h)))
+                                    (equal (op (inv g x) x) (id g))
+                                    (equal (op x (inv g x)) (id g)))))
+             ((use (subset-lemma0 (s1 (phi-inv g (id-1 h))) (s g)))))
+                           
+(prove-lemma ker-subgroup (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h))
+                      (group-op (phi-inv g (id-1 h))))
+             ((use (group-op (g (phi-inv g (id-1 h)))
+                             (id (id g))
+                             (inv (inv g (x-2 (phi-inv g (id-1 h)) (id g)))))
+                   (ker-closed (x (x (phi-inv g (id-1 h))))
+                               (y (y (phi-inv g (id-1 h)))))
+                   (ker-associativity (x (x-1 (phi-inv g (id-1 h))))
+                                      (y (y-1 (phi-inv g (id-1 h))))
+                                      (z (z (phi-inv g (id-1 h))))
+                                      (a (id-1 h)))
+                   (ker-identity-inverse (x (x-2 (phi-inv g (id-1 h)) (id g)))))))
+                           
+(defn-sk op-normalp (g n)
+  (forall (x y)
+          (implies (and (member x g)
+                        (member y n))
+                   (member (op (op x y) (inv g x)) n))))
+
+(defn normal-subgroup-op (g n)
+  (and (group-op g)
+       (group-op n)
+       (subset n g)
+       (op-normalp g n)))
+
+(prove-lemma normal-lemma (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h)
+                           (member x g)
+                           (member y (phi-inv g (id-1 h))))
+                      (member (op (op x y) (inv g x))
+                              (phi-inv g (id-1 h))))
+             ((use (basic-mapping1 (x (op (op x y) (inv g x))) (a (id-1 h)))
+                   (subset-lemma0 (x y) (s1 (phi-inv g (id-1 h))) (s g))
+                   (inv-to-inv))))
+
+(prove-lemma ker-normal (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h))
+                      (op-normalp g (phi-inv g (id-1 h))))
+             ((use (op-normalp (h (phi-inv g (id-1 h))))
+                   (normal-lemma (x (x-7 g (phi-inv g (id-1 h))))
+                                 (y (y-5 g (phi-inv g (id-1 h))))))))
+
+(prove-lemma ker-normal-subgroup (rewrite)
+             (implies (and (group-op g)
+                           (group-op1 h)
+                           (homo-phi g h))
+                      (normal-subgroup-op g (phi-inv g (id-1 h)))))
+
+(enable group-op-associativity1)
+
+; Now back to the proof of Lagrange Theorem.
+; Every coset of s in a group is "set-standard".
+(prove-lemma right-coset-standard-1 (rewrite)
+             (implies (and (group-op g)
+                           (subset s g)
+                           (member a g)
+                           (member x g)
+                           (not (member x s)))
+                      (not (member (op x a) (right-coset s a))))
+             ((use (cancellation (y (car s))))
+              (induct (right-coset s a))))
+                           
+(prove-lemma right-coset-standard-2 (rewrite)
+             (implies (and (group-op g)
+                           (subset s g)
+                           (set-standard s)
+                           (member a g))
+                      (set-standard (right-coset s a)))
+             ((use (right-coset-standard-1 (x (car s)) (s (cdr s))))
+              (induct (set-standard s))))
+
+(prove-lemma right-coset-standard (rewrite)
+             (implies (and (subgroup-op h g)
+                           (set-standard h)
+                           (member a g))
+                      (set-standard (right-coset h a)))
+             ((use (right-coset-standard-2 (s h)))))
+
+; different cosets are disjoint.
+(prove-lemma right-coset-disjoint-lemma (rewrite)
+             (implies (and (group-op g)
+                           (subset s g)
+                           (member x g)
+                           (member y g)
+                           (member a g)
+                           (member b g)
+                           (member (op (inv g x) y) s)
+                           (not (member a (right-coset s b))))
+                      (not (equal (op x a) (op y b)))))
+
+(prove-lemma right-coset-disjoint-1 (rewrite)
+             (implies (and (subgroup-op h g)
+                           (subset s h)
+                           (member x h)
+                           (member a g)
+                           (member b g)
+                           (not (member a (right-coset h b))))
+                      (not (member (op x a) (right-coset s b))))
+             ((use (right-coset-disjoint-lemma (y (car s)) (s h)))
+              (induct (subset s h))))
+             
+(prove-lemma right-coset-disjoint-2 (rewrite)
+             (implies (and (subgroup-op h g)
+                           (member x h)
+                           (member a g)
+                           (member b g)
+                           (not (member a (right-coset h b))))
+                      (not (member (op x a) (right-coset h b))))
+             ((use (right-coset-disjoint-1 (s h)))))
+
+(prove-lemma right-coset-disjoint-3 (rewrite)
+             (implies (and (subgroup-op h g)
+                           (subset s h)
+                           (member a g)
+                           (member b g)
+                           (not (member a (right-coset h b))))
+                      (set-disjoint (right-coset s a) (right-coset h b)))
+             ((use (right-coset-disjoint-2 (x (car s))))
+              (induct (right-coset s a))))
+
+(prove-lemma right-coset-disjoint (rewrite)
+             (implies (and (subgroup-op h g)
+                           (member a g)
+                           (member b g)
+                           (not (member a (right-coset h b))))
+                      (set-disjoint (right-coset h a) (right-coset h b)))
+             ((use (right-coset-disjoint-3 (s h)))))
+
+; Now the Lagrange Theorem will be attacked.
+; First, we still need some lemmas.
+; first, disable GROUP.
+(disable group-op)
+
+(defn-sk op-closed (s1 s2)
+  (forall (x y)
+          (implies (and (member x s1)
+                        (member y s2))
+                   (member (op x y) s2))))
+
+(prove-lemma la-lemma1 (rewrite)
+             (implies (and (member b s)
+                           (subset h1 h)
+                           (op-closed h s))
+                      (subset (right-coset h1 b) s))
+             ((use (op-closed (s1 h) (s2 s) (x (car h1)) (y b)))
+              (induct (right-coset h1 b))))
+
+(prove-lemma la-lemma2(rewrite)
+             (implies (and (subgroup-op h g)
+                           (subset s g)
+                           (member b g)
+                           (op-closed h s))
+                      (implies (and (member x h)
+                                    (member a (set-minus s (right-coset h b))))
+                               (member (op x a)
+                                       (set-minus s (right-coset h b)))))
+             ((use (op-closed (s1 h) (s2 s) (y a))
+                   (right-coset-disjoint-2)
+                   (set-minus-lemma3 (x a) (s1 (right-coset h b)))
+                   (set-minus-lemma3 (x (op x a)) (s1 (right-coset h b))))
+              (do-not-induct t)))
+
+(prove-lemma la-lemma3 (rewrite)
+             (implies (and (subgroup-op h g)
+                           (subset s g)
+                           (member b g)
+                           (op-closed h s))
+                      (op-closed h (set-minus s (right-coset h b))))
+             ((use (op-closed (s1 h) 
+                              (s2 (set-minus s (right-coset h b)))
+                              (x (x-8 h (set-minus s (right-coset h b))))
+                              (y (y-6 h (set-minus s (right-coset h b)))))
+                   (la-lemma2 (x (x-8 h (set-minus s (right-coset h b))))
+                              (a (y-6 h (set-minus s (right-coset h b))))))))
+
+(prove-lemma lagrange-induct-measure (rewrite)
+             (implies (and (group-op g)
+                           (group-op h)
+                           (subset h g)
+                           (subset s g)
+                           (listp s))
+                      (lessp (count (set-minus s (right-coset h (car s))))
+                             (count s)))
+             ((use (set-minus-lemma (s1 (right-coset h (car s))) 
+                                    (x (car s)))
+                   (right-coset-nempty (x (car s)) (s h))
+                   (subset-lemma0 (x (car s)) (s g) (s1 h)))
+              (do-not-induct t)))
+
+(prove-lemma la-lemma4 ()
+             (implies (and (leq y x)
+                           (leq 1 y)
+                           (equal (remainder (difference x y) y) 0))
+                      (equal (remainder x y) 0)))
+             
+
+(prove-lemma la-lemma5 (rewrite)
+             (implies (and (subgroup-op h g)
+                           (set-standard h)
+                           (subset s g)
+                           (set-standard s)
+                           (op-closed h s)
+                           (equal 
+                             (remainder 
+                               (cardinal (set-minus s (right-coset h (car s))))
+                               (cardinal h))
+                             0))
+                      (equal (remainder (cardinal s) (cardinal h)) 0))
+             ((use (cardinal-inequality (a s) (b (right-coset h (car s))))
+                   (cardinal-subset (a s) (b (right-coset h (car s))))
+                   (la-lemma4 (x (cardinal s)) (y (cardinal h)))
+                   (right-coset-standard (a (car s)))
+                   (right-coset-cardinal (s h) (a (car s)))
+                   (la-lemma1 (h1 h) (b (car s)))
+                   (group-op-order))
+              (do-not-induct t)))
+
+(defn lagrange-induct (g h s)
+  (if (and (subgroup-op h g)
+           (subset s g)
+           (listp s))
+      (lagrange-induct g h (set-minus s (right-coset h (car s))))
+    t)
+  ((lessp (count s))))
+
+(prove-lemma lagrange-generalized ()
+             (implies (and (subgroup-op h g)
+                           (set-standard h)
+                           (subset s g)
+                           (set-standard s)
+                           (op-closed h s))
+                      (equal (remainder (cardinal s) (cardinal h)) 0))
+             ((use (la-lemma3 (b (car s)))
+                   (set-standard-lemma (a s) (b (right-coset h (car s))))
+                   (subset-lemma2 (a s) (b g) (c (right-coset h (car s))))
+                   (la-lemma5))
+              (induct (lagrange-induct g h s))))
+
+(defn divides (m n)
+   (equal (remainder n m) 0))
+
+(prove-lemma subset-op-closed (rewrite)
+             (implies (and (group-op g)
+                           (subset h g))
+                      (op-closed h g))
+             ((use (group-op-closed (x (x-8 h g)) (y (y-6 h g)))
+                   (op-closed (s1 h) (s2 g)))))
+
+(prove-lemma lagrange ()
+             (implies (and (subgroup-op h g)
+                           (set-standard g)
+                           (set-standard h))
+                      (divides (cardinal h) (cardinal g)))
+             ((use (lagrange-generalized (s g)))))
+
+

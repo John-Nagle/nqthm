@@ -1,0 +1,4417 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+
+;; By Matt Kaufmann, modified from earlier integer library of Bill
+;; Bevier and Matt Wilding.  A few functions (even ILESSP) have
+;; been changed, but I expect the functionality of this library to
+;; include all the functionality of the old one in most or even all
+;; cases.
+
+;; Modified from /local/src/nqthm-libs/integers.events to get ILEQ
+;; expressed in terms of ILESSP and IDIFFERENCE in terms of INEG and
+;; IPLUS.  There are other changes too.  The highlights are the new
+;; metalemmas.
+
+;; I'm going to leave the eval$ rules on that are proved here, and
+;; leave eval$ off.
+
+;; My intention is that this library be used in a mode in which ILEQ
+;; and IDIFFERENCE are left enabled.  Otherwise, the aforementioned
+;; meta lemmas may not be very useful, and also a number of additional
+;; replacement rules may be needed.
+
+;; There are three theories created by this library.  INTEGER-DEFNS is
+;; a list of definitions of all integer functions (not including the
+;; cancellation metafunctions and their auxiliaries, though), except
+;; that ILEQ and IDIFFERENCE have been omitted.  This is a useful
+;; theory for an ENABLE-THEORY hint when one simply wants to blast all
+;; integer functions open, and it's also useful if one wants to close
+;; them down with a DISABLE-THEORY hint (perhaps to go with an
+;; (ENABLE-THEORY T) hint).  Second, ALL-INTEGER-DEFNS is the same as
+;; INTEGER-DEFNS except that ILEQ and IDIFFERENCE are included in this
+;; one.  Finally, INTEGERS is a list of all events to be "exported as
+;; enabled" from this file when working in a mode where everything not
+;; enabled by an ENABLE-THEORY hint is to be disabled.  Notice that
+;; some rewrite rules have been included that might appear to be
+;; unnecessary in light of the metalemmas; that's because metalemmas
+;; only work on tame terms.  However, there's no guarantee that the
+;; rewrite rules alone will prove very useful (on non-tame terms).
+;; Also notice that INTEGER-DEFNS is disjoint from INTEGERS, since we
+;; expect the basic definitions (other than ILEQ and IDIFFERENCE) to
+;; remain disabled.
+
+;; It's easy to see what I have and haven't placed in INTEGERS, since
+;; I'll simply comment out the event names that I want to exclude (see
+;; end of this file).
+
+;; One might wish to consider changing (fix-int (minus ...)) in some
+;; of the definitions below to (ineg ...).
+
+;; The following meta rules are in this library.  
+;; (A little documentation added by Matt Wilding July 90)
+;; 
+;; CORRECTNESS-OF-CANCEL-INEG
+;;  cancel the first argument of an iplus term with a member of the second 
+;;  argument.
+;; 
+;;  ex:  (iplus (ineg y) (iplus (ineg x) (iplus y z)))  
+;;     -->
+;;       (iplus (ineg x) (fix-int z))
+;; 
+;; CORRECTNESS-OF-CANCEL-IPLUS
+;;  cancel the sides of an equality of iplus sums
+;; 
+;;  ex:  (equal (iplus x (iplus y z)) (iplus a (iplus z x)))
+;;     -->
+;;       (equal (fix-int y) (fix-int a))
+;; 
+;; CORRECTNESS-OF-CANCEL-IPLUS-ILESSP
+;;  cancel the sides of an ilessp inequality of sums
+;; 
+;;  ex:  (ilessp (iplus x (iplus y z)) (iplus a (iplus z x)))
+;;     -->
+;;       (ilessp y a)
+;; 
+;; CORRECTNESS-OF-CANCEL-ITIMES
+;;  cancel the sides of an equality of itimes products
+;;  
+;;  ex: (equal (itimes x (itimes y z)) (itimes a (itimes z x)))
+;;     -->
+;;      (if (equal (itimes x z) '0)
+;;        t
+;;        (equal (fix-int y) (fix-int a)))
+;; 
+;; CORRECTNESS-OF-CANCEL-ITIMES-ILESSP
+;;  cancel the sides of an inequality of itimes products
+;; 
+;;  ex: (ilessp (itimes x (itimes y z)) (itimes a (itimes z x)))
+;;     -->
+;;      (if (ilessp (itimes x z) '0)
+;;         (ilessp a y)
+;;        (if (ilessp 0 (itimes x z))
+;;           (ilessp y a)
+;;           f))
+;; 
+;; CORRECTNESS-OF-CANCEL-ITIMES-FACTORS
+;;  cancel factors in equality terms
+;;  ex: (equal (iplus (itimes x y) x) (itimes z x))
+;;     -->
+;;      (if (equal (fix-int x) '0)
+;;         t
+;;        (equal (fix-int (plus y 1)) (fix-int z)))
+;; 
+;; CORRECTNESS-OF-CANCEL-ITIMES-ILESSP-FACTORS
+;;  cancel factors in ilessp terms
+;;  ex: (equal (iplus (itimes x y) x) (itimes z x))
+;;     -->
+;;      (if (ilessp x '0)
+;;         (ilessp z (iplus y 1))
+;;        (if (ilessp '0 x)
+;;           (ilessp (iplus y '1) z)
+;;          f))
+;; 
+;; CORRECTNESS-OF-CANCEL-FACTORS-0
+;;  factor one side of equality when other side is constant 0
+;; 
+;;  ex: (equal (iplus x (itimes x y)) '0)
+;;     -->
+;;      (or (equal (fix-int (iplus '1 y)) '0)
+;;          (equal (fix-int x) '0))
+;; 
+;; CORRECTNESS-OF-CANCEL-FACTORS-ILESSP-0
+;;  factor one side of inequality when other side is constant 0
+;; 
+;;  ex: (ilessp (iplus x (itimes x y)) '0)
+;;     -->
+;;      (or (and (ilessp (iplus '1 y) '0)
+;;               (ilessp '0 x))
+;;          (and (ilessp '0 (iplus '1 y))
+;;               (ilessp x '0)))
+;; 
+;; CORRECTNESS-OF-CANCEL-INEG-TERMS-FROM-EQUALITY
+;;  rewrite equality to remove ineg terms
+;; 
+;;  ex: (equal (iplus (ineg x) (ineg y)) (iplus (ineg z) w))
+;;     --> 
+;;      (equal (fix-int z) (iplus x (iplus y w)))
+;; 
+;; CORRECTNESS-OF-CANCEL-INEG-TERMS-FROM-INEQUALITY
+;;  rewrite inequalities to remove ineg terms
+;; 
+;;  ex: (ilessp (iplus (ineg x) (ineg y)) (iplus (ineg z) w))
+;;     -->
+;;      (ilessp (fix-int z) (iplus x (iplus y w)))
+
+
+;(note-lib "/local/src/nqthm-libs/naturals")
+
+;(compile-uncompiled-defns "xxx")
+
+; -----------------------------------------------------------------------------
+; Integers
+; -----------------------------------------------------------------------------
+
+#| The function below has no AND or OR, for efficiency
+(defn integerp (x)
+  (or (numberp x)
+      (and (negativep x)
+           (not (zerop (negative-guts x))))))
+|#
+
+(DEFN INTEGERP (X)
+  (COND
+   ((NUMBERP X) T)
+   ((NEGATIVEP X) (NOT (ZEROP (NEGATIVE-GUTS X))))
+   (T F)))
+
+(defn fix-int (x)
+  (if (integerp x) x 0))
+
+;; Even though I'll include a definition for izerop here, I'll
+;; often avoid using it.
+(defn izerop (i)
+  (equal (fix-int i) 0))
+
+#| old version:
+(defn izerop (i)
+  (if (integerp i)
+      (equal i 0)
+      t))
+|#
+
+(defn ilessp (i j)
+  (if (negativep i)
+      (if (negativep j)
+          (lessp (negative-guts j) (negative-guts i))
+          (if (equal i (minus 0))
+              (lessp 0 j)
+            t))
+      (if (negativep j)
+          f
+          (lessp i j))))
+
+(defn ileq (i j)
+  ;; I expect this to be enabled, in analogy to leq.
+  (not (ilessp j i)))
+
+(defn iplus (x y)
+  (if (negativep x)
+      (if (negativep y)
+          (if (and (zerop (negative-guts x))
+                   (zerop (negative-guts y)))
+              0
+              (minus (plus (negative-guts x)
+                           (negative-guts y))))
+          (if (lessp y (negative-guts x))
+              (minus (difference (negative-guts x) y))
+              (difference y (negative-guts x))))
+      (if (negativep y)
+          (if (lessp x (negative-guts y))
+              (minus (difference (negative-guts y) x))
+              (difference x (negative-guts y)))
+          (plus x y))))
+
+(defn ineg (x)
+  (if (negativep x)
+      (negative-guts x)
+      (if (zerop x)
+          0
+          (minus x))))
+
+(defn idifference (x y)
+  ;; I find it troublesome to reason separately about idifference,
+  ;; especially for metalemmas, so I intend to keep it enabled.
+  (iplus x (ineg y)))
+
+(defn iabs (i)
+  (if (negativep i)
+      (negative-guts i)
+      (fix i)))
+
+(defn itimes (i j)
+  (if (negativep i)
+      (if (negativep j)
+          (times (negative-guts i) (negative-guts j))
+          (fix-int (minus (times (negative-guts i) j))))
+      (if (negativep j)
+          (fix-int (minus (times i (negative-guts j))))
+          (times i j))))
+
+(defn iquotient (i j)
+  (if (equal (fix-int j) 0)
+      0
+      (if (negativep i)
+          (if (negativep j)
+              (if (equal (remainder (negative-guts i) (negative-guts j)) 0)
+                  (quotient (negative-guts i) (negative-guts j))
+                  (add1 (quotient (negative-guts i) (negative-guts j))))
+              (if (equal (remainder (negative-guts i) j) 0)
+                  (fix-int (minus (quotient (negative-guts i) j)))
+                  (fix-int (minus (add1 (quotient (negative-guts i) j))))))
+          (if (negativep j)
+              (fix-int (minus (quotient i (negative-guts j))))
+              (quotient i j)))))
+
+(defn iremainder (i j)
+  (idifference i (itimes j (iquotient i j))))
+
+(defn idiv (i j)
+  (if (equal (fix-int j) 0)
+      0
+      (if (negativep i)
+          (if (negativep j)
+              (quotient (negative-guts i) (negative-guts j))
+              (if (equal (remainder (negative-guts i) j) 0)
+                  (fix-int (minus (quotient (negative-guts i) j)))
+                  (fix-int (minus (add1 (quotient (negative-guts i) j))))))
+          (if (negativep j)
+              (if (equal (remainder i (negative-guts j)) 0)
+                  (fix-int (minus (quotient i (negative-guts j))))
+                  (fix-int (minus (add1 (quotient i (negative-guts j))))))
+              (quotient i j)))))
+
+(defn imod (i j)
+  (idifference (fix-int i) (itimes j (idiv i j))))
+
+(defn iquo (i j)
+  (if (equal (fix-int j) 0)
+      0
+      (if (negativep i)
+          (if (negativep j)
+              (quotient (negative-guts i) (negative-guts j))
+              (fix-int (minus (quotient (negative-guts i) j))))
+          (if (negativep j)
+              (fix-int (minus (quotient i (negative-guts j))))
+              (quotient i j)))))
+
+(defn irem (i j)
+  (idifference (fix-int i) (itimes j (iquo i j))))
+
+; ---------- DEFTHEORY events for definitions ----------
+
+(deftheory integer-defns
+  ;; omits ILEQ and IDIFFERENCE and IZEROP
+  (integerp fix-int ilessp iplus ineg iabs itimes
+            iquotient iremainder idiv imod iquo irem))
+
+(deftheory all-integer-defns
+  (integerp fix-int izerop ilessp ileq iplus ineg idifference iabs itimes
+            iquotient iremainder idiv imod iquo irem))
+
+(disable integerp)
+(disable fix-int)
+(disable ilessp)
+(disable iplus)
+(disable ineg)
+(disable iabs)
+(disable itimes)
+;; I've disabled the rest later in the file, just because the lemmas
+;; about division were (re-)proved with the remaining functions enabled.
+
+; ---------- INTEGERP ----------
+
+(lemma integerp-fix-int (rewrite)
+       (integerp (fix-int x))
+       ((enable integerp fix-int)))
+
+(lemma integerp-iplus (rewrite)
+       (integerp (iplus x y))
+       ((enable integerp iplus)))
+
+(lemma integerp-idifference (rewrite)
+       (integerp (idifference x y))
+       ((enable integerp-iplus idifference)))
+
+(lemma integerp-ineg (rewrite)
+       (integerp (ineg x))
+       ((enable integerp ineg)))
+
+(lemma integerp-iabs (rewrite)
+       (integerp (iabs x))
+       ((enable integerp iabs)))
+
+(lemma integerp-itimes (rewrite)
+       (integerp (itimes x y))
+       ((enable integerp itimes fix-int)))
+
+; ---------- FIX-INT ----------
+
+;; The first of these, FIX-INT-REMOVER, is potentially dangerous from
+;; a backchaining point of view, but I believe it's necessary.  At least
+;; the lemmas below it should go a long way toward preventing its application.
+
+(lemma fix-int-remover (rewrite)
+  (implies (integerp x)
+           (equal (fix-int x) x))
+  ((enable fix-int integerp)))
+
+(lemma fix-int-fix-int (rewrite)
+       (equal (fix-int (fix-int x))
+              (fix-int x))
+       ((enable fix-int integerp)))
+
+(lemma fix-int-iplus (rewrite)
+       (equal (fix-int (iplus a b))
+              (iplus a b))
+       ((enable fix-int integerp iplus)))
+
+(lemma fix-int-idifference (rewrite)
+       (equal (fix-int (idifference a b))
+              (idifference a b))
+       ((enable fix-int-iplus idifference)))
+
+(lemma fix-int-ineg (rewrite)
+       (equal (fix-int (ineg x))
+              (ineg x))
+       ((enable fix-int integerp ineg)))
+
+(lemma fix-int-iabs (rewrite)
+       (equal (fix-int (iabs x))
+              (iabs x))
+       ((enable integerp fix-int iabs)))
+
+(lemma fix-int-itimes (rewrite)
+       (equal (fix-int (itimes x y))
+              (itimes x y))
+       ((enable integerp itimes fix-int)))
+
+; ---------- INEG ----------
+
+(lemma ineg-iplus (rewrite)
+       (equal (ineg (iplus a b))
+              (iplus (ineg a) (ineg b)))
+       ((enable iplus ineg plus-zero-arg2)))
+
+(lemma ineg-ineg (rewrite)
+       (equal (ineg (ineg x))
+              (fix-int x))
+       ((enable ineg fix-int integerp)))
+
+(lemma ineg-fix-int (rewrite)
+       (equal (ineg (fix-int x))
+              (ineg x))
+       ((enable ineg fix-int integerp)))
+
+(lemma ineg-of-non-integerp (rewrite)
+  (implies (not (integerp x))
+           (equal (ineg x) 0))
+  ((enable ineg integerp)))
+
+;; I don't want the backchaining to slow down the prover.
+(disable ineg-of-non-integerp)
+
+(lemma ineg-0 (rewrite)
+  (equal (ineg 0) 0)
+  ((enable ineg)))
+
+; ---------- IPLUS ----------
+
+;; The first two of these really aren't necessary, in light
+;; of the cancellation metalemma.
+
+(lemma iplus-left-id (rewrite)
+       (implies (not (integerp x))
+                (equal (iplus x y)
+                       (fix-int y)))
+       ((enable integerp iplus fix-int)))
+
+;; I don't want the backchaining to slow down the prover.
+(disable iplus-left-id)
+
+(lemma iplus-right-id (rewrite)
+       (implies (not (integerp y))
+                (equal (iplus x y)
+                       (fix-int x)))
+       ((enable integerp iplus fix-int plus-zero-arg2)))
+
+;; I don't want the backchaining to slow down the prover.
+(disable iplus-right-id)
+
+(lemma iplus-0-left (rewrite)
+       (equal (iplus 0 x) (fix-int x))
+       ((enable iplus fix-int integerp)))
+
+(lemma iplus-0-right (rewrite)
+       ;; just in case we turn off commutativity
+       (equal (iplus x 0) (fix-int x))
+       ((enable iplus fix-int integerp)))
+
+(lemma commutativity2-of-iplus (rewrite)
+       (equal (iplus x (iplus y z)) (iplus y (iplus x z)))
+       ((enable iplus commutativity2-of-plus)))
+
+(lemma commutativity-of-iplus (rewrite)
+       (equal (iplus x y) (iplus y x))
+       ((enable iplus commutativity2-of-iplus)))
+
+(lemma associativity-of-iplus (rewrite)
+       (equal (iplus (iplus x y) z) (iplus x (iplus y z)))
+       ((enable iplus)
+        (enable-theory addition)))
+
+(lemma iplus-cancellation-1 (rewrite)
+       (equal (equal (iplus a b) (iplus a c))
+              (equal (fix-int b) (fix-int c)))
+       ((enable iplus fix-int integerp)
+        (enable-theory addition)))
+
+(lemma iplus-cancellation-2 (rewrite)
+       (equal (equal (iplus b a) (iplus c a))
+              (equal (fix-int b) (fix-int c)))
+       ((use (iplus-cancellation-1))
+        (enable commutativity-of-iplus)))
+
+(lemma iplus-ineg1 (rewrite)
+       (equal (iplus (ineg a) a) 0)
+       ((enable iplus ineg integerp fix-int)))
+
+(lemma iplus-ineg2 (rewrite)
+       (equal (iplus a (ineg a)) 0)
+       ((enable iplus ineg integerp fix-int)))
+
+(lemma iplus-fix-int1 (rewrite)
+       (equal (iplus (fix-int a) b)
+              (iplus a b))
+       ((enable iplus fix-int integerp plus-zero-arg2)
+        (do-not-induct t)))
+
+(lemma iplus-fix-int2 (rewrite)
+       (equal (iplus a (fix-int b))
+              (iplus a b))
+       ((enable iplus fix-int integerp plus-zero-arg2)
+        (do-not-induct t)))
+
+; ---------- IDIFFERENCE ----------
+
+;; mostly omitted, but I'll keep a few
+
+(lemma idifference-fix-int1 (rewrite)
+       (equal (idifference (fix-int a) b)
+              (idifference a b))
+       ((enable idifference iplus-fix-int1)
+        (do-not-induct t)))
+
+(lemma idifference-fix-int2 (rewrite)
+       (equal (idifference a (fix-int b))
+              (idifference a b))
+       ((enable idifference iplus-fix-int2 ineg-fix-int)
+        (do-not-induct t)))
+
+
+; -----------------------------------------------------------------------------
+; Cancel INEG
+; -----------------------------------------------------------------------------
+
+;; We assume that the given term (IPLUS x y) has the property that y
+;; has already been reduced and x is not an iplus-term.  So, the only
+;; question is whether or not the formal negative of x appears in the
+;; fringe of y.
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-ineg-aux (x y)
+  ;; returns nil or else a new term provably equal to (IPLUS x y)
+  (if (and (listp x)
+           (equal (car x) 'ineg))
+      (cond 
+       ((equal y (cadr x))
+        ''0)
+       ((and (listp y)
+             (equal (car y) 'iplus))
+        (let ((y1 (cadr y)) (y2 (caddr y)))
+          (if (equal y1 (cadr x))
+              (list 'fix-int y2)
+            (let ((z (cancel-ineg-aux x y2)))
+              (if z
+                  (list 'iplus y1 z)
+                f)))))
+       (t f))
+    (cond
+     ((nlistp y)
+      f)
+     ((equal (car y) 'ineg)
+      (if (equal x (cadr y))
+          ''0
+        f))
+     ((equal (car y) 'iplus)
+      (let ((y1 (cadr y)) (y2 (caddr y)))
+        (if (and (listp y1)
+                 (equal (car y1) 'ineg)
+                 (equal x (cadr y1)))
+            (list 'fix-int y2)
+          (let ((z (cancel-ineg-aux x y2)))
+            (if z
+                (list 'iplus y1 z)
+              f)))))
+     (t f))))
+|#
+
+(DEFN CANCEL-INEG-AUX (X Y)
+      (COND
+        ((LISTP X)
+         (COND
+           ((EQUAL (CAR X) 'INEG)
+            (COND
+              ((EQUAL Y (CADR X)) ''0)
+              ((LISTP Y)
+               (IF (EQUAL (CAR Y) 'IPLUS)
+                   (COND
+                     ((EQUAL (CADR Y) (CADR X))
+                      (LIST 'FIX-INT (CADDR Y)))
+                     ((CANCEL-INEG-AUX X (CADDR Y))
+                      (LIST 'IPLUS (CADR Y)
+                            (CANCEL-INEG-AUX X (CADDR Y))))
+                     (T F))
+                   F))
+              (T F)))
+           ((NLISTP Y) F)
+           ((EQUAL (CAR Y) 'INEG) (IF (EQUAL X (CADR Y)) ''0 F))
+           ((EQUAL (CAR Y) 'IPLUS)
+            (COND
+              ((LISTP (CADR Y))
+               (COND
+                 ((EQUAL (CAADR Y) 'INEG)
+                  (COND
+                    ((EQUAL X (CADADR Y)) (LIST 'FIX-INT (CADDR Y)))
+                    ((CANCEL-INEG-AUX X (CADDR Y))
+                     (LIST 'IPLUS (CADR Y)
+                           (CANCEL-INEG-AUX X (CADDR Y))))
+                    (T F)))
+                 ((CANCEL-INEG-AUX X (CADDR Y))
+                  (LIST 'IPLUS (CADR Y) (CANCEL-INEG-AUX X (CADDR Y))))
+                 (T F)))
+              ((CANCEL-INEG-AUX X (CADDR Y))
+               (LIST 'IPLUS (CADR Y) (CANCEL-INEG-AUX X (CADDR Y))))
+              (T F)))
+           (T F)))
+        ((NLISTP Y) F)
+        ((EQUAL (CAR Y) 'INEG) (IF (EQUAL X (CADR Y)) ''0 F))
+        ((EQUAL (CAR Y) 'IPLUS)
+         (COND
+           ((LISTP (CADR Y))
+            (COND
+              ((EQUAL (CAADR Y) 'INEG)
+               (COND
+                 ((EQUAL X (CADADR Y)) (LIST 'FIX-INT (CADDR Y)))
+                 ((CANCEL-INEG-AUX X (CADDR Y))
+                  (LIST 'IPLUS (CADR Y) (CANCEL-INEG-AUX X (CADDR Y))))
+                 (T F)))
+              ((CANCEL-INEG-AUX X (CADDR Y))
+               (LIST 'IPLUS (CADR Y) (CANCEL-INEG-AUX X (CADDR Y))))
+              (T F)))
+           ((CANCEL-INEG-AUX X (CADDR Y))
+            (LIST 'IPLUS (CADR Y) (CANCEL-INEG-AUX X (CADDR Y))))
+           (T F)))
+        (T F)))
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-ineg (x)
+  (if (and (listp x)
+           (equal (car x) 'iplus))
+      (let ((temp (cancel-ineg-aux (cadr x) (caddr x))))
+        (if temp
+            temp
+          x))
+    x))
+|#
+
+(DEFN CANCEL-INEG (X)
+      (IF (LISTP X)
+          (IF (EQUAL (CAR X) 'IPLUS)
+              (IF (CANCEL-INEG-AUX (CADR X) (CADDR X))
+                  (CANCEL-INEG-AUX (CADR X) (CADDR X))
+                  X)
+              X)
+          X))
+
+;; It seems a big win to turn off eval$.  I'll leave the recursive step out in
+;; hopes that rewrite-eval$ handles it OK.
+
+(prove-lemma eval$-list-cons (rewrite)
+  (equal (eval$ 'list (cons x y) a)
+         (cons (eval$ t x a)
+               (eval$ 'list y a))))
+
+(prove-lemma eval$-list-nlistp (rewrite)
+  (implies (nlistp x)
+           (equal (eval$ 'list x a)
+                  nil)))
+
+(prove-lemma eval$-litatom (rewrite)
+  (implies (litatom x)
+           (equal (eval$ t x a)
+                  (cdr (assoc x a)))))
+
+#|
+(prove-lemma eval$-quotep (rewrite)
+  (equal (eval$ t (list 'quote x) a)
+         x))
+|#
+
+;; In place of the above I'll do the following, from
+;; the naturals library.
+(enable eval$-quote)
+
+(prove-lemma eval$-other (rewrite)
+  (implies (and (not (litatom x))
+                (nlistp x))
+           (equal (eval$ t x a)
+                  x)))
+
+(disable eval$)
+
+;; What I'd like to do is say what (eval$ t (cancel-ineg-aux x y) a),
+;; but a rewrite rule will loop because of the recursion.  So I
+;; introduce a silly auxiliary function so that the opening-up
+;; heuristics can help me.  The function body has (listp y) tests
+;; so that it can be accepted.
+
+(defn eval$-cancel-ineg-aux-fn (x y a)
+  (if (and (listp x)
+           (equal (car x) 'ineg))
+      (cond 
+       ((equal y (cadr x))
+        0)
+       (t
+        (let ((y1 (cadr y)) (y2 (caddr y)))
+          (if (equal y1 (cadr x))
+              (fix-int (eval$ t y2 a))
+            (if (listp y);; silly acceptability thing
+                (iplus (eval$ t y1 a)
+                       (eval$-cancel-ineg-aux-fn x y2 a))
+              0)))))
+    (cond
+     ((equal (car y) 'ineg)
+      0)
+     (t
+      (let ((y1 (cadr y)) (y2 (caddr y)))
+        (if (and (listp y1)
+                 (equal (car y1) 'ineg)
+                 (equal x (cadr y1)))
+            (fix-int (eval$ t y2 a))
+          (if (listp y);; silly acceptability thing
+              (iplus (eval$ t y1 a)
+                     (eval$-cancel-ineg-aux-fn x y2 a))
+            0)))))))
+
+(prove-lemma eval$-cancel-ineg-aux-is-its-fn (rewrite)
+  (implies (not (equal (cancel-ineg-aux x y) f))
+           (equal (eval$ t (cancel-ineg-aux x y) a)
+                  (eval$-cancel-ineg-aux-fn x y a))))
+
+(prove-lemma iplus-ineg3 (rewrite)
+  (equal (iplus (ineg x) (iplus x y))
+         (fix-int y))
+  ((enable-theory integer-defns)))
+
+(prove-lemma iplus-ineg4 (rewrite)
+  (equal (iplus x (iplus (ineg x) y))
+         (fix-int y))
+  ((use (iplus-ineg3 (x (ineg x)) (y y)))))
+
+(prove-lemma iplus-ineg-promote (rewrite)
+  (equal (iplus y (ineg x))
+         (iplus (ineg x) y)))
+
+(prove-lemma iplus-x-y-ineg-x (rewrite)
+  (equal (iplus x (iplus y (ineg x)))
+         (fix-int y)))
+             
+(disable iplus-ineg-promote)
+
+(prove-lemma correctness-of-cancel-ineg-aux (rewrite)
+  (implies (not (equal (cancel-ineg-aux x y) f))
+           (equal (eval$-cancel-ineg-aux-fn x y a)
+                  (iplus (eval$ t x a) (eval$ t y a))))
+  ((induct (cancel-ineg-aux x y))))
+
+(prove-lemma correctness-of-cancel-ineg ((meta iplus))
+  (equal (eval$ t x a)
+         (eval$ t (cancel-ineg x) a))
+  ((disable cancel-ineg-aux)))
+
+(disable correctness-of-cancel-ineg-aux)
+
+; ---------------------------------------------------------------------------
+; Cancel IPLUS
+; ---------------------------------------------------------------------------
+
+;; All I do here is cancel like terms from both sides.  The problem of
+;; handling INEG cancellation IS handled completely separately above.
+;; That hasn't always been the case -- in my first try I attempted to
+;; integrate the operations.  But now I see that for things like
+;; (equal z (iplus x (iplus y (ineg x)))) the integrated approach will
+;; fail.  Also, thanks to Matt Wilding, for pointing out that the
+;; "four squares" example that Bill Pase sent me ran faster with the
+;; newer approach (on his previously-implemented version for the
+;; rationals).
+
+#| The function below has no AND or OR, for efficiency
+(defn iplus-fringe (x)
+  (if (and (listp x)
+           (equal (car x)
+                  (quote iplus)))
+      (append (iplus-fringe (cadr x))
+              (iplus-fringe (caddr x)))
+      (cons x nil)))
+|#
+
+(DEFN IPLUS-FRINGE (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'IPLUS)
+          (APPEND (IPLUS-FRINGE (CADR X)) (IPLUS-FRINGE (CADDR X)))
+          (LIST X))
+      (LIST X)))
+
+(prove-lemma lessp-count-listp-cdr (rewrite)
+  (implies (listp (cdr x))
+           (lessp (count (cdr x)) (count x))))
+
+(defn iplus-tree-rec (l)
+  (if (nlistp (cdr l))
+      (car l)
+    (list (quote iplus)
+          (car l)
+          (iplus-tree-rec (cdr l)))))
+
+(defn iplus-tree (l)
+  (if (listp l)
+      (if (listp (cdr l))
+          (iplus-tree-rec l)
+        (list (quote fix-int)
+              (car l)))
+    (quote (quote 0))))
+
+(defn iplus-list (x)
+  (if (listp x)
+      (iplus (car x)
+             (iplus-list (cdr x)))
+    0))
+
+(prove-lemma integerp-iplus-list (rewrite)
+  (integerp (iplus-list x)))
+
+(prove-lemma eval$-iplus-tree-rec (rewrite)
+  (equal (eval$ t (iplus-tree-rec x) a)
+         (if (listp x)
+             (if (listp (cdr x))
+                 (iplus-list (eval$ 'list x a))
+               (eval$ t (car x) a))
+           0)))
+           
+(prove-lemma eval$-iplus-tree (rewrite)
+  (equal (eval$ t (iplus-tree x) a)
+         (iplus-list (eval$ 'list x a))))
+
+(prove-lemma eval$-list-append (rewrite)
+  (equal (eval$ 'list (append x y) a)
+         (append (eval$ 'list x a)
+                 (eval$ 'list y a))))
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-iplus (x)
+  (if (and (listp x)
+           (equal (car x) (quote equal)))
+      (if (and (listp (cadr x))
+               (equal (caadr x) (quote iplus))
+               (listp (caddr x))
+               (equal (caaddr x) (quote iplus)))
+          (let ((xs (iplus-fringe (cadr x)))
+                (ys (iplus-fringe (caddr x))))
+            (let ((bagint (bagint xs ys)))
+              (if (listp bagint)
+                  (list (quote equal)
+                        (iplus-tree (bagdiff xs bagint))
+                        (iplus-tree (bagdiff ys bagint)))
+                x)))
+        (if (and (listp (cadr x))
+                 (equal (caadr x) (quote iplus))
+                 ;; We don't want to introduce the IF below unless something
+                 ;; is "gained", or else we may get into an infinite 
+                 ;; rewriting loop.
+                 (member (caddr x) (iplus-fringe (cadr x))))
+            (list (quote if)
+                  (list (quote integerp) (caddr x))
+                  (list (quote equal)
+                        (iplus-tree (delete (caddr x) (iplus-fringe (cadr x))))
+                        ''0)
+                  (list (quote quote) f))
+          (if (and (listp (caddr x))
+                   (equal (caaddr x) (quote iplus))
+                   (member (cadr x) (iplus-fringe (caddr x))))
+              (list (quote if)
+                    (list (quote integerp) (cadr x))
+                    (list (quote equal)
+                          ''0
+                          (iplus-tree (delete (cadr x)
+                                              (iplus-fringe (caddr x)))))
+                    (list (quote quote) f))
+            x)))
+    x))
+|#
+
+(DEFN CANCEL-IPLUS (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'EQUAL)
+          (COND
+           ((LISTP (CADR X))
+            (COND
+             ((EQUAL (CAADR X) 'IPLUS)
+              (COND
+               ((LISTP (CADDR X))
+                (COND
+                 ((EQUAL (CAADDR X) 'IPLUS)
+                  (IF (LISTP (BAGINT (IPLUS-FRINGE (CADR X))
+                                     (IPLUS-FRINGE (CADDR X))))
+                      (LIST 'EQUAL
+                            (IPLUS-TREE
+                             (BAGDIFF (IPLUS-FRINGE (CADR X))
+                                      (BAGINT (IPLUS-FRINGE (CADR X))
+                                              (IPLUS-FRINGE (CADDR X)))))
+                            (IPLUS-TREE
+                             (BAGDIFF (IPLUS-FRINGE (CADDR X))
+                                      (BAGINT (IPLUS-FRINGE (CADR X))
+                                              (IPLUS-FRINGE (CADDR X))))))
+                      X))
+                 ((MEMBER (CADDR X) (IPLUS-FRINGE (CADR X)))
+                  (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                        (CONS 'EQUAL
+                              (CONS
+                               (IPLUS-TREE
+                                (DELETE (CADDR X)
+                                        (IPLUS-FRINGE (CADR X))))
+                               '('0)))
+                        (LIST 'QUOTE F)))
+                 (T X)))
+               ((MEMBER (CADDR X) (IPLUS-FRINGE (CADR X)))
+                (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                      (CONS 'EQUAL
+                            (CONS
+                             (IPLUS-TREE
+                              (DELETE (CADDR X)
+                                      (IPLUS-FRINGE (CADR X))))
+                             '('0)))
+                      (LIST 'QUOTE F)))
+               (T X)))
+             ((LISTP (CADDR X))
+              (IF (EQUAL (CAADDR X) 'IPLUS)
+                  (IF (MEMBER (CADR X) (IPLUS-FRINGE (CADDR X)))
+                      (LIST 'IF (LIST 'INTEGERP (CADR X))
+                            (LIST 'EQUAL ''0
+                                  (IPLUS-TREE
+                                   (DELETE (CADR X)
+                                           (IPLUS-FRINGE (CADDR X)))))
+                            (LIST 'QUOTE F))
+                      X)
+                  X))
+             (T X)))
+           ((LISTP (CADDR X))
+            (IF (EQUAL (CAADDR X) 'IPLUS)
+                (IF (MEMBER (CADR X) (IPLUS-FRINGE (CADDR X)))
+                    (LIST 'IF (LIST 'INTEGERP (CADR X))
+                          (LIST 'EQUAL ''0
+                                (IPLUS-TREE
+                                 (DELETE (CADR X)
+                                         (IPLUS-FRINGE (CADDR X)))))
+                          (LIST 'QUOTE F))
+                    X)
+                X))
+           (T X))
+          X)
+      X))
+
+(lemma eval$-cancel-iplus (rewrite)
+  (equal
+   (eval$ t (cancel-iplus x) a)
+   (if (and (listp x)
+            (equal (car x) (quote equal)))
+       (if (and (listp (cadr x))
+                (equal (caadr x) (quote iplus))
+                (listp (caddr x))
+                (equal (caaddr x) (quote iplus)))
+           (let ((xs (iplus-fringe (cadr x)))
+                 (ys (iplus-fringe (caddr x))))
+             (let ((bagint (bagint xs ys)))
+               (if (listp bagint)
+                   (equal
+                    (iplus-list (eval$ 'list (bagdiff xs (bagint xs ys)) a))
+                    (iplus-list (eval$ 'list (bagdiff ys (bagint xs ys)) a)))
+                 (eval$ t x a))))
+         (if (and (listp (cadr x))
+                  (equal (caadr x) (quote iplus))
+                  (member (caddr x) (iplus-fringe (cadr x))))
+             (if (integerp (eval$ t (caddr x) a))
+                 (equal (iplus-list
+                         (eval$ 'list (delete (caddr x)
+                                              (iplus-fringe (cadr x))) a))
+                        0)
+               f)
+           (if (and (listp (caddr x))
+                    (equal (caaddr x) (quote iplus))
+                    (member (cadr x) (iplus-fringe (caddr x))))
+               (if (integerp (eval$ t (cadr x) a))
+                   (equal 0
+                          (iplus-list
+                           (eval$ 'list (delete (cadr x)
+                                                (iplus-fringe (caddr x))) a)))
+                 f)
+             (eval$ t x a))))
+     (eval$ t x a)))
+  ((enable eval$-iplus-tree cancel-iplus eval$-list-cons
+           eval$-litatom eval$-quote)
+   (disable eval$)))
+
+(disable cancel-iplus)
+
+(prove-lemma eval$-iplus-list-delete (rewrite)
+  (implies (member z y)
+           (equal (iplus-list (eval$ 'list (delete z y) a))
+                  (idifference (iplus-list (eval$ 'list y a))
+                               (eval$ t z a)))))
+
+(prove-lemma eval$-iplus-list-bagdiff (rewrite)
+  (implies (subbagp x y)
+           (equal (iplus-list (eval$ 'list (bagdiff y x) a))
+                  (idifference (iplus-list (eval$ 'list y a))
+                               (iplus-list (eval$ 'list x a))))))
+
+(prove-lemma iplus-list-append (rewrite)
+  (equal (iplus-list (append x y))
+         (iplus (iplus-list x) (iplus-list y))))
+
+(disable iplus-tree) ;; because we want to use EVAL$-IPLUS-TREE for now
+
+(lemma not-integerp-implies-not-equal-iplus (rewrite)
+       (implies (not (integerp a))
+                (equal (equal a (iplus b c))
+                       f))
+       ((use (integerp-iplus (x b) (y c)))
+        (enable integerp)
+        (do-not-induct t)))
+
+(prove-lemma iplus-list-eval$-fringe (rewrite)
+       ;; similar to IPLUS-TREE-IPLUS-FRINGE
+       (equal (iplus-list (eval$ 'list (iplus-fringe x) a))
+              (fix-int (eval$ t x a)))
+       ((induct (iplus-fringe x))))
+
+;; The following two lemmas aren't needed but they sure do
+;; shorten the total proof time!!!
+
+(prove-lemma iplus-ineg5-lemma-1 (rewrite)
+  (implies (integerp x)
+           (equal (equal x (iplus y (iplus (ineg z) w)))
+                  (equal x (iplus (ineg z) (iplus y w))))))
+
+(prove-lemma iplus-ineg5-lemma-2 (rewrite)
+  (implies (and (integerp x) (integerp v))
+           (equal (equal x (iplus (ineg z) v))
+                  (equal (iplus x z) v))))
+
+(lemma iplus-ineg5 (rewrite)
+  (implies (integerp x)
+           (equal (equal x (iplus y (iplus (ineg z) w)))
+                  (equal (iplus x z) (iplus y w))))
+  ((enable iplus-ineg5-lemma-1 iplus-ineg5-lemma-2 integerp-iplus)))
+
+(disable iplus-ineg5-lemma-1)
+
+(disable iplus-ineg5-lemma-2)
+
+(lemma iplus-ineg6 (rewrite)
+  (implies (integerp x)
+           (equal (equal x (iplus y (iplus w (ineg z))))
+                  (equal (iplus x z) (iplus y w))))
+  ((use (iplus-ineg5)
+        (commutativity-of-iplus (x w) (y (ineg z))))))
+
+(prove-lemma eval$-iplus (rewrite)
+  (implies (and (listp x)
+                (equal (car x) 'iplus))
+           (equal (eval$ t x a)
+                  (iplus (eval$ t (cadr x) a)
+                         (eval$ t (caddr x) a)))))
+
+(prove-lemma iplus-ineg7 (rewrite)
+  (equal (equal 0 (iplus x (ineg y)))
+         (equal (fix-int y) (fix-int x)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma correctness-of-cancel-iplus ((meta equal))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-iplus x) a)))
+
+(disable iplus-ineg5)
+
+(disable iplus-ineg6)
+
+; ---------------------------------------------------------------------------
+; Cancel IPLUS from ILESSP
+; ---------------------------------------------------------------------------
+
+;; This is similar to the cancellation of IPLUS terms from equalities,
+;; handled above, and uses many of the same lemmas.  A small but definite
+;; difference however is that for ILESSP we don't have to fix integers.
+
+;; By luck we have that iplus-tree-rec is appropriate here, since
+;; the lemma eval$-iplus-tree-rec shows that it (accidentally) behaves
+;; properly on the empty list.
+
+(prove-lemma ilessp-fix-int-1 (rewrite)
+  (equal (ilessp (fix-int x) y)
+         (ilessp x y))
+  ((enable-theory integer-defns)))
+
+(prove-lemma ilessp-fix-int-2 (rewrite)
+  (equal (ilessp x (fix-int y))
+         (ilessp x y))
+  ((enable-theory integer-defns)))
+
+;; Perhaps the easiest approach is to do everything with respect to the
+;; same IPLUS-TREE function that we used before, and then once the
+;; supposed meta-lemma is proved, go back and show that we get the
+;; same answer if we use a version that doesn't fix-int singleton fringes.
+
+(defn make-cancel-iplus-inequality-1 (x y)
+  ;; x and y are term lists
+  (list (quote ilessp)
+        (iplus-tree (bagdiff
+                     x
+                     (bagint x y)))
+        (iplus-tree (bagdiff
+                     y
+                     (bagint x y)))))
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-iplus-ilessp-1 (x)
+  (if (and (listp x)
+           (equal (car x) (quote ilessp)))
+      (make-cancel-iplus-inequality-1 (iplus-fringe (cadr x))
+                                      (iplus-fringe (caddr x)))
+    x))
+|#
+
+(DEFN CANCEL-IPLUS-ILESSP-1 (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'ILESSP)
+          (MAKE-CANCEL-IPLUS-INEQUALITY-1 (IPLUS-FRINGE (CADR X))
+                                          (IPLUS-FRINGE (CADDR X)))
+          X)
+      X))
+
+;; Notice that IPLUS-TREE-NO-FIX-INT is currently enabled, which is
+;; good since we want to use EVAL$-IPLUS-TREE-NO-FIX-INT for now.
+
+(prove-lemma lessp-difference-plus-arg1 (rewrite)
+  (equal (lessp w (difference (plus w y) x))
+         (lessp x y)))
+
+(prove-lemma lessp-difference-plus-arg1-commuted (rewrite)
+  (equal (lessp w (difference (plus y w) x))
+         (lessp x y)))
+
+(prove-lemma iplus-cancellation-1-for-ilessp (rewrite)
+       (equal (ilessp (iplus a b) (iplus a c))
+              (ilessp b c))
+       ((enable-theory integer-defns)))
+
+(prove-lemma iplus-cancellation-2-for-ilessp (rewrite)
+       (equal (ilessp (iplus b a) (iplus c a))
+              (ilessp b c)))
+
+(prove-lemma correctness-of-cancel-iplus-ilessp-lemma nil
+       (equal (eval$ t x a)
+              (eval$ t (cancel-iplus-ilessp-1 x) a)))
+
+(defn iplus-tree-no-fix-int (l)
+  (if (listp l)
+      (iplus-tree-rec l)
+    (quote (quote 0))))
+
+(prove-lemma eval$-ilessp-iplus-tree-no-fix-int (rewrite)
+  (equal (ilessp (eval$ t (iplus-tree-no-fix-int x) a)
+                 (eval$ t (iplus-tree-no-fix-int y) a))
+         (ilessp (eval$ t (iplus-tree x) a)
+                 (eval$ t (iplus-tree y) a))))
+
+(disable iplus-tree-no-fix-int)
+
+(lemma make-cancel-iplus-inequality-simplifier (rewrite)
+       (equal (eval$ t (make-cancel-iplus-inequality-1 x y) a)
+              (eval$ t (list (quote ilessp)
+                             (iplus-tree-no-fix-int (bagdiff
+                                                     x
+                                                     (bagint x y)))
+                             (iplus-tree-no-fix-int (bagdiff
+                                                     y
+                                                     (bagint x y)))) a))
+       ((enable make-cancel-iplus-inequality-1
+                eval$-ilessp-iplus-tree-no-fix-int)
+        (disable eval$)))
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-iplus-ilessp (x)
+  (if (and (listp x)
+           (equal (car x) (quote ilessp)))
+      (let ((x1 (iplus-fringe (cadr x)))
+            (y1 (iplus-fringe (caddr x))))
+        (let ((bagint (bagint x1 y1)))
+          (if (listp bagint)
+              ;; I check (listp bagint) only for efficiency
+              (list (quote ilessp)
+                    (iplus-tree-no-fix-int (bagdiff x1 bagint))
+                    (iplus-tree-no-fix-int (bagdiff y1 bagint)))
+            x)))
+    x))
+|#
+
+;; **** Should perhaps check that some argument of the ILESSP has function
+;; symbol IPLUS, or else we may wind up dealing with (ILESSP 0 0).  That should
+;; be harmless enough, though, even if *1*IPLUS is disabled; we'll just get the
+;; same term back, the hard way.
+
+(DEFN CANCEL-IPLUS-ILESSP (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'ILESSP)
+          (IF (LISTP (BAGINT (IPLUS-FRINGE (CADR X))
+                             (IPLUS-FRINGE (CADDR X))))
+              (LIST 'ILESSP
+                    (IPLUS-TREE-NO-FIX-INT
+                     (BAGDIFF (IPLUS-FRINGE (CADR X))
+                              (BAGINT (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X)))))
+                    (IPLUS-TREE-NO-FIX-INT
+                     (BAGDIFF (IPLUS-FRINGE (CADDR X))
+                              (BAGINT (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X))))))
+              X)
+          X)
+      X))
+
+(disable make-cancel-iplus-inequality-1)
+
+(prove-lemma correctness-of-cancel-iplus-ilessp ((meta ilessp))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-iplus-ilessp x) a))
+       ((use (correctness-of-cancel-iplus-ilessp-lemma))))
+
+; ---------- Multiplication ----------
+
+(lemma itimes-zero1 (rewrite)
+       (implies (equal (fix-int x) 0)
+                (equal (itimes x y) 0))
+       ((enable itimes times fix-int integerp)
+        (do-not-induct t)))
+
+(prove-lemma itimes-0-left (rewrite)
+       (equal (itimes 0 y) 0))
+
+;; I don't want the backchaining to slow down the prover.
+(disable itimes-zero1)
+
+(lemma itimes-zero2 (rewrite)
+       (implies (equal (fix-int y) 0)
+                (equal (itimes x y) 0))
+       ((enable itimes fix-int integerp times-zero)
+        (do-not-induct t)))
+
+(prove-lemma itimes-0-right (rewrite)
+       (equal (itimes x 0) 0))
+
+;; I don't want the backchaining to slow down the prover.
+(disable itimes-zero2)
+
+(lemma itimes-fix-int1 (rewrite)
+       (equal (itimes (fix-int a) b)
+              (itimes a b))
+       ((enable itimes fix-int integerp)
+        (do-not-induct t)))
+
+(lemma itimes-fix-int2 (rewrite)
+       (equal (itimes a (fix-int b))
+              (itimes a b))
+       ((enable itimes fix-int integerp times-zero)
+        (do-not-induct t)))
+
+(lemma commutativity-of-itimes (rewrite)
+       (equal (itimes x y) (itimes y x))
+       ((enable itimes fix-int integerp)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+(lemma itimes-distributes-over-iplus-proof ()
+       (equal (itimes x (iplus y z))
+              (iplus (itimes x y) (itimes x z)))
+       ((enable itimes iplus integerp fix-int
+                commutativity2-of-iplus associativity-of-iplus)
+        (enable-theory multiplication addition)
+        (do-not-induct t)))
+
+(lemma itimes-distributes-over-iplus (rewrite)
+       (and (equal (itimes x (iplus y z))
+                   (iplus (itimes x y) (itimes x z)))
+            (equal (itimes (iplus x y) z)
+                   (iplus (itimes x z) (itimes y z))))
+       ((use (itimes-distributes-over-iplus-proof (x x) (y y) (z z))
+             (itimes-distributes-over-iplus-proof (x z) (y x) (z y)))
+        (enable commutativity-of-itimes)))
+
+(lemma commutativity2-of-itimes (rewrite)
+       (equal (itimes x (itimes y z))
+              (itimes y (itimes x z)))
+       ((enable itimes integerp fix-int)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+(lemma associativity-of-itimes (rewrite)
+       (equal (itimes (itimes x y) z) 
+              (itimes x (itimes y z)))
+       ((enable itimes integerp fix-int)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+(lemma equal-itimes-0 (rewrite)
+       (equal (equal (itimes x y) 0)
+              (or (equal (fix-int x) 0)
+                  (equal (fix-int y) 0)))
+       ((enable itimes integerp fix-int)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+(lemma equal-itimes-1 (rewrite)
+       (equal (equal (itimes a b) 1)
+              (or (and (equal a 1)
+                       (equal b 1))
+                  (and (equal a -1)
+                       (equal b -1))))
+       ((enable itimes integerp fix-int)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+(lemma equal-itimes-minus-1 (rewrite)
+       (equal (equal (itimes a b) -1)
+              (or (and (equal a -1)
+                       (equal b 1))
+                  (and (equal a 1)
+                       (equal b -1))))
+       ((enable itimes integerp fix-int)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+(lemma itimes-1-arg1 (rewrite)
+       (equal (itimes 1 x) (fix-int x))
+       ((enable integerp fix-int itimes)
+        (enable-theory multiplication)
+        (do-not-induct t)))
+
+; ---------- Division ----------
+
+(lemma quotient-remainder-uniqueness ()
+       (implies (and (equal a (plus r (times b q)))
+                     (lessp r b))
+                (and (equal (fix r) (remainder a b))
+                     (equal (fix q) (quotient a b))))
+       ((enable-theory naturals)
+        (enable remainder quotient)))
+
+
+; We want to define IQUOTIENT and IREMAINDER. The standard approach to
+; integer division derives from from the following theorem.
+;
+; Division Theorem:
+; For all integers i,j, j not 0, there exist unique integers q and r
+; which satisfy  i = jq + r,  0 <= r < |j|.
+;
+; The functions IQUOTIENT and IREMAINDER are intended to compute q and r.
+; Therefore, to be satisfied that we have the right definitions, we must
+; prove the above theorem.
+
+(prove-lemma division-theorem-part1 ()
+       (implies (integerp i)
+                (equal (iplus (iremainder i j) (itimes j (iquotient i j)))
+                       i)))
+
+(prove-lemma division-theorem-part2 ()
+       (implies (and (integerp j)
+                     (not (equal j 0)))
+                (not (ilessp (iremainder i j) 0)))
+       ((enable-theory integer-defns)))
+
+(prove-lemma division-theorem-part3 ()
+       (implies (and (integerp j)
+                     (not (equal j 0)))
+                (ilessp (iremainder i j) (iabs j)))
+       ((enable-theory integer-defns)))
+
+(lemma division-theorem ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (not (equal j 0)))
+                (and (equal (iplus (iremainder i j) (itimes j (iquotient i j)))
+                            i)
+                     (not (ilessp (iremainder i j) 0))
+                     (ilessp (iremainder i j) (iabs j))))
+       ((use (division-theorem-part1 (i i) (j j))
+             (division-theorem-part2 (i i) (j j))
+             (division-theorem-part3 (i i) (j j)))))
+
+(lemma quotient-difference-lessp-arg2 (rewrite)
+       (implies (and (equal (remainder a c) 0)
+                     (lessp b c))
+                (equal (quotient (difference a b) c)
+                       (if (zerop b)
+                           (quotient a c)
+                           (if (lessp b a)
+                               (difference (quotient a c)
+                                           (add1 (quotient b c)))
+                               0))))
+       ((enable-theory naturals)
+        (do-not-induct t)))
+
+(lemma iquotient-iremainder-uniqueness ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (integerp r)
+                     (integerp q)
+                     (not (equal j 0))
+                     (equal i (iplus r (itimes j q)))
+                     (not (ilessp r 0))
+                     (ilessp r (iabs j)))
+                (and (equal r (iremainder i j))
+                     (equal q (iquotient i j))))
+       ((enable iremainder iabs idifference iplus ineg
+                fix-int itimes iquotient ilessp integerp
+                quotient-difference-lessp-arg2) 
+        (enable-theory naturals)
+        (do-not-induct t)))
+ 
+; It turns out that in computer arithmetic, notions of division other than that
+; given by the division theorem are used. Two in particular, called
+; "truncate towards negative infinity" and "truncate towards zero" are common.
+; We present their definitions here. 
+
+; Division Theorem (truncate towards negative infinity variant):
+;
+; For all integers i,j, j not 0, there exist unique integers q and r
+; which satisfy  
+;                i = jq + r,  0 <= r <  j  (j > 0)
+;                             j <  r <= 0  (j < 0)
+;
+; In this version the integer quotient of two integers is the integer floor
+; of the real quotient of the integers. The remainder has the sign of the
+; divisor. The functions IDIV and IMOD are intended to compute q and r.
+; Therefore, to be satisfied that we have the right definitions, we must
+; prove the above theorem.
+
+(prove-lemma division-theorem-for-truncate-to-neginf-part1 ()
+       (implies (integerp i)
+                (equal (iplus (imod i j) (itimes j (idiv i j)))
+                       i))
+       ((enable-theory integer-defns)))
+
+(lemma division-theorem-for-truncate-to-neginf-part2 ()
+       (implies (ilessp 0 j)
+                (and (not (ilessp (imod i j) 0))
+                     (ilessp (imod i j) j)))
+       ((enable imod ilessp idifference iplus ineg
+                itimes idiv integerp fix-int)
+        (enable-theory naturals)
+        (do-not-induct t)))
+
+(lemma division-theorem-for-truncate-to-neginf-part3 ()
+       (implies (and (integerp j)
+                     (ilessp j 0))
+                (and (not (ilessp 0 (imod i j)))
+                     (ilessp j (imod i j))))
+       ((enable imod ilessp idifference iplus ineg
+                itimes idiv integerp fix-int)
+        (enable-theory naturals)
+        (do-not-induct t)))
+
+(lemma division-theorem-for-truncate-to-neginf ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (not (equal j 0)))
+                (and (equal (iplus (imod i j) (itimes j (idiv i j)))
+                            i)
+                     (if (ilessp 0 j)
+                         (and (not (ilessp (imod i j) 0))
+                              (ilessp (imod i j) j))
+                         (and (not (ilessp 0 (imod i j)))
+                              (ilessp j (imod i j))))))
+       ((use (division-theorem-for-truncate-to-neginf-part1 (i i) (j j))
+             (division-theorem-for-truncate-to-neginf-part2 (i i) (j j))
+             (division-theorem-for-truncate-to-neginf-part3 (i i) (j j)))
+        (enable integerp ilessp)
+        (do-not-induct t)))
+
+(lemma idiv-imod-uniqueness ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (integerp r)
+                     (integerp q)
+                     (not (equal j 0))
+                     (equal i (iplus r (itimes j q)))
+                     (if (ilessp 0 j)
+                         (and (not (ilessp r 0))
+                              (ilessp r j))
+                         (and (not (ilessp 0 r))
+                              (ilessp j r))))
+                (and (equal r (imod i j))
+                     (equal q (idiv i j))))
+       ((enable imod iabs idifference iplus ineg
+                fix-int itimes idiv ilessp integerp
+                ;lessp-plus-times-crock
+                ;lessp-times-crock1
+                ;lessp-times-crock2
+                ;lessp-times-crock3
+                ;lessp-times-crock4
+                quotient-difference-lessp-arg2) 
+        (enable-theory naturals)
+        (do-not-induct t)))
+
+; Division Theorem (truncate towards zero variant):
+;
+; For all integers i,j, j not 0, there exist unique integers q and r
+; which satisfy  
+;                i = jq + r,     0 <=  r  <  |j|  (i => 0)
+;                             -|j| <   r  <= 0    (i < 0)
+;
+; In this version (iquo, irem), the integer quotient of two integers
+; is the integer floor of the real quotient of the integers, if the
+; real quotient is positive. If the real quotient is negative, the
+; integer quotient is the integer ceiling of the real quotient. The
+; remainder has the sign of the dividend. The functions IQUO and IREM
+; are intended to compute q and r. Therefore, to be satisfied that we
+; have the right definitions, we must prove the above theorem.
+
+(prove-lemma division-theorem-for-truncate-to-zero-part1 ()
+       (implies (integerp i)
+                (equal (iplus (irem i j) (itimes j (iquo i j)))
+                       i))
+       ((enable-theory integer-defns)))
+
+(prove-lemma division-theorem-for-truncate-to-zero-part2 ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (not (equal j 0))
+                     (not (ilessp i 0)))
+                (and (not (ilessp (irem i j) 0))
+                     (ilessp (irem i j) (iabs j))))
+       ((enable-theory integer-defns)))
+
+(prove-lemma division-theorem-for-truncate-to-zero-part3 ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (not (equal j 0))
+                     (ilessp i 0))
+                (and (not (ilessp 0 (irem i j)))
+                     (ilessp (ineg (iabs j)) (irem i j))))
+       ((enable-theory integer-defns)))
+
+(lemma division-theorem-for-truncate-to-zero ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (not (equal j 0)))
+                (and (equal (iplus (irem i j) (itimes j (iquo i j)))
+                            i)
+                     (if (not (ilessp i 0))
+                         (and (not (ilessp (irem i j) 0))
+                              (ilessp (irem i j) (iabs j)))
+                         (and (not (ilessp 0 (irem i j)))
+                              (ilessp (ineg (iabs j)) (irem i j))))))
+       ((use (division-theorem-for-truncate-to-zero-part1 (i i) (j j))
+             (division-theorem-for-truncate-to-zero-part2 (i i) (j j))
+             (division-theorem-for-truncate-to-zero-part3 (i i) (j j)))
+        (enable integerp ilessp)
+        (do-not-induct t)))
+
+(prove-lemma iquo-irem-uniqueness ()
+       (implies (and (integerp i)
+                     (integerp j)
+                     (integerp r)
+                     (integerp q)
+                     (not (equal j 0))
+                     (equal i (iplus r (itimes j q)))
+                     (if (not (ilessp i 0))
+                         (and (not (ilessp r 0))
+                              (ilessp r (iabs j)))
+                         (and (not (ilessp 0 r))
+                              (ilessp (ineg (iabs j)) r))))
+                (and (equal r (irem i j))
+                     (equal q (iquo i j))))
+       ((enable-theory integer-defns)))
+
+; ---------- Multiplication Facts
+
+(prove-lemma itimes-ineg-1 (rewrite)
+  (equal (itimes (ineg x) y)
+         (ineg (itimes x y)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma itimes-ineg-2 (rewrite)
+  (equal (itimes x (ineg y))
+         (ineg (itimes x y)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma itimes-cancellation-1 (rewrite)
+       (equal (equal (itimes a b) (itimes a c))
+              (or (equal (fix-int a) 0)
+                  (equal (fix-int b) (fix-int c))))
+       ((enable-theory integer-defns)))
+
+(lemma itimes-cancellation-2 (rewrite)
+       (equal (equal (itimes b a) (itimes c a))
+              (or (equal (fix-int a) 0)
+                  (equal (fix-int b) (fix-int c))))
+       ((use (itimes-cancellation-1))
+        (enable commutativity-of-itimes)))
+
+(lemma itimes-cancellation-3 (rewrite)
+       (equal (equal (itimes a b) (itimes c a))
+              (or (equal (fix-int a) 0)
+                  (equal (fix-int b) (fix-int c))))
+       ((use (itimes-cancellation-1))
+        (enable commutativity-of-itimes)))
+
+; ---------- Division Facts
+
+(lemma integerp-iquotient (rewrite)
+       (integerp (iquotient i j))
+       ((enable integerp iquotient fix-int)
+        (do-not-induct t)))
+
+(lemma integerp-iremainder (rewrite)
+       (integerp (iremainder i j))
+       ((enable iremainder integerp-idifference)
+        (do-not-induct t)))
+
+(lemma integerp-idiv (rewrite)
+       (integerp (idiv i j))
+       ((enable integerp idiv fix-int)
+        (do-not-induct t)))
+
+(lemma integerp-imod (rewrite)
+       (integerp (imod i j))
+       ((enable imod integerp-idifference)
+        (do-not-induct t)))
+
+(lemma integerp-iquo (rewrite)
+       (integerp (iquo i j))
+       ((enable integerp iquo fix-int)
+        (do-not-induct t)))
+
+(lemma integerp-irem (rewrite)
+       (integerp (irem i j))
+       ((enable irem integerp-idifference)
+        (do-not-induct t)))
+
+(lemma iquotient-fix-int1 (rewrite)
+       (equal (iquotient (fix-int i) j)
+              (iquotient i j))       
+       ((enable integerp iquotient fix-int)
+        (do-not-induct t)))
+
+(lemma iquotient-fix-int2 (rewrite)
+       (equal (iquotient i (fix-int j))
+              (iquotient i j))       
+       ((enable integerp iquotient fix-int)
+        (do-not-induct t)))
+
+(lemma iremainder-fix-int1 (rewrite)
+       (equal (iremainder (fix-int i) j)
+              (iremainder i j))       
+       ((enable iremainder idifference-fix-int1 iquotient-fix-int1)
+        (do-not-induct t)))
+
+(lemma iremainder-fix-int2 (rewrite)
+       (equal (iremainder i (fix-int j))
+              (iremainder i j))       
+       ((enable iremainder itimes-fix-int1 iquotient-fix-int2)
+        (do-not-induct t)))
+
+(lemma idiv-fix-int1 (rewrite)
+       (equal (idiv (fix-int i) j)
+              (idiv i j))       
+       ((enable integerp idiv fix-int)
+        (do-not-induct t)))
+
+(lemma idiv-fix-int2 (rewrite)
+       (equal (idiv i (fix-int j))
+              (idiv i j))       
+       ((enable integerp idiv fix-int)
+        (do-not-induct t)))
+
+(lemma imod-fix-int1 (rewrite)
+       (equal (imod (fix-int i) j)
+              (imod i j))       
+       ((enable imod fix-int-fix-int idiv-fix-int1)
+        (do-not-induct t)))
+
+(lemma imod-fix-int2 (rewrite)
+       (equal (imod i (fix-int j))
+              (imod i j))       
+       ((enable imod itimes-fix-int1 idiv-fix-int2)
+        (do-not-induct t)))
+
+(lemma iquo-fix-int1 (rewrite)
+       (equal (iquo (fix-int i) j)
+              (iquo i j))       
+       ((enable integerp iquo fix-int)
+        (do-not-induct t)))
+
+(lemma iquo-fix-int2 (rewrite)
+       (equal (iquo i (fix-int j))
+              (iquo i j))       
+       ((enable integerp iquo fix-int)
+        (do-not-induct t)))
+
+(lemma irem-fix-int1 (rewrite)
+       (equal (irem (fix-int i) j)
+              (irem i j))       
+       ((enable irem fix-int-fix-int iquo-fix-int1)
+        (do-not-induct t)))
+
+(lemma irem-fix-int2 (rewrite)
+       (equal (irem i (fix-int j))
+              (irem i j))       
+       ((enable irem itimes-fix-int1 iquo-fix-int2)
+        (do-not-induct t)))
+
+(lemma fix-int-iquotient (rewrite)
+       (equal (fix-int (iquotient i j))
+              (iquotient i j))
+       ((enable integerp iquotient fix-int)
+        (do-not-induct t)))
+
+(lemma fix-int-iremainder (rewrite)
+       (equal (fix-int (iremainder i j))
+              (iremainder i j))
+       ((enable iremainder fix-int-idifference)
+        (do-not-induct t)))
+
+(lemma fix-int-idiv (rewrite)
+       (equal (fix-int (idiv i j))
+              (idiv i j))
+       ((enable integerp idiv fix-int)
+        (do-not-induct t)))
+
+(lemma fix-int-imod (rewrite)
+       (equal (fix-int (imod i j))
+              (imod i j))
+       ((enable imod fix-int-idifference)
+        (do-not-induct t)))
+
+(lemma fix-int-iquo (rewrite)
+       (equal (fix-int (iquo i j))
+              (iquo i j))
+       ((enable integerp iquo fix-int)
+        (do-not-induct t)))
+
+(lemma fix-int-irem (rewrite)
+       (equal (fix-int (irem i j))
+              (irem i j))
+       ((enable irem fix-int-idifference)
+        (do-not-induct t)))
+
+(disable iquotient)
+(disable iremainder)
+(disable idiv)
+(disable imod)
+(disable iquo)
+(disable irem)
+
+; ---------- Meta lemma for itimes cancellation
+
+;; I tried to adapt this somewhat from corresponding meta lemmas in
+;; naturals library, but it seemed to get hairy.  So instead I'll try
+;; to parallel the development I gave for IPLUS.  I'll be lazier here
+;; about efficiency, so I'll use a completely analogous definition of
+;; itimes-tree.  Notice that I've avoided the IZEROP-TREE approach
+;; from the naturals version, in that I simply create the appropriate
+;; common fringe into a product and say that this product is non-zero
+;; when dividing both sides by it.  It can then be up to the user
+;; whether or not to enable the (meta or rewrite) rule that says that
+;; izerop of a product reduces to the disjunction of izerop of the
+;; factors.
+
+#| The function below has no AND or OR, for efficiency
+(defn itimes-fringe (x)
+  (if (and (listp x)
+           (equal (car x)
+                  (quote itimes)))
+      (append (itimes-fringe (cadr x))
+              (itimes-fringe (caddr x)))
+      (cons x nil)))
+|#
+
+(DEFN ITIMES-FRINGE (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'ITIMES)
+          (APPEND (ITIMES-FRINGE (CADR X))
+                  (ITIMES-FRINGE (CADDR X)))
+          (LIST X))
+      (LIST X)))
+
+(defn itimes-tree-rec (l)
+  (if (nlistp (cdr l))
+      (car l)
+    (list (quote itimes)
+          (car l)
+          (itimes-tree-rec (cdr l)))))
+
+(defn itimes-tree (l)
+  (if (listp l)
+      (if (listp (cdr l))
+          (itimes-tree-rec l)
+        (list (quote fix-int)
+              (car l)))
+    (quote (quote 1))))
+
+(defn itimes-list (x)
+  (if (listp x)
+      (itimes (car x)
+              (itimes-list (cdr x)))
+    1))
+
+(prove-lemma integerp-itimes-list (rewrite)
+  (integerp (itimes-list x)))
+
+(prove-lemma eval$-itimes-tree-rec (rewrite)
+  (implies (listp x)
+           (equal (eval$ t (itimes-tree-rec x) a)
+                  (if (listp (cdr x))
+                      (itimes-list (eval$ 'list x a))
+                    (eval$ t (car x) a)))))
+           
+;; The following allows us to pretty much ignore itimes-tree forever.  (Notice
+;; that it is disabled immediately below.)
+
+(prove-lemma eval$-itimes-tree (rewrite)
+  (equal (eval$ t (itimes-tree x) a)
+         (itimes-list (eval$ 'list x a))))
+
+(disable itimes-tree) ;; because we want to use EVAL$-ITIMES-TREE for now
+
+(defn make-cancel-itimes-equality (x y in-both)
+  ;; x and y are term lists and for efficiency we pass in-both as their bagint,
+  ;; which is a listp.
+  (list 'if
+        (list 'equal (itimes-tree in-both) ''0)
+        (list 'quote t)
+        (list (quote equal)
+              (itimes-tree (bagdiff x in-both))
+              (itimes-tree (bagdiff y in-both)))))
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-itimes (x)
+  (if (and (listp x)
+           (equal (car x) (quote equal)))
+      (if (and (listp (cadr x))
+               (equal (caadr x) (quote itimes))
+               (listp (caddr x))
+               (equal (caaddr x) (quote itimes)))
+          (if (listp (bagint (itimes-fringe (cadr x))
+                             (itimes-fringe (caddr x))))
+              (make-cancel-itimes-equality (itimes-fringe (cadr x))
+                                           (itimes-fringe (caddr x))
+                                           (bagint (itimes-fringe (cadr x))
+                                                   (itimes-fringe (caddr x))))
+            x)
+        (if (and (listp (cadr x))
+                 (equal (caadr x) (quote itimes)))
+            ;; We don't want to introduce the IF below unless something
+            ;; is "gained", or else we may get into an infinite rewriting loop.
+            (if (member (caddr x) (itimes-fringe (cadr x)))
+                (list (quote if)
+                      (list (quote integerp) (caddr x)) 
+                      (make-cancel-itimes-equality (itimes-fringe (cadr x))
+                                                   (list (caddr x))
+                                                   (list (caddr x)))
+                      (list (quote quote) f))
+              x)
+          (if (and (listp (caddr x))
+                   (equal (caaddr x) (quote itimes)))
+              (if (member (cadr x) (itimes-fringe (caddr x)))
+                  (list (quote if)
+                        (list (quote integerp) (cadr x))
+                        (make-cancel-itimes-equality (list (cadr x))
+                                                     (itimes-fringe (caddr x))
+                                                     (list (cadr x)))
+                        (list (quote quote) f))
+                x)
+            x)))
+    x))
+|#
+
+(DEFN CANCEL-ITIMES (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'EQUAL)
+          (COND
+           ((LISTP (CADR X))
+            (COND
+             ((EQUAL (CAADR X) 'ITIMES)
+              (COND
+               ((LISTP (CADDR X))
+                (COND
+                 ((EQUAL (CAADDR X) 'ITIMES)
+                  (IF (LISTP (BAGINT (ITIMES-FRINGE (CADR X))
+                                     (ITIMES-FRINGE (CADDR X))))
+                      (MAKE-CANCEL-ITIMES-EQUALITY
+                       (ITIMES-FRINGE (CADR X))
+                       (ITIMES-FRINGE (CADDR X))
+                       (BAGINT (ITIMES-FRINGE (CADR X))
+                               (ITIMES-FRINGE (CADDR X))))
+                      X))
+                 ((MEMBER (CADDR X) (ITIMES-FRINGE (CADR X)))
+                  (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                        (MAKE-CANCEL-ITIMES-EQUALITY
+                         (ITIMES-FRINGE (CADR X))
+                         (LIST (CADDR X)) (LIST (CADDR X)))
+                        (LIST 'QUOTE F)))
+                 (T X)))
+               ((MEMBER (CADDR X) (ITIMES-FRINGE (CADR X)))
+                (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                      (MAKE-CANCEL-ITIMES-EQUALITY
+                       (ITIMES-FRINGE (CADR X))
+                       (LIST (CADDR X)) (LIST (CADDR X)))
+                      (LIST 'QUOTE F)))
+               (T X)))
+             ((LISTP (CADDR X))
+              (IF (EQUAL (CAADDR X) 'ITIMES)
+                  (IF (MEMBER (CADR X) (ITIMES-FRINGE (CADDR X)))
+                      (LIST 'IF (LIST 'INTEGERP (CADR X))
+                            (MAKE-CANCEL-ITIMES-EQUALITY
+                             (LIST (CADR X))
+                             (ITIMES-FRINGE (CADDR X))
+                             (LIST (CADR X)))
+                            (LIST 'QUOTE F))
+                      X)
+                  X))
+             (T X)))
+           ((LISTP (CADDR X))
+            (IF (EQUAL (CAADDR X) 'ITIMES)
+                (IF (MEMBER (CADR X) (ITIMES-FRINGE (CADDR X)))
+                    (LIST 'IF (LIST 'INTEGERP (CADR X))
+                          (MAKE-CANCEL-ITIMES-EQUALITY
+                           (LIST (CADR X))
+                           (ITIMES-FRINGE (CADDR X))
+                           (LIST (CADR X)))
+                          (LIST 'QUOTE F))
+                    X)
+                X))
+           (T X))
+          X)
+      X))
+
+(prove-lemma itimes-list-append (rewrite)
+  (equal (itimes-list (append x y))
+         (itimes (itimes-list x) (itimes-list y))))
+
+(prove-lemma itimes-list-eval$-fringe (rewrite)
+       ;; similar to ITIMES-TREE-ITIMES-FRINGE
+       (equal (itimes-list (eval$ 'list (itimes-fringe x) a))
+              (fix-int (eval$ t x a)))
+       ((induct (itimes-fringe x))))
+
+(prove-lemma integerp-eval$-itimes (rewrite)
+  (implies (equal (car x) 'itimes)
+           (integerp (eval$ t x a))))
+
+(lemma not-integerp-implies-not-equal-itimes (rewrite)
+       (implies (not (integerp a))
+                (equal (equal a (itimes b c))
+                       f))
+       ((use (integerp-itimes (x b) (y c)))
+        (enable integerp)
+        (do-not-induct t)))
+
+(prove-lemma itimes-list-eval$-delete (rewrite)
+  (implies (member z y)
+           (equal (itimes-list (eval$ 'list y a))
+                  (itimes (eval$ t z a)
+                          (itimes-list (eval$ 'list (delete z y) a))))))
+
+(prove-lemma itimes-list-bagdiff (rewrite)
+       (implies (subbagp x y)
+                (equal (itimes-list (eval$ 'list y a))
+                       (itimes (itimes-list (eval$ 'list (bagdiff y x) a))
+                               (itimes-list (eval$ 'list x a)))))
+       ((induct (bagdiff y x))))
+
+(prove-lemma equal-itimes-list-eval$-list-delete (rewrite)
+  (implies (and (member c y)
+                (not (equal (fix-int (eval$ t c a)) 0)))
+           (equal (equal x (itimes-list (eval$ 'list (delete c y) a)))
+                  (and (integerp x)
+                       (equal (itimes x (eval$ t c a))
+                              (itimes-list (eval$ 'list y a)))))))
+
+(disable itimes-list-eval$-delete)
+
+;; I had trouble with the clausifier (thanks, J, for pointing that out
+;; as the source of my trouble) in the proof of the meta lemma -- it's
+;; getting rid of a case split.  So, I'll proceed by reducing
+;; cancel-itimes in each case; see lemma eval$-make-cancel-itimes-equality
+;; (and its -1 and -2 versions).
+
+(prove-lemma member-append (rewrite)
+  (equal (member a (append x y))
+         (or (member a x) (member a y))))
+
+(prove-lemma member-izerop-itimes-fringe (rewrite)
+  (implies (and (member z (itimes-fringe x))
+                (equal (fix-int (eval$ t z a)) 0))
+           (equal (fix-int (eval$ t x a)) 0))
+  ((induct (itimes-fringe x))))
+
+(prove-lemma correctness-of-cancel-itimes-hack-1 (rewrite)
+  (implies (and (member w
+                        (itimes-fringe (cons 'itimes x1)))
+                (equal (fix-int (eval$ t w a)) 0)
+                (not (equal (fix-int (eval$ t (car x1) a)) 0)))
+           (equal (fix-int (eval$ t (cadr x1) a)) 0)))
+
+(enable eval$-equal)
+
+(prove-lemma eval$-make-cancel-itimes-equality (rewrite)
+  (equal (eval$ t (make-cancel-itimes-equality x y in-both) a)
+         (if (eval$ t (list 'equal (itimes-tree in-both) ''0) a)
+             t
+           (equal
+              (itimes-list (eval$ 'list (bagdiff x in-both) a))
+              (itimes-list (eval$ 'list (bagdiff y in-both) a))))))
+
+(disable make-cancel-itimes-equality)
+
+;; Here's a special case that I hope helps with the clausifier problem.
+;; The lemma above seems necessary for its proof.
+
+(prove-lemma eval$-make-cancel-itimes-equality-1 (rewrite)
+  (equal (eval$ t (make-cancel-itimes-equality (list x) y (list x)) a)
+         (if (equal (fix-int (eval$ t x a)) 0)
+             t
+           (equal
+              1
+              (itimes-list (eval$ 'list (delete x y) a))))))
+
+(prove-lemma equal-fix-int (rewrite)
+  (equal (equal (fix-int x) x)
+         (integerp x))
+  ((enable-theory integer-defns)))
+
+;; Here's another special case that I hope helps with the clausifier problem.
+
+(prove-lemma eval$-make-cancel-itimes-equality-2 (rewrite)
+  (equal (eval$ t (make-cancel-itimes-equality x (list y) (list y)) a)
+         (if (equal (fix-int (eval$ t y a)) 0)
+             t
+           (equal
+              1
+              (itimes-list (eval$ 'list (delete y x) a))))))
+
+(prove-lemma eval$-equal-itimes-tree-itimes-fringe-0 (rewrite)
+  (implies (and (eval$ t
+                       (list 'equal
+                             (itimes-tree (itimes-fringe x))
+                             ''0)
+                       a)
+                (equal (car x) 'itimes))
+           (equal (eval$ t x a) 0)))
+
+(prove-lemma izerop-eval-of-member-implies-itimes-list-0 (rewrite)
+  (implies (and (member z y)
+                (equal (fix-int (eval$ t z a)) 0))
+           (equal (itimes-list (eval$ 'list y a))
+                  0)))
+
+#| The function below has no AND or OR, for efficiency
+(defn subsetp (x y)
+  (if (nlistp x)
+      t
+    (and (member (car x) y)
+         (subsetp (cdr x) y))))
+|#
+
+(DEFN SUBSETP (X Y)
+  (COND
+   ((NLISTP X) T)
+   ((MEMBER (CAR X) Y) (SUBSETP (CDR X) Y))
+   (T F)))
+
+(prove-lemma subsetp-implies-itimes-list-eval$-equals-0 (rewrite)
+  (implies (and (subsetp x y)
+                (equal (itimes-list (eval$ 'list x a))
+                       0))
+           (equal (itimes-list (eval$ 'list y a))
+                  0)))
+
+(prove-lemma subbagp-subsetp (rewrite)
+  (implies (subbagp x y)
+           (subsetp x y)))
+
+(prove-lemma equal-0-itimes-list-eval$-bagint-1 (rewrite)
+  (implies (equal (itimes-list (eval$ 'list (bagint x y) a))
+                  0)
+           (equal (itimes-list (eval$ 'list x a))
+                  0))
+  ((use (subsetp-implies-itimes-list-eval$-equals-0 (x (bagint x y)) (y x)))
+   (disable subsetp-implies-itimes-list-eval$-equals-0)))
+
+(prove-lemma equal-0-itimes-list-eval$-bagint-2 (rewrite)
+  (implies (equal (itimes-list (eval$ 'list (bagint x y) a))
+                  0)
+           (equal (itimes-list (eval$ 'list y a))
+                  0))
+  ((use (subsetp-implies-itimes-list-eval$-equals-0 (x (bagint x y)) (y y)))
+   (disable subsetp-implies-itimes-list-eval$-equals-0)))
+
+(prove-lemma correctness-of-cancel-itimes-hack-2 (rewrite)
+ (implies
+   (and (listp u)
+        (equal (car u) 'itimes)
+        (listp v)
+        (equal (car v) 'itimes)
+        (not (equal (eval$ t u a)
+                    (eval$ t v a))))
+   (not (equal (itimes-list (eval$ 'list
+                                   (bagdiff (itimes-fringe u)
+                                            (bagint (itimes-fringe u)
+                                                    (itimes-fringe v)))
+                                   a))
+               (itimes-list (eval$ 'list
+                                   (bagdiff (itimes-fringe v)
+                                            (bagint (itimes-fringe u)
+                                                    (itimes-fringe v)))
+                                   a)))))
+ ((use (itimes-list-bagdiff
+        (y (itimes-fringe u))
+        (x (bagint (itimes-fringe u)
+                   (itimes-fringe v)))
+        (a a))
+       (itimes-list-bagdiff
+        (y (itimes-fringe v))
+        (x (bagint (itimes-fringe u)
+                   (itimes-fringe v)))
+        (a a)))))
+
+(prove-lemma correctness-of-cancel-itimes-hack-3-lemma (rewrite)
+  (implies (and (equal u (itimes a b))
+                (not (equal (fix-int a) 0)))
+           (equal (equal u (itimes a c))
+                  (equal (fix-int b) (fix-int c)))))
+
+(prove-lemma correctness-of-cancel-itimes-hack-3 (rewrite)
+ (implies
+   (and (listp u)
+        (equal (car u) 'itimes)
+        (listp v)
+        (equal (car v) 'itimes)
+        (equal (eval$ t u a)
+               (eval$ t v a))
+        (not (eval$ t
+                    (list 'equal
+                          (itimes-tree (bagint (itimes-fringe u)
+                                               (itimes-fringe v)))
+                          ''0)
+                    a)))
+   (equal (equal (itimes-list (eval$ 'list
+                                     (bagdiff (itimes-fringe u)
+                                              (bagint (itimes-fringe u)
+                                                      (itimes-fringe v)))
+                                     a))
+                 (itimes-list (eval$ 'list
+                                     (bagdiff (itimes-fringe v)
+                                              (bagint (itimes-fringe u)
+                                                      (itimes-fringe v)))
+                                     a)))
+          t))
+ ((use (itimes-list-bagdiff
+        (y (itimes-fringe u))
+        (x (bagint (itimes-fringe u)
+                   (itimes-fringe v)))
+        (a a))
+       (itimes-list-bagdiff
+        (y (itimes-fringe v))
+        (x (bagint (itimes-fringe u)
+                   (itimes-fringe v)))
+        (a a)))))
+
+(disable correctness-of-cancel-itimes-hack-3-lemma)
+
+(prove-lemma correctness-of-cancel-itimes ((meta equal))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-itimes x) a))
+       ((do-not-induct t)))
+
+; ---------- Meta lemma for itimes cancellation on ilessp terms
+
+;; I'll try to keep this similar to the approach for equalities above,
+;; modified as in the iplus case (i.e. no fix-int is necessary).
+
+;; EVAL$-EQUAL is currently enabled, but that's OK.
+
+(defn itimes-tree-no-fix-int (l)
+  (if (listp l)
+      (itimes-tree-rec l)
+    (quote (quote 1))))
+           
+;; The following allows us to pretty much ignore
+;; itimes-tree-no-fix-int forever.  (Notice that it is disabled
+;; immediately below.)
+
+(prove-lemma eval$-itimes-tree-no-fix-int-1 (rewrite)
+  (equal (ilessp (eval$ t (itimes-tree-no-fix-int x) a)
+                 y)
+         (ilessp (eval$ t (itimes-tree x) a)
+                 y)))
+
+(prove-lemma eval$-itimes-tree-no-fix-int-2 (rewrite)
+  (equal (ilessp y
+                 (eval$ t (itimes-tree-no-fix-int x) a))
+         (ilessp y
+                 (eval$ t (itimes-tree x) a))))
+
+(disable itimes-tree-no-fix-int)
+
+;; We want to use EVAL$-ITIMES-TREE, and ITIMES-TREE is still disabled
+;; so we're in good shape.
+
+(defn make-cancel-itimes-inequality (x y in-both)
+  ;; x and y are term lists and for efficiency we pass in-both as their bagint,
+  ;; which is a listp.
+  (list 'if
+        (list 'ilessp (itimes-tree-no-fix-int in-both) ''0)
+        (list (quote ilessp)
+              (itimes-tree-no-fix-int (bagdiff y in-both))
+              (itimes-tree-no-fix-int (bagdiff x in-both)))
+        (list 'if
+              (list 'ilessp ''0 (itimes-tree-no-fix-int in-both))
+              (list (quote ilessp)
+                    (itimes-tree-no-fix-int (bagdiff x in-both))
+                    (itimes-tree-no-fix-int (bagdiff y in-both)))
+              '(false))))
+
+#| The function below has no AND or OR, for efficiency
+(defn cancel-itimes-ilessp (x)
+  (if (and (listp x)
+           (equal (car x) (quote ilessp))
+           (listp (bagint (itimes-fringe (cadr x)) (itimes-fringe (caddr x)))))
+      (make-cancel-itimes-inequality (itimes-fringe (cadr x))
+                                     (itimes-fringe (caddr x))
+                                     (bagint (itimes-fringe (cadr x))
+                                             (itimes-fringe (caddr x))))
+    x))
+|#
+
+(DEFN CANCEL-ITIMES-ILESSP (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'ILESSP)
+          (IF (LISTP (BAGINT (ITIMES-FRINGE (CADR X))
+                             (ITIMES-FRINGE (CADDR X))))
+              (MAKE-CANCEL-ITIMES-INEQUALITY
+               (ITIMES-FRINGE (CADR X))
+               (ITIMES-FRINGE (CADDR X))
+               (BAGINT (ITIMES-FRINGE (CADR X))
+                       (ITIMES-FRINGE (CADDR X))))
+              X)
+          X)
+      X))
+
+(prove-lemma eval$-make-cancel-itimes-inequality (rewrite)
+  (equal
+   (eval$ t (make-cancel-itimes-inequality x y in-both) a)
+   (if (eval$ t (list 'ilessp (itimes-tree-no-fix-int in-both) ''0) a)
+       (ilessp (eval$ t (itimes-tree-no-fix-int (bagdiff y in-both)) a)
+               (eval$ t (itimes-tree-no-fix-int (bagdiff x in-both)) a))
+     (if (eval$ t (list 'ilessp ''0 (itimes-tree-no-fix-int in-both)) a)
+         (ilessp (eval$ t (itimes-tree-no-fix-int (bagdiff x in-both)) a)
+                 (eval$ t (itimes-tree-no-fix-int (bagdiff y in-both)) a))
+       f))))
+
+(disable make-cancel-itimes-inequality)
+
+(prove-lemma listp-bagint-with-singleton-implies-member (rewrite)
+  (implies (listp (bagint y (list z)))
+           (member z y)))
+
+(prove-lemma itimes-list-eval$-list-0 (rewrite)
+  (implies (member 0 x)
+           (equal (itimes-list (eval$ 'list x a))
+                  0)))
+
+(prove-lemma ilessp-itimes-right-positive nil
+             (implies (ilessp 0 x)
+                      (equal (ilessp y z)
+                             (ilessp (itimes y x) (itimes z x))))
+             ((enable-theory integer-defns)))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-1 (rewrite)
+  (implies (and (subbagp bag x)
+                (subbagp bag y)
+                (ilessp 0 (itimes-list (eval$ 'list bag a))))
+           (equal (ilessp (itimes-list (eval$ 'list
+                                              (bagdiff x bag)
+                                              a))
+                          (itimes-list (eval$ 'list
+                                              (bagdiff y bag)
+                                              a)))
+                  (ilessp (itimes-list (eval$ 'list x a))
+                          (itimes-list (eval$ 'list y a)))))
+  ((use (ilessp-itimes-right-positive
+         (x (itimes-list (eval$ 'list bag a)))
+         (y (itimes-list (eval$ 'list (bagdiff x bag) a)))
+         (z (itimes-list (eval$ 'list (bagdiff y bag) a))))
+        (itimes-list-bagdiff (y x) (x bag) (a a))
+        (itimes-list-bagdiff (y y) (x bag) (a a)))))
+
+(prove-lemma listp-bagint-with-singleton-member (rewrite)
+  (equal (listp (bagint y (list z)))
+         (member z y)))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-2-lemma (rewrite)
+  (implies (member 0 (itimes-fringe w))
+           (equal (eval$ t w a) 0))
+  ((expand (itimes-fringe w))))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-2 (rewrite)
+  (implies (member 0 (itimes-fringe w))
+           (not (ilessp (eval$ t w a) 0))))
+
+(disable correctness-of-cancel-itimes-ilessp-hack-2-lemma)
+
+;;; Now hack-3 and hack-4 below are all that's left to prove before the
+;;; main result.
+
+(prove-lemma ilessp-trichotomy (rewrite)
+  (implies (not (ilessp x y))
+           (equal (ilessp y x)
+                  (not (equal (fix-int x) (fix-int y)))))
+  ((enable-theory integer-defns)))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-3-lemma-1 nil
+  (implies (and (equal 0 (itimes-list (eval$ 'list bag a)))
+                (subsetp bag z))
+           (equal (itimes-list (eval$ 'list z a)) 0)))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-3-lemma-2 nil
+  (implies (and (equal 0 (itimes-list (eval$ 'list bag a)))
+                (subsetp bag (itimes-fringe x)))
+           (equal (fix-int (eval$ t x a)) 0))
+  ((use (correctness-of-cancel-itimes-ilessp-hack-3-lemma-1
+         (z (itimes-fringe x))))))
+
+(prove-lemma same-fix-int-implies-not-ilessp (rewrite)
+  (implies (equal (fix-int x) (fix-int y))
+           (not (ilessp x y)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-3 (rewrite)
+  (implies
+   (and (not (ilessp (itimes-list (eval$ 'list
+                                         bag
+                                         a))
+                     0))
+        (not (ilessp 0
+                     (itimes-list (eval$ 'list
+                                         bag
+                                         a))))
+        (subbagp bag (itimes-fringe w))
+        (subbagp bag (itimes-fringe v)))
+   (not (ilessp (eval$ t w a)
+                (eval$ t v a))))
+  ((use (correctness-of-cancel-itimes-ilessp-hack-3-lemma-2
+         (x w) (bag bag))
+        (correctness-of-cancel-itimes-ilessp-hack-3-lemma-2
+         (x v) (bag bag)))))
+
+(prove-lemma ilessp-itimes-right-negative nil
+             (implies (ilessp x 0)
+                      (equal (ilessp y z)
+                             (ilessp (itimes z x) (itimes y x))))
+             ((enable-theory integer-defns)))
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-hack-4 (rewrite)
+  (implies (and (subbagp bag x)
+                (subbagp bag y)
+                (ilessp (itimes-list (eval$ 'list bag a)) 0))
+           (equal (ilessp (itimes-list (eval$ 'list
+                                              (bagdiff x bag)
+                                              a))
+                          (itimes-list (eval$ 'list
+                                              (bagdiff y bag)
+                                              a)))
+                  (ilessp (itimes-list (eval$ 'list y a))
+                          (itimes-list (eval$ 'list x a)))))
+  ((use (ilessp-itimes-right-negative
+         (x (itimes-list (eval$ 'list bag a)))
+         (y (itimes-list (eval$ 'list (bagdiff x bag) a)))
+         (z (itimes-list (eval$ 'list (bagdiff y bag) a))))
+        (itimes-list-bagdiff (y x) (x bag) (a a))
+        (itimes-list-bagdiff (y y) (x bag) (a a)))))
+
+(disable ilessp-trichotomy)
+
+(disable same-fix-int-implies-not-ilessp)
+
+(prove-lemma correctness-of-cancel-itimes-ilessp ((meta ilessp))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-itimes-ilessp x) a))
+       ((do-not-induct t)))
+
+;; I think that the following lemma is safe because it won't be
+;; called at all during relieve-hyps.
+
+(prove-lemma ilessp-strict (rewrite)
+  (implies (ilessp x y)
+           (not (ilessp y x)))
+  ((enable-theory integer-defns)))
+
+
+; ---------- Setting up the State ----------
+
+;; I'll close by disabling (or enabling) those rules and definitions
+;; whose status as left over from above isn't quite what I'd like.
+;; I'm going to leave the eval$ rules on and eval$ off.
+
+(disable eval$-cancel-iplus)
+(disable eval$-iplus)
+
+(disable lessp-count-listp-cdr)
+(disable eval$-iplus-tree-rec)
+(disable eval$-iplus-tree)
+;;(disable eval$-list-append) ;; Nice rule -- I'll keep it enabled
+(disable iplus-list-eval$-fringe)
+(disable eval$-iplus-list-bagdiff)
+(disable lessp-difference-plus-arg1)
+(disable lessp-difference-plus-arg1-commuted)
+(disable correctness-of-cancel-iplus-ilessp-lemma)
+(disable eval$-ilessp-iplus-tree-no-fix-int)
+(disable make-cancel-iplus-inequality-simplifier)
+(disable quotient-difference-lessp-arg2)
+(disable eval$-itimes-tree-rec)
+(disable eval$-itimes-tree)
+(disable itimes-list-eval$-fringe)
+(disable integerp-eval$-itimes)
+(disable itimes-list-bagdiff)
+(disable equal-itimes-list-eval$-list-delete)
+(disable member-izerop-itimes-fringe)
+(disable correctness-of-cancel-itimes-hack-1)
+(disable eval$-make-cancel-itimes-equality)
+(disable eval$-make-cancel-itimes-equality-1)
+(disable eval$-make-cancel-itimes-equality-2)
+(disable eval$-equal-itimes-tree-itimes-fringe-0)
+(disable izerop-eval-of-member-implies-itimes-list-0)
+(disable subsetp-implies-itimes-list-eval$-equals-0)
+(disable equal-0-itimes-list-eval$-bagint-1)
+(disable equal-0-itimes-list-eval$-bagint-2)
+(disable correctness-of-cancel-itimes-hack-2)
+(disable correctness-of-cancel-itimes-hack-3-lemma)
+(disable correctness-of-cancel-itimes-hack-3)
+(disable eval$-itimes-tree-no-fix-int-1)
+(disable eval$-itimes-tree-no-fix-int-2)
+(disable eval$-make-cancel-itimes-inequality)
+(disable listp-bagint-with-singleton-implies-member)
+(disable itimes-list-eval$-list-0)
+(disable correctness-of-cancel-itimes-ilessp-hack-1)
+(disable listp-bagint-with-singleton-member)
+(disable correctness-of-cancel-itimes-ilessp-hack-2)
+(disable correctness-of-cancel-itimes-ilessp-hack-3-lemma-1)
+(disable correctness-of-cancel-itimes-ilessp-hack-3-lemma-2)
+(disable correctness-of-cancel-itimes-ilessp-hack-3)
+(disable correctness-of-cancel-itimes-ilessp-hack-4)
+;; The last one is a tough call, but I think it's OK.
+;; (disable ilessp-strict)
+
+;;;;;; ***** EXTRA META STUFF ***** ;;;;;;
+
+;; The next goal is to improve itimes cancellation so that it looks
+;; for common factors, and hence works on equations like
+;;    x*y + x = x*z
+;; and, for that matter,
+;; a*x + -b*x = 0.
+
+;; Rather than changing the existing cancel-itimes function, I'll
+;; leave that one but disable its metalemma at the end.  Then if the
+;; new version, which I'll call cancel-itimes-factors, is found to be
+;; too slow, one can always disable its metalemma and re-enable the
+;; metalemma for cancel-itimes.
+
+;; Notice, by the way, that the existing cancel-itimes function is
+;; useless for something like the following, since there's no special
+;; treatment for INEG.  I'll remedy that in this version.
+
+#|
+(IMPLIES (AND (NOT (IZEROP X))
+              (EQUAL (ITIMES A X) (INEG (ITIMES B X))))
+         (EQUAL (FIX-INT A) (INEG B)))
+|#
+
+(defn itimes-tree-ineg (l)
+
+  ;; Like itimes-tree-rec in that it doesn't apply fix-int even for a
+  ;; one-element list, but with special treatment if l is a list
+  ;; starting with (quote -1).  Notice the coding with IF, for
+  ;; computational efficiency.
+
+  (if (listp l)
+      (if (equal (car l) (list 'quote -1))
+          (if (listp (cdr l))
+              (list 'ineg (itimes-tree-rec (cdr l)))
+            (car l))
+        (itimes-tree-rec l))
+    (quote (quote 1))))
+
+(defn itimes-factors (x)
+  ;; a "generalization" of itimes-fringe
+  (if (listp x)
+      (cond
+       ((equal (car x)
+               (quote itimes))
+        (append (itimes-factors (cadr x))
+                (itimes-factors (caddr x))))
+       ((equal (car x)
+               (quote iplus))
+        (let ((bag1 (itimes-factors (cadr x)))
+              (bag2 (itimes-factors (caddr x))))
+          (let ((inboth (bagint bag1 bag2)))
+            (if (listp inboth)
+                (cons (list 'iplus
+                            (itimes-tree-ineg (bagdiff bag1 inboth))
+                            (itimes-tree-ineg (bagdiff bag2 inboth)))
+                      inboth)
+              (list x)))))
+       ((equal (car x)
+               (quote ineg))
+        (cons (list 'quote -1)
+              (itimes-factors (cadr x))))
+       (t
+        (list x)))
+    (list x)))
+
+(prove-lemma itimes--1 (rewrite)
+             (equal (itimes -1 x)
+                    (ineg x))
+             ((enable-theory integer-defns)))
+
+;; I'll need the following lemma because it's simplest not to deal with
+;; e.g. (equal x x), where x is a variable, in the meta thing.  I'll do
+;; the one after it too, simply because I'm thinking of it now.
+(prove-lemma equal-ineg-ineg (rewrite)
+  (equal (equal (ineg x) (ineg y))
+         (equal (fix-int x) (fix-int y)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma ilessp-ineg-ineg (rewrite)
+  (equal (ilessp (ineg x) (ineg y))
+         (ilessp y x))
+  ((enable-theory integer-defns)))
+
+(prove-lemma fix-int-eval$-itimes-tree-rec (rewrite)
+  (implies (listp x)
+           (equal (fix-int (eval$ t (itimes-tree-rec x) a))
+                  (itimes-list (eval$ 'list x a))))
+  ((enable eval$-itimes-tree-rec)))
+
+(prove-lemma eval$-itimes-tree-ineg (rewrite)
+  (equal (fix-int (eval$ t (itimes-tree-ineg x) a))
+         (itimes-list (eval$ 'list x a)))
+  ((enable eval$-itimes-tree-rec)))
+
+;; Now I want the above lemma to apply, but it doesn't, so the
+;; following three lemmas are used instead.
+
+(prove-lemma ineg-eval$-itimes-tree-ineg (rewrite)
+  (equal (ineg (eval$ t (itimes-tree-ineg x) a))
+         (ineg (itimes-list (eval$ 'list x a))))
+  ((use (eval$-itimes-tree-ineg))))
+
+(prove-lemma iplus-eval$-itimes-tree-ineg (rewrite)
+  (and (equal (iplus (eval$ t (itimes-tree-ineg x) a) y)
+              (iplus (itimes-list (eval$ 'list x a)) y))
+       (equal (iplus y (eval$ t (itimes-tree-ineg x) a))
+              (iplus y (itimes-list (eval$ 'list x a)))))
+  ((use (eval$-itimes-tree-ineg))))
+
+(prove-lemma itimes-eval$-itimes-tree-ineg (rewrite)
+  (and (equal (itimes (eval$ t (itimes-tree-ineg x) a) y)
+              (itimes (itimes-list (eval$ 'list x a)) y))
+       (equal (itimes y (eval$ t (itimes-tree-ineg x) a))
+              (itimes y (itimes-list (eval$ 'list x a)))))
+  ((use (eval$-itimes-tree-ineg))))
+
+(disable itimes-tree-ineg)
+
+#| ****** The following definitions are for efficient execution of
+   metafunctions.  They should probably be applied to all the metafunctions
+   with fns arguments AND and OR.
+
+(defmacro nqthm-macroexpand (defn &rest fns)
+  `(nqthm-macroexpand-fn ',defn ',fns))
+
+(defun nqthm-macroexpand-fn (defn fns)
+  (iterate for fn in fns
+           when (not (get fn 'sdefn))
+           do (er soft (fn) |Sorry| |,| |but| |there| |is| |no| SDEFN
+                  |for| (!ppr fn (quote |.|))))
+  (let (name args body)
+    (match! defn (defn name args body))
+    (let ((arity-alist (cons (cons name (length args)) arity-alist)))
+      (list 'defn name args
+            (untranslate (normalize-ifs
+                          (nqthm-macroexpand-term (translate body) fns)
+                          nil nil nil))))))
+
+(defun nqthm-macroexpand-term (term fns)
+  (cond
+   ((or (variablep term) (fquotep term))
+    term)
+   ((member-eq (ffn-symb term) fns)
+    (let ((sdefn (get (ffn-symb term) 'sdefn)))
+      (sub-pair-var (cadr sdefn)
+                    (iterate for arg in (fargs term)
+                             collect (nqthm-macroexpand-term arg fns))
+                    (caddr sdefn))))
+   (t (fcons-term (ffn-symb term)
+                  (iterate for arg in (fargs term)
+                           collect (nqthm-macroexpand-term arg fns))))))
+
+|#
+
+;; I "macroexpand" away the following below, so it's not really needed
+;; except for the proof.  That is, I use it in the definition of
+;; cancel-itimes-factors, but then get rid of it for
+;; cancel-itimes-factors-expanded, and although I reason about the
+;; former, I USE the latter, for efficiency.
+
+(defn iplus-or-itimes-term (x)
+  (if (listp x)
+      (case (car x)
+            (iplus t)
+            (itimes t)
+            (ineg (if (listp (cadr x))
+                      (equal (car (cadr x)) 'itimes)
+                    f))
+            (otherwise f))
+    f))
+
+(defn cancel-itimes-factors (x)
+  (if (and (listp x)
+           (equal (car x) (quote equal)))
+      (let ((bagint (bagint (itimes-factors (cadr x))
+                            (itimes-factors (caddr x)))))
+        (let ((new-equality
+               (make-cancel-itimes-equality (itimes-factors (cadr x))
+                                            (itimes-factors (caddr x))
+                                            bagint)))
+          (if (iplus-or-itimes-term (cadr x))
+              (if (listp bagint)
+                  (if (iplus-or-itimes-term (caddr x))
+                      new-equality
+                    (list 'if
+                          (list 'integerp (caddr x))
+                          new-equality
+                          (list 'quote f)))
+                x)
+            (if (iplus-or-itimes-term (caddr x))
+                (if (listp bagint)
+                    (list 'if
+                          (list 'integerp (cadr x))
+                          new-equality
+                          (list 'quote f))
+                  x)
+              x))))
+    x))
+
+;; The following was generated with the nqthm-macroexpand macro defined above.
+(DEFN CANCEL-ITIMES-FACTORS-expanded (X)
+  (IF (LISTP X)
+      (IF (EQUAL (CAR X) 'EQUAL)
+          (COND
+           ((LISTP (CADR X))
+            (CASE
+             (CAR (CAR (CDR X)))
+             (IPLUS
+              (IF (LISTP (BAGINT (ITIMES-FACTORS (CADR X))
+                                 (ITIMES-FACTORS (CADDR X))))
+                  (IF (LISTP (CADDR X))
+                      (CASE (CAR (CAR (CDR (CDR X))))
+                            (IPLUS
+                             (MAKE-CANCEL-ITIMES-EQUALITY
+                              (ITIMES-FACTORS (CADR X))
+                              (ITIMES-FACTORS (CADDR X))
+                              (BAGINT (ITIMES-FACTORS (CADR X))
+                                      (ITIMES-FACTORS (CADDR X)))))
+                            (ITIMES
+                             (MAKE-CANCEL-ITIMES-EQUALITY
+                              (ITIMES-FACTORS (CADR X))
+                              (ITIMES-FACTORS (CADDR X))
+                              (BAGINT (ITIMES-FACTORS (CADR X))
+                                      (ITIMES-FACTORS (CADDR X)))))
+                            (INEG
+                             (IF (LISTP (CADADDR X))
+                                 (IF (EQUAL (CAADADDR X) 'ITIMES)
+                                     (MAKE-CANCEL-ITIMES-EQUALITY
+                                      (ITIMES-FACTORS (CADR X))
+                                      (ITIMES-FACTORS (CADDR X))
+                                      (BAGINT
+                                       (ITIMES-FACTORS (CADR X))
+                                       (ITIMES-FACTORS (CADDR X))))
+                                     (LIST 'IF
+                                           (LIST 'INTEGERP (CADDR X))
+                                           (MAKE-CANCEL-ITIMES-EQUALITY
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))
+                                            (BAGINT
+                                             (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                                           (LIST 'QUOTE F)))
+                                 (LIST 'IF
+                                       (LIST 'INTEGERP (CADDR X))
+                                       (MAKE-CANCEL-ITIMES-EQUALITY
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X))
+                                        (BAGINT
+                                         (ITIMES-FACTORS (CADR X))
+                                         (ITIMES-FACTORS (CADDR X))))
+                                       (LIST 'QUOTE F))))
+                            (OTHERWISE
+                             (LIST 'IF
+                                   (LIST 'INTEGERP (CADDR X))
+                                   (MAKE-CANCEL-ITIMES-EQUALITY
+                                    (ITIMES-FACTORS (CADR X))
+                                    (ITIMES-FACTORS (CADDR X))
+                                    (BAGINT
+                                     (ITIMES-FACTORS (CADR X))
+                                     (ITIMES-FACTORS (CADDR X))))
+                                   (LIST 'QUOTE F))))
+                      (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                            (MAKE-CANCEL-ITIMES-EQUALITY
+                             (ITIMES-FACTORS (CADR X))
+                             (ITIMES-FACTORS (CADDR X))
+                             (BAGINT
+                              (ITIMES-FACTORS (CADR X))
+                              (ITIMES-FACTORS (CADDR X))))
+                            (LIST 'QUOTE F)))
+                  X))
+             (ITIMES
+              (IF (LISTP (BAGINT (ITIMES-FACTORS (CADR X))
+                                 (ITIMES-FACTORS (CADDR X))))
+                  (IF (LISTP (CADDR X))
+                      (CASE (CAR (CAR (CDR (CDR X))))
+                            (IPLUS
+                             (MAKE-CANCEL-ITIMES-EQUALITY
+                              (ITIMES-FACTORS (CADR X))
+                              (ITIMES-FACTORS (CADDR X))
+                              (BAGINT
+                               (ITIMES-FACTORS (CADR X))
+                               (ITIMES-FACTORS (CADDR X)))))
+                            (ITIMES
+                             (MAKE-CANCEL-ITIMES-EQUALITY
+                              (ITIMES-FACTORS (CADR X))
+                              (ITIMES-FACTORS (CADDR X))
+                              (BAGINT
+                               (ITIMES-FACTORS (CADR X))
+                               (ITIMES-FACTORS (CADDR X)))))
+                            (INEG
+                             (IF (LISTP (CADADDR X))
+                                 (IF (EQUAL (CAADADDR X) 'ITIMES)
+                                     (MAKE-CANCEL-ITIMES-EQUALITY
+                                      (ITIMES-FACTORS (CADR X))
+                                      (ITIMES-FACTORS (CADDR X))
+                                      (BAGINT
+                                       (ITIMES-FACTORS (CADR X))
+                                       (ITIMES-FACTORS (CADDR X))))
+                                     (LIST 'IF
+                                           (LIST 'INTEGERP (CADDR X))
+                                           (MAKE-CANCEL-ITIMES-EQUALITY
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))
+                                            (BAGINT
+                                             (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                                           (LIST 'QUOTE F)))
+                                 (LIST 'IF
+                                       (LIST 'INTEGERP (CADDR X))
+                                       (MAKE-CANCEL-ITIMES-EQUALITY
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X))
+                                        (BAGINT
+                                         (ITIMES-FACTORS (CADR X))
+                                         (ITIMES-FACTORS (CADDR X))))
+                                       (LIST 'QUOTE F))))
+                            (OTHERWISE
+                             (LIST 'IF
+                                   (LIST 'INTEGERP (CADDR X))
+                                   (MAKE-CANCEL-ITIMES-EQUALITY
+                                    (ITIMES-FACTORS (CADR X))
+                                    (ITIMES-FACTORS (CADDR X))
+                                    (BAGINT
+                                     (ITIMES-FACTORS (CADR X))
+                                     (ITIMES-FACTORS (CADDR X))))
+                                   (LIST 'QUOTE F))))
+                      (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                            (MAKE-CANCEL-ITIMES-EQUALITY
+                             (ITIMES-FACTORS (CADR X))
+                             (ITIMES-FACTORS (CADDR X))
+                             (BAGINT (ITIMES-FACTORS (CADR X))
+                                     (ITIMES-FACTORS (CADDR X))))
+                            (LIST 'QUOTE F)))
+                  X))
+             (INEG (COND
+                    ((LISTP (CADADR X))
+                     (COND
+                      ((EQUAL (CAADADR X) 'ITIMES)
+                       (IF (LISTP
+                            (BAGINT (ITIMES-FACTORS (CADR X))
+                                    (ITIMES-FACTORS (CADDR X))))
+                           (IF (LISTP (CADDR X))
+                               (CASE (CAR (CAR (CDR (CDR X))))
+                                     (IPLUS
+                                      (MAKE-CANCEL-ITIMES-EQUALITY
+                                       (ITIMES-FACTORS (CADR X))
+                                       (ITIMES-FACTORS (CADDR X))
+                                       (BAGINT
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X)))))
+                                     (ITIMES
+                                      (MAKE-CANCEL-ITIMES-EQUALITY
+                                       (ITIMES-FACTORS (CADR X))
+                                       (ITIMES-FACTORS (CADDR X))
+                                       (BAGINT
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X)))))
+                                     (INEG
+                                      (IF (LISTP (CADADDR X))
+                                          (IF
+                                           (EQUAL (CAADADDR X) 'ITIMES)
+                                           (MAKE-CANCEL-ITIMES-EQUALITY
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))
+                                            (BAGINT
+                                             (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                                           (LIST 'IF
+                                                 (LIST 'INTEGERP (CADDR X))
+                                                 (MAKE-CANCEL-ITIMES-EQUALITY
+                                                  (ITIMES-FACTORS (CADR X))
+                                                  (ITIMES-FACTORS (CADDR X))
+                                                  (BAGINT
+                                                   (ITIMES-FACTORS (CADR X))
+                                                   (ITIMES-FACTORS (CADDR X))))
+                                                 (LIST 'QUOTE F)))
+                                          (LIST 'IF
+                                                (LIST 'INTEGERP (CADDR X))
+                                                (MAKE-CANCEL-ITIMES-EQUALITY
+                                                 (ITIMES-FACTORS (CADR X))
+                                                 (ITIMES-FACTORS (CADDR X))
+                                                 (BAGINT
+                                                  (ITIMES-FACTORS (CADR X))
+                                                  (ITIMES-FACTORS (CADDR X))))
+                                                (LIST 'QUOTE F))))
+                                     (OTHERWISE
+                                      (LIST 'IF
+                                            (LIST 'INTEGERP (CADDR X))
+                                            (MAKE-CANCEL-ITIMES-EQUALITY
+                                             (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))
+                                             (BAGINT
+                                              (ITIMES-FACTORS (CADR X))
+                                              (ITIMES-FACTORS (CADDR X))))
+                                            (LIST 'QUOTE F))))
+                               (LIST 'IF
+                                     (LIST 'INTEGERP (CADDR X))
+                                     (MAKE-CANCEL-ITIMES-EQUALITY
+                                      (ITIMES-FACTORS (CADR X))
+                                      (ITIMES-FACTORS (CADDR X))
+                                      (BAGINT (ITIMES-FACTORS (CADR X))
+                                              (ITIMES-FACTORS (CADDR X))))
+                                     (LIST 'QUOTE F)))
+                           X))
+                      ((LISTP (CADDR X))
+                       (CASE (CAR (CAR (CDR (CDR X))))
+                             (IPLUS (IF
+                                     (LISTP
+                                      (BAGINT
+                                       (ITIMES-FACTORS (CADR X))
+                                       (ITIMES-FACTORS (CADDR X))))
+                                     (LIST 'IF
+                                           (LIST 'INTEGERP (CADR X))
+                                           (MAKE-CANCEL-ITIMES-EQUALITY
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))
+                                            (BAGINT
+                                             (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                                           (LIST 'QUOTE F))
+                                     X))
+                             (ITIMES (IF
+                                      (LISTP
+                                       (BAGINT
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X))))
+                                      (LIST 'IF
+                                            (LIST 'INTEGERP (CADR X))
+                                            (MAKE-CANCEL-ITIMES-EQUALITY
+                                             (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))
+                                             (BAGINT
+                                              (ITIMES-FACTORS (CADR X))
+                                              (ITIMES-FACTORS (CADDR X))))
+                                            (LIST 'QUOTE F))
+                                      X))
+                             (INEG (IF (LISTP (CADADDR X))
+                                       (IF
+                                        (EQUAL (CAADADDR X) 'ITIMES)
+                                        (IF
+                                         (LISTP
+                                          (BAGINT
+                                           (ITIMES-FACTORS (CADR X))
+                                           (ITIMES-FACTORS (CADDR X))))
+                                         (LIST 'IF
+                                               (LIST 'INTEGERP (CADR X))
+                                               (MAKE-CANCEL-ITIMES-EQUALITY
+                                                (ITIMES-FACTORS (CADR X))
+                                                (ITIMES-FACTORS (CADDR X))
+                                                (BAGINT
+                                                 (ITIMES-FACTORS (CADR X))
+                                                 (ITIMES-FACTORS (CADDR X))))
+                                               (LIST 'QUOTE F))
+                                         X)
+                                        X)
+                                       X))
+                             (OTHERWISE X)))
+                      (T X)))
+                    ((LISTP (CADDR X))
+                     (CASE (CAR (CAR (CDR (CDR X))))
+                           (IPLUS (IF
+                                   (LISTP
+                                    (BAGINT
+                                     (ITIMES-FACTORS (CADR X))
+                                     (ITIMES-FACTORS (CADDR X))))
+                                   (LIST 'IF
+                                         (LIST 'INTEGERP (CADR X))
+                                         (MAKE-CANCEL-ITIMES-EQUALITY
+                                          (ITIMES-FACTORS (CADR X))
+                                          (ITIMES-FACTORS (CADDR X))
+                                          (BAGINT
+                                           (ITIMES-FACTORS (CADR X))
+                                           (ITIMES-FACTORS (CADDR X))))
+                                         (LIST 'QUOTE F))
+                                   X))
+                           (ITIMES (IF
+                                    (LISTP
+                                     (BAGINT
+                                      (ITIMES-FACTORS (CADR X))
+                                      (ITIMES-FACTORS (CADDR X))))
+                                    (LIST 'IF
+                                          (LIST 'INTEGERP (CADR X))
+                                          (MAKE-CANCEL-ITIMES-EQUALITY
+                                           (ITIMES-FACTORS (CADR X))
+                                           (ITIMES-FACTORS (CADDR X))
+                                           (BAGINT
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))))
+                                          (LIST 'QUOTE F))
+                                    X))
+                           (INEG (IF (LISTP (CADADDR X))
+                                     (IF (EQUAL (CAADADDR X) 'ITIMES)
+                                         (IF
+                                          (LISTP
+                                           (BAGINT
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))))
+                                          (LIST 'IF
+                                                (LIST 'INTEGERP (CADR X))
+                                                (MAKE-CANCEL-ITIMES-EQUALITY
+                                                 (ITIMES-FACTORS (CADR X))
+                                                 (ITIMES-FACTORS (CADDR X))
+                                                 (BAGINT
+                                                  (ITIMES-FACTORS (CADR X))
+                                                  (ITIMES-FACTORS (CADDR X))))
+                                                (LIST 'QUOTE F))
+                                          X)
+                                         X)
+                                     X))
+                           (OTHERWISE X)))
+                    (T X)))
+             (OTHERWISE
+              (IF (LISTP (CADDR X))
+                  (CASE (CAR (CAR (CDR (CDR X))))
+                        (IPLUS (IF
+                                (LISTP
+                                 (BAGINT (ITIMES-FACTORS (CADR X))
+                                         (ITIMES-FACTORS (CADDR X))))
+                                (LIST 'IF
+                                      (LIST 'INTEGERP (CADR X))
+                                      (MAKE-CANCEL-ITIMES-EQUALITY
+                                       (ITIMES-FACTORS (CADR X))
+                                       (ITIMES-FACTORS (CADDR X))
+                                       (BAGINT
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X))))
+                                      (LIST 'QUOTE F))
+                                X))
+                        (ITIMES (IF
+                                 (LISTP
+                                  (BAGINT
+                                   (ITIMES-FACTORS (CADR X))
+                                   (ITIMES-FACTORS (CADDR X))))
+                                 (LIST 'IF
+                                       (LIST 'INTEGERP (CADR X))
+                                       (MAKE-CANCEL-ITIMES-EQUALITY
+                                        (ITIMES-FACTORS (CADR X))
+                                        (ITIMES-FACTORS (CADDR X))
+                                        (BAGINT
+                                         (ITIMES-FACTORS (CADR X))
+                                         (ITIMES-FACTORS (CADDR X))))
+                                       (LIST 'QUOTE F))
+                                 X))
+                        (INEG (IF (LISTP (CADADDR X))
+                                  (IF (EQUAL (CAADADDR X) 'ITIMES)
+                                      (IF
+                                       (LISTP
+                                        (BAGINT
+                                         (ITIMES-FACTORS (CADR X))
+                                         (ITIMES-FACTORS (CADDR X))))
+                                       (LIST 'IF
+                                             (LIST 'INTEGERP (CADR X))
+                                             (MAKE-CANCEL-ITIMES-EQUALITY
+                                              (ITIMES-FACTORS (CADR X))
+                                              (ITIMES-FACTORS (CADDR X))
+                                              (BAGINT
+                                               (ITIMES-FACTORS (CADR X))
+                                               (ITIMES-FACTORS (CADDR X))))
+                                             (LIST 'QUOTE F))
+                                       X)
+                                      X)
+                                  X))
+                        (OTHERWISE X))
+                  X))))
+           ((LISTP (CADDR X))
+            (CASE (CAR (CAR (CDR (CDR X))))
+                  (IPLUS (IF (LISTP (BAGINT (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))))
+                             (LIST 'IF (LIST 'INTEGERP (CADR X))
+                                   (MAKE-CANCEL-ITIMES-EQUALITY
+                                    (ITIMES-FACTORS (CADR X))
+                                    (ITIMES-FACTORS (CADDR X))
+                                    (BAGINT (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))))
+                                   (LIST 'QUOTE F))
+                             X))
+                  (ITIMES (IF (LISTP (BAGINT (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                              (LIST 'IF (LIST 'INTEGERP (CADR X))
+                                    (MAKE-CANCEL-ITIMES-EQUALITY
+                                     (ITIMES-FACTORS (CADR X))
+                                     (ITIMES-FACTORS (CADDR X))
+                                     (BAGINT (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                                    (LIST 'QUOTE F))
+                              X))
+                  (INEG (IF (LISTP (CADADDR X))
+                            (IF (EQUAL (CAADADDR X) 'ITIMES)
+                                (IF (LISTP
+                                     (BAGINT (ITIMES-FACTORS (CADR X))
+                                             (ITIMES-FACTORS (CADDR X))))
+                                    (LIST 'IF
+                                          (LIST 'INTEGERP (CADR X))
+                                          (MAKE-CANCEL-ITIMES-EQUALITY
+                                           (ITIMES-FACTORS (CADR X))
+                                           (ITIMES-FACTORS (CADDR X))
+                                           (BAGINT
+                                            (ITIMES-FACTORS (CADR X))
+                                            (ITIMES-FACTORS (CADDR X))))
+                                          (LIST 'QUOTE F))
+                                    X)
+                                X)
+                            X))
+                  (OTHERWISE X)))
+           (T X))
+          X)
+      X))
+
+(prove-lemma cancel-itimes-factors-expanded-cancel-itimes-factors (rewrite)
+             (equal (cancel-itimes-factors-expanded x)
+                    (cancel-itimes-factors x))
+             ((disable-theory t)
+              (enable-theory ground-zero)
+              (enable iplus-or-itimes-term cancel-itimes-factors
+                      cancel-itimes-factors-expanded)))
+
+(disable cancel-itimes-factors-expanded)
+
+(disable iplus-or-itimes-term)
+
+(prove-lemma equal-itimes-list-eval$-list-delete-new-1 (rewrite)
+  (implies (not (equal (fix-int (eval$ t elt a)) 0))
+           (equal (equal x (itimes-list (eval$ 'list
+                                               (delete elt bag)
+                                               a)))
+                  (if (member elt bag)
+                      (and (integerp x)
+                           (equal (itimes x (eval$ t elt a) )
+                                  (itimes-list (eval$ 'list bag a))))
+                    (equal x (itimes-list (eval$ 'list bag a))))))
+  ((enable equal-itimes-list-eval$-list-delete)))
+
+(prove-lemma equal-itimes-list-eval$-list-delete-new-2 (rewrite)
+  (implies (not (equal (fix-int (eval$ t elt a)) 0))
+           (equal (equal (itimes-list (eval$ 'list
+                                             (delete elt bag)
+                                             a))
+                         x)
+                  (if (member elt bag)
+                      (and (integerp x)
+                           (equal (itimes x (eval$ t elt a) )
+                                  (itimes-list (eval$ 'list bag a))))
+                    (equal x (itimes-list (eval$ 'list bag a)))))))
+
+(prove-lemma itimes-itimes-list-eval$-list-delete (rewrite)
+  (implies (member x bag)
+           (equal (itimes (eval$ t x a)
+                          (itimes-list (eval$ 'list (delete x bag) a)))
+                  (itimes-list (eval$ 'list bag a)))))
+
+(prove-lemma equal-itimes-list-eval$-list-bagdiff (rewrite)
+  (implies (and (subbagp in-both bag1)
+                (subbagp in-both bag2)
+                (not (equal (itimes-list (eval$ 'list in-both a)) 0)))
+           (equal (equal (itimes-list (eval$ 'list
+                                             (bagdiff bag1 in-both)
+                                             a))
+                         (itimes-list (eval$ 'list
+                                             (bagdiff bag2 in-both)
+                                             a)))
+                  (equal (itimes-list (eval$ 'list bag1 a))
+                         (itimes-list (eval$ 'list bag2 a))))))
+
+(prove-lemma membership-of-0-implies-itimes-list-is-0 (rewrite)
+  (implies (member 0 x)
+           (equal (itimes-list x) 0)))
+
+(prove-lemma member-0-eval$-list (rewrite)
+  (implies (member 0 x)
+           (member 0 (eval$ 'list x a))))
+
+(prove-lemma itimes-list-eval$-factors-lemma (rewrite)
+  (equal (itimes (itimes-list (eval$ 'list
+                                     (bagint bag1 bag2)
+                                     a))
+                 (itimes-list (eval$ 'list
+                                     (bagdiff bag2 (bagint bag1 bag2))
+                                     a)))
+         (itimes-list (eval$ 'list bag2 a)))
+  ((use (itimes-list-bagdiff
+         (x (bagint bag1 bag2))
+         (y bag2)))))
+
+(prove-lemma itimes-list-eval$-factors-lemma-prime (rewrite)
+  (equal (itimes (itimes-list (eval$ 'list
+                                     (bagint bag1 bag2)
+                                     a))
+                 (itimes-list (eval$ 'list
+                                     (bagdiff bag1 (bagint bag1 bag2))
+                                     a)))
+         (itimes-list (eval$ 'list bag1 a)))
+  ((use (itimes-list-bagdiff
+         (x (bagint bag1 bag2))
+         (y bag1)))))
+
+(prove-lemma itimes-list-eval$-factors (rewrite)
+       ;; similar to ITIMES-LIST-EVAL$-FRINGE, except one has to
+       ;; reason about bagdiff etc.
+       (equal (itimes-list (eval$ 'list (itimes-factors x) a))
+              (fix-int (eval$ t x a)))
+       ((induct (itimes-factors x))
+        (enable ;;eval$-list-append ;; already enabled now
+                integerp-eval$-itimes
+                itimes-list-bagdiff
+                listp-bagint-with-singleton-member)))
+
+(prove-lemma iplus-or-itimes-term-integerp-eval$ (rewrite)
+  (implies (iplus-or-itimes-term x)
+           (integerp (eval$ t x a)))
+  ((enable iplus-or-itimes-term)))
+
+(prove-lemma eval$-list-bagint-0 nil
+  (implies (equal (itimes-list (eval$ 'list (bagint x y) a)) 0)
+           (and (equal (itimes-list (eval$ 'list x a)) 0)
+                (equal (itimes-list (eval$ 'list y a)) 0)))
+  ((use (subsetp-implies-itimes-list-eval$-equals-0
+         (x (bagint x y))
+         (y x))
+        (subsetp-implies-itimes-list-eval$-equals-0
+         (x (bagint x y))
+         (y y)))))
+
+(prove-lemma eval$-list-bagint-0-implies-equal (rewrite)
+  (implies (and (equal (itimes-list
+                        (eval$ 'list (bagint (itimes-factors v)
+                                             (itimes-factors w)) a))
+                       0)
+                (integerp (eval$ t v a))
+                (integerp (eval$ t w a)))
+           (equal (equal (eval$ t v a) (eval$ t w a))
+                  t))
+  ((use (eval$-list-bagint-0 (x (itimes-factors v))
+                             (y (itimes-factors w))))))
+
+(prove-lemma correctness-of-cancel-itimes-factors ((meta equal))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-itimes-factors-expanded x) a))
+       ((do-not-induct t)
+        (enable eval$-itimes-tree eval$-make-cancel-itimes-equality)))
+
+;; OK -- now, the lessp case, finally.  Ugh!
+
+(defn cancel-itimes-ilessp-factors (x)
+  (if (listp x)
+      (if (equal (car x) 'ilessp)
+          (if (listp (bagint (itimes-factors (cadr x))
+                             (itimes-factors (caddr x))))
+              (make-cancel-itimes-inequality
+               (itimes-factors (cadr x))
+               (itimes-factors (caddr x))
+               (bagint (itimes-factors (cadr x))
+                       (itimes-factors (caddr x))))
+              x)
+          x)
+      x))
+
+(prove-lemma bagint-singleton (rewrite)
+  (equal (bagint x (list y))
+         (if (member y x)
+             (list y)
+           nil)))
+
+(prove-lemma izerop-ilessp-0-relationship (rewrite)
+  (equal (equal (fix-int x) 0)
+         (and (not (ilessp x 0))
+              (not (ilessp 0 x))))
+  ((enable-theory integer-defns)))
+
+(prove-lemma ilessp-itimes-list-eval$-list-delete-helper-1 (rewrite)
+  (implies
+   (ilessp 0 w)
+   (equal
+    (ilessp (itimes x w)
+            (itimes w u))
+    (ilessp x u))))
+
+(prove-lemma ilessp-itimes-list-eval$-list-delete-helper-2 (rewrite)
+  (implies
+   (ilessp w 0)
+   (equal
+    (ilessp (itimes w u)
+            (itimes x w))
+    (ilessp x u))))
+
+(prove-lemma ilessp-itimes-list-eval$-list-delete (rewrite)
+  (implies (and (member z y)
+                (not (equal (fix-int (eval$ t z a)) 0)))
+           (equal (ilessp x
+                          (itimes-list (eval$ 'list (delete z y) a)))
+                  (if (ilessp 0 (eval$ t z a))
+                      (ilessp (itimes x (eval$ t z a))
+                              (itimes-list (eval$ 'list y a)))
+                    (if (ilessp (eval$ t z a) 0)
+                        (ilessp (itimes-list (eval$ 'list y a))
+                                (itimes x (eval$ t z a)))
+                      f))))
+  ((enable itimes-list-eval$-delete)
+   (disable itimes-itimes-list-eval$-list-delete)))
+
+(prove-lemma ilessp-itimes-list-eval$-list-delete-prime-helper-1 (rewrite)
+  (implies
+   (ilessp 0 w)
+   (equal
+    (ilessp (itimes w u)
+            (itimes x w))
+    (ilessp u x))))
+
+(prove-lemma ilessp-itimes-list-eval$-list-delete-prime-helper-2 (rewrite)
+  (implies
+   (ilessp w 0)
+   (equal
+    (ilessp (itimes x w)
+            (itimes w u))
+    (ilessp u x))))
+
+(prove-lemma ilessp-itimes-list-eval$-list-delete-prime (rewrite)
+  (implies (and (member z y)
+                (not (equal (fix-int (eval$ t z a)) 0)))
+           (equal (ilessp (itimes-list (eval$ 'list (delete z y) a))
+                          x)
+                  (if (ilessp 0 (eval$ t z a))
+                      (ilessp (itimes-list (eval$ 'list y a))
+                              (itimes x (eval$ t z a)))
+                    (if (ilessp (eval$ t z a) 0)
+                        (ilessp (itimes x (eval$ t z a))
+                                (itimes-list (eval$ 'list y a)))
+                      f))))
+  ((enable itimes-list-eval$-delete)
+   (disable itimes-itimes-list-eval$-list-delete
+            ilessp-itimes-list-eval$-list-delete)))
+
+;; **** Do I have anything like the following two lemmas for the
+;; equality case?  Should I?
+
+;;;***** I should also consider if I've dealt with things like 0 = a*x
+;;;+ b*x, and simlilarly for ilessp.
+
+(prove-lemma ilessp-0-itimes (rewrite)
+  (equal (ilessp 0 (itimes x y))
+         (or (and (ilessp 0 x) (ilessp 0 y))
+             (and (ilessp x 0) (ilessp y 0))))
+  ((enable-theory integer-defns)))
+
+(prove-lemma ilessp-itimes-0 (rewrite)
+  (equal (ilessp (itimes x y) 0)
+         (or (and (ilessp 0 x) (ilessp y 0))
+             (and (ilessp x 0) (ilessp 0 y))))
+  ((enable-theory integer-defns)))
+
+(prove-lemma ilessp-itimes-list-eval$-list-bagdiff (rewrite)
+  (implies (and (subbagp in-both bag1)
+                (subbagp in-both bag2)
+                (not (equal (itimes-list (eval$ 'list in-both a)) 0)))
+           (equal (ilessp (itimes-list (eval$ 'list
+                                              (bagdiff bag1 in-both)
+                                              a))
+                          (itimes-list (eval$ 'list
+                                              (bagdiff bag2 in-both)
+                                              a)))
+                  (if (ilessp 0 (itimes-list (eval$ 'list in-both a)))
+                      (ilessp (itimes-list (eval$ 'list bag1 a))
+                              (itimes-list (eval$ 'list bag2 a)))
+                    (ilessp (itimes-list (eval$ 'list bag2 a))
+                            (itimes-list (eval$ 'list bag1 a))))))
+  ((enable ilessp-trichotomy)
+   (disable izerop-ilessp-0-relationship)))
+
+(prove-lemma zero-ilessp-implies-not-equal nil
+             ;; This is not a rewrite rule because I don't want to slow down
+             ;; the rewriter.  Maybe that's not such a great decision.
+             (implies (ilessp 0 x)
+                      (not (equal 0 x))))
+
+(prove-lemma ilessp-itimes-list-eval$-list-bagdiff-corollary-1 (rewrite)
+  (implies (and (subbagp in-both bag1)
+                (subbagp in-both bag2)
+                (ilessp 0 (itimes-list (eval$ 'list in-both a))))
+           (equal (ilessp (itimes-list (eval$ 'list
+                                              (bagdiff bag1 in-both)
+                                              a))
+                          (itimes-list (eval$ 'list
+                                              (bagdiff bag2 in-both)
+                                              a)))
+                  (ilessp (itimes-list (eval$ 'list bag1 a))
+                          (itimes-list (eval$ 'list bag2 a)))))
+  ((use (zero-ilessp-implies-not-equal (x (itimes-list
+                                           (eval$ 'list in-both a)))))))
+
+(prove-lemma ilessp-zero-implies-not-equal nil
+             ;; This is not a rewrite rule because I don't want to slow down
+             ;; the rewriter.  Maybe that's not such a great decision.
+             (implies (ilessp x 0)
+                      (not (equal 0 x))))
+
+(prove-lemma ilessp-itimes-list-eval$-list-bagdiff-corollary-2 (rewrite)
+  (implies (and (subbagp in-both bag1)
+                (subbagp in-both bag2)
+                (ilessp (itimes-list (eval$ 'list in-both a)) 0))
+           (equal (ilessp (itimes-list (eval$ 'list
+                                              (bagdiff bag1 in-both)
+                                              a))
+                          (itimes-list (eval$ 'list
+                                              (bagdiff bag2 in-both)
+                                              a)))
+                  (ilessp (itimes-list (eval$ 'list bag2 a))
+                          (itimes-list (eval$ 'list bag1 a)))))
+  ((use (ilessp-zero-implies-not-equal (x (itimes-list
+                                           (eval$ 'list in-both a)))))))
+
+(prove-lemma member-0-itimes-factors-yields-0 (rewrite)
+  ;; I'll hang this on MEMBER for efficiency
+  (implies (not (equal (eval$ t w a) 0))
+           (not (member 0 (itimes-factors w)))))
+
+(prove-lemma member-0-itimes-factors-yields-0-ilessp-consequence-1 (rewrite)
+  ;; I'll hang this on MEMBER for efficiency
+  (implies (ilessp (eval$ t w a) 0)
+           (not (member 0 (itimes-factors w))))
+  ((use (member-0-itimes-factors-yields-0))))
+
+(prove-lemma member-0-itimes-factors-yields-0-ilessp-consequence-2 (rewrite)
+  ;; I'll hang this on MEMBER for efficiency
+  (implies (ilessp 0 (eval$ t w a))
+           (not (member 0 (itimes-factors w))))
+  ((use (member-0-itimes-factors-yields-0))))
+
+#|
+(prove-lemma eval$-list-bagint-0 nil
+  (implies (equal (itimes-list (eval$ 'list (bagint x y) a)) 0)
+           (and (equal (itimes-list (eval$ 'list x a)) 0)
+                (equal (itimes-list (eval$ 'list y a)) 0)))
+  ((use (subsetp-implies-itimes-list-eval$-equals-0
+         (x (bagint x y))
+         (y x))
+        (subsetp-implies-itimes-list-eval$-equals-0
+         (x (bagint x y))
+         (y y)))))
+|#
+
+#|
+(prove-lemma eval$-list-bagint-0-implies-equal (rewrite)
+  (implies (and (equal (itimes-list
+                        (eval$ 'list (bagint (itimes-factors v)
+                                             (itimes-factors w)) a))
+                       0)
+                (integerp (eval$ t v a))
+                (integerp (eval$ t w a)))
+           (equal (equal (eval$ t v a) (eval$ t w a))
+                  t))
+  ((use (eval$-list-bagint-0 (x (itimes-factors v))
+                             (y (itimes-factors w))))))
+|#
+
+;; At this point I'm going to switch the states of ilessp-trichotomy and
+;; izerop-ilessp-0-relationship, for good (or till I change my mind again!).
+
+(enable ilessp-trichotomy)
+(disable izerop-ilessp-0-relationship)
+
+(prove-lemma eval$-list-bagint-0-for-ilessp nil
+  (implies (and (not (ilessp (itimes-list (eval$ 'list (bagint x y) a)) 0))
+                (not (ilessp 0 (itimes-list (eval$ 'list (bagint x y) a)))))
+           (and (equal (fix-int (itimes-list (eval$ 'list x a))) 0)
+                (equal (fix-int (itimes-list (eval$ 'list y a))) 0)))
+  ((use (subsetp-implies-itimes-list-eval$-equals-0
+         (x (bagint x y))
+         (y x))
+        (subsetp-implies-itimes-list-eval$-equals-0
+         (x (bagint x y))
+         (y y)))))
+
+(prove-lemma eval$-list-bagint-0-implies-equal-for-ilessp-lemma nil
+  (implies (and (not (ilessp (itimes-list (eval$ 'list
+                                                 (bagint (itimes-factors v)
+                                                         (itimes-factors w))
+                                                 a))
+                             0))
+                (not (ilessp 0
+                             (itimes-list (eval$ 'list
+                                                 (bagint (itimes-factors v)
+                                                         (itimes-factors w))
+                                                 a)))))
+           (equal (fix-int (eval$ t v a))
+                  (fix-int (eval$ t w a))))
+  ((use (eval$-list-bagint-0-for-ilessp (x (itimes-factors v))
+                                        (y (itimes-factors w))))))
+
+(prove-lemma equal-fix-int-to-ilessp nil
+  ;; Not a rewrite rule, for efficiency
+  (implies (equal (fix-int x) (fix-int y))
+           (not (ilessp x y)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma eval$-list-bagint-0-implies-equal-for-ilessp (rewrite)
+  (implies (and (not (ilessp (itimes-list (eval$ 'list
+                                                 (bagint (itimes-factors v)
+                                                         (itimes-factors w))
+                                                 a))
+                             0))
+                (not (ilessp 0
+                             (itimes-list (eval$ 'list
+                                                 (bagint (itimes-factors v)
+                                                         (itimes-factors w))
+                                                 a)))))
+           (and (not (ilessp (eval$ t v a)
+                             (eval$ t w a)))
+                (not (ilessp (eval$ t w a)
+                             (eval$ t v a)))))
+  ((use (eval$-list-bagint-0-implies-equal-for-ilessp-lemma)
+        (equal-fix-int-to-ilessp (x (eval$ t v a)) (y (eval$ t w a)))
+        (equal-fix-int-to-ilessp (x (eval$ t w a)) (y (eval$ t v a))))))
+
+;; The rewrite rule ILESSP-TRICHOTOMY seemed to mess up the proof of
+;; the following, so I'm just going to leave it disabled.
+(disable ilessp-trichotomy)
+
+(prove-lemma correctness-of-cancel-itimes-ilessp-factors ((meta ilessp))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-itimes-ilessp-factors x) a))
+       ((do-not-induct t)
+        (enable eval$-itimes-tree-no-fix-int-1
+                eval$-itimes-tree-no-fix-int-2
+                eval$-itimes-tree
+                eval$-make-cancel-itimes-inequality)))
+
+;; OK -- now, the zero cases.
+
+(enable LESSP-COUNT-LISTP-CDR)
+
+(defn disjoin-equalities-with-0 (factors)
+  (if (listp (cdr factors))
+      (list 'or
+            (list 'equal (list 'fix-int (car factors)) ''0)
+            (disjoin-equalities-with-0 (cdr factors)))
+    (list 'equal (list 'fix-int (car factors)) ''0)))
+
+(disable LESSP-COUNT-LISTP-CDR)
+
+(defn cancel-factors-0 (x)
+  (if (listp x)
+      (if (equal (car x) 'equal)
+          (if (equal (cadr x) ''0)
+              (let ((factors (itimes-factors (caddr x))))
+                (if (listp (cdr factors))
+                    (disjoin-equalities-with-0 factors)
+                  x))
+            (if (equal (caddr x) ''0)
+                (let ((factors (itimes-factors (cadr x))))
+                  (if (listp (cdr factors))
+                      (disjoin-equalities-with-0 factors)
+                    x))
+              x))
+        x)
+    x))
+
+(defn some-eval$s-to-0 (x a)
+  ;; says that some member of x eval$s to an izerop
+  (if (listp x)
+      (or (equal (fix-int (eval$ t (car x) a)) 0)
+          (some-eval$s-to-0 (cdr x) a))
+    f))
+
+(prove-lemma eval$-disjoin-equalities-with-0 (rewrite)
+  (implies (listp lst)
+           (equal (eval$ t (disjoin-equalities-with-0 lst) a)
+                  (some-eval$s-to-0 lst a))))
+
+(prove-lemma some-eval$s-to-0-append (rewrite)
+  (equal (some-eval$s-to-0 (append x y) a)
+         (or (some-eval$s-to-0 x a)
+             (some-eval$s-to-0 y a))))
+
+(prove-lemma some-eval$s-to-0-eliminator (rewrite)
+  (equal (some-eval$s-to-0 x a)
+         (equal (itimes-list (eval$ 'list x a)) 0)))
+
+(prove-lemma listp-cdr-factors-implies-integerp (rewrite)
+  (implies (listp (cdr (itimes-factors v)))
+           (integerp (eval$ t v a)))
+  ((expand (itimes-factors v))))
+
+(prove-lemma correctness-of-cancel-factors-0 ((meta equal))
+  (equal (eval$ t x a)
+         (eval$ t (cancel-factors-0 x) a)))
+
+;; and now for inequalities...
+
+(enable LESSP-COUNT-LISTP-CDR)
+
+(defn conjoin-inequalities-with-0 (factors parity)
+  ;; Returns an inequality saying that 0 is less than the product of the
+  ;; factors if parity is not F and the other way around otherwise.
+  (if (listp (cdr factors))
+      (if parity
+          (list 'or
+                (list 'and
+                      (list 'ilessp ''0 (car factors))
+                      (conjoin-inequalities-with-0 (cdr factors) t))
+                (list 'and
+                      (list 'ilessp (car factors) ''0)
+                      (conjoin-inequalities-with-0 (cdr factors) f)))
+        (list 'or
+              (list 'and
+                    (list 'ilessp (car factors) ''0)
+                    (conjoin-inequalities-with-0 (cdr factors) t))
+              (list 'and
+                    (list 'ilessp ''0 (car factors))
+                    (conjoin-inequalities-with-0 (cdr factors) f))))
+    (if parity
+        (list 'ilessp ''0 (car factors))
+      (list 'ilessp (car factors) ''0))))
+
+(disable lessp-count-listp-cdr)
+
+(defn cancel-factors-ilessp-0 (x)
+  (if (listp x)
+      (if (equal (car x) 'ilessp)
+          (if (equal (cadr x) ''0)
+              (let ((factors (itimes-factors (caddr x))))
+                (if (listp (cdr factors))
+                    (conjoin-inequalities-with-0 factors t)
+                  x))
+            (if (equal (caddr x) ''0)
+                (let ((factors (itimes-factors (cadr x))))
+                  (if (listp (cdr factors))
+                      (conjoin-inequalities-with-0 factors f)
+                    x))
+              x))
+        x)
+    x))
+
+(prove-lemma conjoin-inequalities-with-0-eliminator (rewrite)
+  (implies (listp x)
+           (equal (eval$ t (conjoin-inequalities-with-0 x parity) a)
+                  (if parity
+                      (ilessp 0 (itimes-list (eval$ 'list x a)))
+                    (ilessp (itimes-list (eval$ 'list x a)) 0)))))
+
+(prove-lemma correctness-of-cancel-factors-ilessp-0 ((meta ilessp))
+  (equal (eval$ t x a)
+         (eval$ t (cancel-factors-ilessp-0 x) a)))
+
+(disable equal-itimes-list-eval$-list-delete-new-1)
+(disable equal-itimes-list-eval$-list-delete-new-2)
+(disable itimes-itimes-list-eval$-list-delete)
+(disable equal-itimes-list-eval$-list-bagdiff)
+(disable itimes-list-eval$-factors-lemma)
+(disable itimes-list-eval$-factors-lemma-prime)
+(disable itimes-list-eval$-factors)
+(disable iplus-or-itimes-term-integerp-eval$)
+(disable eval$-list-bagint-0)
+(disable eval$-list-bagint-0-implies-equal)
+(disable izerop-ilessp-0-relationship)
+(disable ilessp-itimes-list-eval$-list-delete-helper-1)
+(disable ilessp-itimes-list-eval$-list-delete-helper-2)
+(disable ilessp-itimes-list-eval$-list-delete)
+(disable ilessp-itimes-list-eval$-list-delete-prime-helper-1)
+(disable ilessp-itimes-list-eval$-list-delete-prime-helper-2)
+(disable ilessp-itimes-list-eval$-list-delete-prime)
+(disable ilessp-0-itimes)
+(disable ilessp-itimes-0)
+(disable listp-cdr-factors-implies-integerp)
+
+
+;; We presumably have better meta-lemmas now, but if we want we
+;; can disable those (i.e., correctness-of-cancel-itimes-factors,
+;; correctness-of-cancel-itimes-ilessp-factors,
+;; correctness-of-cancel-factors-0, and
+;; correctness-of-cancel-factors-ilessp-0) and enable the two
+;; mentioned below:
+
+(disable correctness-of-cancel-itimes)
+(disable correctness-of-cancel-itimes-ilessp)
+
+
+;; I'll disable some rules now, finally, that I'd previously thought
+;; would be OK but now fear because of potential nasty backchaining.
+
+(disable not-integerp-implies-not-equal-iplus)
+(disable not-integerp-implies-not-equal-itimes)
+(disable subbagp-subsetp)
+(disable eval$-list-bagint-0-implies-equal-for-ilessp)
+
+; ---------- Cancel ineg terms from equalities and inequalities ----------
+
+(defn split-out-ineg-terms (x)
+  ;; Here x is a list and we return a pair consisting of
+  ;; a list of the terms in x not starting with INEG and a list
+  ;; of those terms that do (with their INEG headers stripped off).
+  (if (listp x)
+      (let ((pair (split-out-ineg-terms (cdr x)))
+            (a (car x)))
+        (if (listp a)
+            (if (equal (car a) 'ineg)
+                (cons (car pair)
+                      (cons (cadr a) (cdr pair)))
+              (if (and (equal (car a) 'quote)
+                       (negativep (cadr a))
+                       (not (equal (negative-guts (cadr a)) 0)))
+                  (cons (car pair)
+                        (cons (list 'quote (negative-guts (cadr a)))
+                              (cdr pair)))
+                (cons (cons a (car pair))
+                      (cdr pair))))
+          (cons (cons a (car pair))
+                (cdr pair))))
+    (cons nil nil)))
+
+(defn remove-inegs (x y)
+  ;; x and y are term lists that are known to represent integers.
+  ;; The idea is to rearrange (equal x y) or (ilessp x y).  Notice
+  ;; that the negative terms are put in the front, so that APPEND
+  ;; will run fast and do no CONSing in the frequent case that
+  ;; there are no negative terms.
+  ;;   Returns F, though, if there's no change at all.  I was getting
+  ;; into an infinite loop when I built a new term, since there was
+  ;; an extra FIX-INT put there.
+  (let ((xpair (split-out-ineg-terms x))
+        (ypair (split-out-ineg-terms y)))
+    (if (or (listp (cdr xpair)) (listp (cdr ypair)))
+        (cons (append (cdr ypair) (car xpair))
+              (append (cdr xpair) (car ypair)))
+      f)))
+
+(defn iplus-or-ineg-term (x)
+  (and (listp x)
+       (or (equal (car x) (quote ineg))
+           (equal (car x) (quote iplus)))))
+
+(defn make-cancel-ineg-terms-equality (x)
+  (let ((new-fringes (remove-inegs (iplus-fringe (cadr x))
+                                   (iplus-fringe (caddr x)))))
+    (if new-fringes
+        (if (iplus-or-ineg-term (cadr x))
+          (if (iplus-or-ineg-term (caddr x))
+              (list (quote equal)
+                    (iplus-tree (car new-fringes))
+                    (iplus-tree (cdr new-fringes)))
+            (list 'if
+                  (list 'integerp (caddr x))
+                  (list (quote equal)
+                        (iplus-tree (car new-fringes))
+                        (iplus-tree (cdr new-fringes)))
+                  (list 'quote f)))
+        ;; otherwise, the first argument is not an iplus or ineg term
+        (if (iplus-or-ineg-term (caddr x)) 
+            (list 'if
+                  (list 'integerp (cadr x))
+                  (list (quote equal)
+                        (iplus-tree (car new-fringes))
+                        (iplus-tree (cdr new-fringes)))
+                  (list 'quote f))
+          x))
+      x)))
+
+(defn cancel-ineg-terms-from-equality (x)
+  (if (and (listp x)
+           (equal (car x) (quote equal)))
+      (make-cancel-ineg-terms-equality x)
+    x))
+
+;; The following was created from nqthm-macroexpand with arguments
+;; and or make-cancel-ineg-terms-equality iplus-or-ineg-term
+(DEFN CANCEL-INEG-TERMS-FROM-EQUALITY-expanded (X)
+      (IF (LISTP X)
+          (IF (EQUAL (CAR X) 'EQUAL)
+              (IF (REMOVE-INEGS (IPLUS-FRINGE (CADR X))
+                      (IPLUS-FRINGE (CADDR X)))
+                  (COND
+                    ((LISTP (CADR X))
+                     (CASE (CAR (CAR (CDR X)))
+                       (INEG (IF (LISTP (CADDR X))
+                                 (CASE (CAR (CAR (CDR (CDR X))))
+                                   (INEG
+                                    (LIST 'EQUAL
+                                     (IPLUS-TREE
+                                      (CAR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X)))))
+                                     (IPLUS-TREE
+                                      (CDR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X)))))))
+                                   (IPLUS
+                                    (LIST 'EQUAL
+                                     (IPLUS-TREE
+                                      (CAR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X)))))
+                                     (IPLUS-TREE
+                                      (CDR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X)))))))
+                                   (OTHERWISE
+                                    (LIST 'IF
+                                     (LIST 'INTEGERP (CADDR X))
+                                     (LIST 'EQUAL
+                                      (IPLUS-TREE
+                                       (CAR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X)))))
+                                      (IPLUS-TREE
+                                       (CDR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X))))))
+                                     (LIST 'QUOTE F))))
+                                 (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                                       (LIST 'EQUAL
+                                        (IPLUS-TREE
+                                         (CAR
+                                          (REMOVE-INEGS
+                                           (IPLUS-FRINGE (CADR X))
+                                           (IPLUS-FRINGE (CADDR X)))))
+                                        (IPLUS-TREE
+                                         (CDR
+                                          (REMOVE-INEGS
+                                           (IPLUS-FRINGE (CADR X))
+                                           (IPLUS-FRINGE (CADDR X))))))
+                                       (LIST 'QUOTE F))))
+                       (IPLUS (IF (LISTP (CADDR X))
+                                  (CASE (CAR (CAR (CDR (CDR X))))
+                                    (INEG
+                                     (LIST 'EQUAL
+                                      (IPLUS-TREE
+                                       (CAR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X)))))
+                                      (IPLUS-TREE
+                                       (CDR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X)))))))
+                                    (IPLUS
+                                     (LIST 'EQUAL
+                                      (IPLUS-TREE
+                                       (CAR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X)))))
+                                      (IPLUS-TREE
+                                       (CDR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X)))))))
+                                    (OTHERWISE
+                                     (LIST 'IF
+                                      (LIST 'INTEGERP (CADDR X))
+                                      (LIST 'EQUAL
+                                       (IPLUS-TREE
+                                        (CAR
+                                         (REMOVE-INEGS
+                                          (IPLUS-FRINGE (CADR X))
+                                          (IPLUS-FRINGE (CADDR X)))))
+                                       (IPLUS-TREE
+                                        (CDR
+                                         (REMOVE-INEGS
+                                          (IPLUS-FRINGE (CADR X))
+                                          (IPLUS-FRINGE (CADDR X))))))
+                                      (LIST 'QUOTE F))))
+                                  (LIST 'IF (LIST 'INTEGERP (CADDR X))
+                                        (LIST 'EQUAL
+                                         (IPLUS-TREE
+                                          (CAR
+                                           (REMOVE-INEGS
+                                            (IPLUS-FRINGE (CADR X))
+                                            (IPLUS-FRINGE (CADDR X)))))
+                                         (IPLUS-TREE
+                                          (CDR
+                                           (REMOVE-INEGS
+                                            (IPLUS-FRINGE (CADR X))
+                                            (IPLUS-FRINGE (CADDR X))))))
+                                        (LIST 'QUOTE F))))
+                       (OTHERWISE
+                           (IF (LISTP (CADDR X))
+                               (CASE (CAR (CAR (CDR (CDR X))))
+                                 (INEG (LIST 'IF
+                                        (LIST 'INTEGERP (CADR X))
+                                        (LIST 'EQUAL
+                                         (IPLUS-TREE
+                                          (CAR
+                                           (REMOVE-INEGS
+                                            (IPLUS-FRINGE (CADR X))
+                                            (IPLUS-FRINGE (CADDR X)))))
+                                         (IPLUS-TREE
+                                          (CDR
+                                           (REMOVE-INEGS
+                                            (IPLUS-FRINGE (CADR X))
+                                            (IPLUS-FRINGE (CADDR X))))))
+                                        (LIST 'QUOTE F)))
+                                 (IPLUS (LIST 'IF
+                                         (LIST 'INTEGERP (CADR X))
+                                         (LIST 'EQUAL
+                                          (IPLUS-TREE
+                                           (CAR
+                                            (REMOVE-INEGS
+                                             (IPLUS-FRINGE (CADR X))
+                                             (IPLUS-FRINGE (CADDR X)))))
+                                          (IPLUS-TREE
+                                           (CDR
+                                            (REMOVE-INEGS
+                                             (IPLUS-FRINGE (CADR X))
+                                             (IPLUS-FRINGE (CADDR X))))))
+                                         (LIST 'QUOTE F)))
+                                 (OTHERWISE X))
+                               X))))
+                    ((LISTP (CADDR X))
+                     (CASE (CAR (CAR (CDR (CDR X))))
+                       (INEG (LIST 'IF (LIST 'INTEGERP (CADR X))
+                                   (LIST 'EQUAL
+                                    (IPLUS-TREE
+                                     (CAR
+                                      (REMOVE-INEGS
+                                       (IPLUS-FRINGE (CADR X))
+                                       (IPLUS-FRINGE (CADDR X)))))
+                                    (IPLUS-TREE
+                                     (CDR
+                                      (REMOVE-INEGS
+                                       (IPLUS-FRINGE (CADR X))
+                                       (IPLUS-FRINGE (CADDR X))))))
+                                   (LIST 'QUOTE F)))
+                       (IPLUS (LIST 'IF (LIST 'INTEGERP (CADR X))
+                                    (LIST 'EQUAL
+                                     (IPLUS-TREE
+                                      (CAR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X)))))
+                                     (IPLUS-TREE
+                                      (CDR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X))))))
+                                    (LIST 'QUOTE F)))
+                       (OTHERWISE X)))
+                    (T X))
+                  X)
+              X)
+          X))
+
+(prove-lemma
+ CANCEL-INEG-TERMS-FROM-EQUALITY-CANCEL-INEG-TERMS-FROM-EQUALITY-expanded
+ (rewrite)
+ (equal (CANCEL-INEG-TERMS-FROM-EQUALITY-expanded x)
+        (CANCEL-INEG-TERMS-FROM-EQUALITY x))
+ ((disable-theory t)
+  (enable-theory ground-zero)
+  (enable make-cancel-ineg-terms-equality iplus-or-ineg-term
+          CANCEL-INEG-TERMS-FROM-EQUALITY-expanded
+          CANCEL-INEG-TERMS-FROM-EQUALITY)))
+
+(disable CANCEL-INEG-TERMS-FROM-EQUALITY-expanded)
+
+(prove-lemma integerp-eval$-iplus-or-ineg-term (rewrite)
+  (implies (iplus-or-ineg-term x)
+           (integerp (eval$ t x a))))
+
+(disable iplus-or-ineg-term)
+
+(prove-lemma eval$-iplus-list-car-remove-inegs (rewrite)
+  (implies (remove-inegs x y)
+           (equal (iplus-list (eval$ 'list (car (remove-inegs x y)) a))
+                  (iplus (iplus-list
+                          (eval$ 'list (car (split-out-ineg-terms x)) a))
+                         (iplus-list
+                          (eval$ 'list (cdr (split-out-ineg-terms y)) a))))))
+
+(prove-lemma eval$-iplus-list-cdr-remove-inegs (rewrite)
+  (implies (remove-inegs x y)
+           (equal (iplus-list (eval$ 'list (cdr (remove-inegs x y)) a))
+                  (iplus (iplus-list
+                          (eval$ 'list (car (split-out-ineg-terms y)) a))
+                         (iplus-list
+                          (eval$ 'list (cdr (split-out-ineg-terms x)) a))))))
+
+(prove-lemma minus-ineg (rewrite)
+  (implies (and (numberp x)
+                (not (equal x 0)))
+           (equal (minus x)
+                  (ineg x)))
+  ((enable-theory integer-defns)))
+
+(prove-lemma iplus-list-eval$-car-split-out-ineg-terms (rewrite)
+  (equal (iplus-list (eval$ 'list (car (split-out-ineg-terms x)) a))
+         (iplus (iplus-list (eval$ 'list x a))
+                (iplus-list (eval$ 'list (cdr (split-out-ineg-terms x)) a))))
+  ((induct (split-out-ineg-terms x))
+   (enable eval$-quote)))
+
+(disable remove-inegs)
+
+(prove-lemma correctness-of-cancel-ineg-terms-from-equality ((meta equal))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-ineg-terms-from-equality-expanded x) a))
+       ((enable eval$-iplus-tree iplus-list-eval$-fringe eval$-quote)
+        (disable iplus-fringe)))
+
+(defn make-cancel-ineg-terms-inequality (x)
+  (let ((new-fringes (remove-inegs (iplus-fringe (cadr x))
+                                   (iplus-fringe (caddr x)))))
+    (if new-fringes
+        (list (quote ilessp)
+              (iplus-tree (car new-fringes))
+              (iplus-tree (cdr new-fringes)))
+      x)))
+
+(defn cancel-ineg-terms-from-inequality (x)
+  (if (and (listp x)
+           (equal (car x) (quote ilessp)))
+      ;; the tests below are for efficiency only
+      (if (iplus-or-ineg-term (cadr x))
+          (make-cancel-ineg-terms-inequality x)
+        (if (iplus-or-ineg-term (caddr x))
+            (make-cancel-ineg-terms-inequality x)
+          x))
+    x))
+
+;; The following was created from nqthm-macroexpand with arguments
+;; and or make-cancel-ineg-terms-inequality iplus-or-ineg-term
+
+(DEFN CANCEL-INEG-TERMS-FROM-INEQUALITY-expanded (X)
+      (IF (LISTP X)
+          (IF (EQUAL (CAR X) 'ILESSP)
+              (COND
+                ((LISTP (CADR X))
+                 (CASE (CAR (CAR (CDR X)))
+                   (INEG (IF (REMOVE-INEGS (IPLUS-FRINGE (CADR X))
+                                 (IPLUS-FRINGE (CADDR X)))
+                             (LIST 'ILESSP
+                                   (IPLUS-TREE
+                                    (CAR
+                                     (REMOVE-INEGS
+                                      (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X)))))
+                                   (IPLUS-TREE
+                                    (CDR
+                                     (REMOVE-INEGS
+                                      (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X))))))
+                             X))
+                   (IPLUS (IF (REMOVE-INEGS (IPLUS-FRINGE (CADR X))
+                                  (IPLUS-FRINGE (CADDR X)))
+                              (LIST 'ILESSP
+                                    (IPLUS-TREE
+                                     (CAR
+                                      (REMOVE-INEGS
+                                       (IPLUS-FRINGE (CADR X))
+                                       (IPLUS-FRINGE (CADDR X)))))
+                                    (IPLUS-TREE
+                                     (CDR
+                                      (REMOVE-INEGS
+                                       (IPLUS-FRINGE (CADR X))
+                                       (IPLUS-FRINGE (CADDR X))))))
+                              X))
+                   (OTHERWISE
+                       (IF (LISTP (CADDR X))
+                           (CASE (CAR (CAR (CDR (CDR X))))
+                             (INEG (IF
+                                    (REMOVE-INEGS
+                                     (IPLUS-FRINGE (CADR X))
+                                     (IPLUS-FRINGE (CADDR X)))
+                                    (LIST 'ILESSP
+                                     (IPLUS-TREE
+                                      (CAR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X)))))
+                                     (IPLUS-TREE
+                                      (CDR
+                                       (REMOVE-INEGS
+                                        (IPLUS-FRINGE (CADR X))
+                                        (IPLUS-FRINGE (CADDR X))))))
+                                    X))
+                             (IPLUS (IF
+                                     (REMOVE-INEGS
+                                      (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X)))
+                                     (LIST 'ILESSP
+                                      (IPLUS-TREE
+                                       (CAR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X)))))
+                                      (IPLUS-TREE
+                                       (CDR
+                                        (REMOVE-INEGS
+                                         (IPLUS-FRINGE (CADR X))
+                                         (IPLUS-FRINGE (CADDR X))))))
+                                     X))
+                             (OTHERWISE X))
+                           X))))
+                ((LISTP (CADDR X))
+                 (CASE (CAR (CAR (CDR (CDR X))))
+                   (INEG (IF (REMOVE-INEGS (IPLUS-FRINGE (CADR X))
+                                 (IPLUS-FRINGE (CADDR X)))
+                             (LIST 'ILESSP
+                                   (IPLUS-TREE
+                                    (CAR
+                                     (REMOVE-INEGS
+                                      (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X)))))
+                                   (IPLUS-TREE
+                                    (CDR
+                                     (REMOVE-INEGS
+                                      (IPLUS-FRINGE (CADR X))
+                                      (IPLUS-FRINGE (CADDR X))))))
+                             X))
+                   (IPLUS (IF (REMOVE-INEGS (IPLUS-FRINGE (CADR X))
+                                  (IPLUS-FRINGE (CADDR X)))
+                              (LIST 'ILESSP
+                                    (IPLUS-TREE
+                                     (CAR
+                                      (REMOVE-INEGS
+                                       (IPLUS-FRINGE (CADR X))
+                                       (IPLUS-FRINGE (CADDR X)))))
+                                    (IPLUS-TREE
+                                     (CDR
+                                      (REMOVE-INEGS
+                                       (IPLUS-FRINGE (CADR X))
+                                       (IPLUS-FRINGE (CADDR X))))))
+                              X))
+                   (OTHERWISE X)))
+                (T X))
+              X)
+          X))
+
+(prove-lemma
+ CANCEL-INEG-TERMS-FROM-INEQUALITY-CANCEL-INEG-TERMS-FROM-INEQUALITY-expanded
+ (rewrite)
+ (equal (CANCEL-INEG-TERMS-FROM-INEQUALITY-expanded x)
+        (CANCEL-INEG-TERMS-FROM-INEQUALITY x))
+ ((disable-theory t)
+  (enable-theory ground-zero)
+  (enable make-cancel-ineg-terms-inequality iplus-or-ineg-term
+          CANCEL-INEG-TERMS-FROM-INEQUALITY-expanded
+          CANCEL-INEG-TERMS-FROM-INEQUALITY)))
+
+(disable CANCEL-INEG-TERMS-FROM-INEQUALITY-expanded)
+
+(prove-lemma correctness-of-cancel-ineg-terms-from-inequality ((meta ilessp))
+       (equal (eval$ t x a)
+              (eval$ t (cancel-ineg-terms-from-inequality-expanded x) a))
+       ((enable eval$-iplus-tree iplus-list-eval$-fringe eval$-quote)
+        (disable iplus-fringe)))
+
+(disable minus-ineg)
+(disable integerp-eval$-iplus-or-ineg-term)
+
+; ---------- Eliminating constants ----------
+
+;; We want to combine in terms like (iplus 3 (iplus x 7)).  Also, when
+;; two iplus terms are equated or in-equated, there should only be a
+;; natural number summand on at most one side.  Finally, if one adds 1
+;; to the right side of a strict inequality, a stronger inequality (in
+;; a certain sense) is obtained by removing the 1 and making a non-strict
+;; inequality in the other direction.
+
+(prove-lemma plus-iplus (rewrite)
+  (implies (and (numberp i) (numberp j))
+           (equal (plus i j) (iplus i j)))
+  ((enable iplus)))
+
+(prove-lemma iplus-constants (rewrite)
+  ;; by now the term presumably has no MINUS terms in it
+  (equal (iplus (add1 i) (iplus (add1 j) x))
+         (iplus (plus (add1 i) (add1 j)) x))
+  ((enable fix-int integerp)
+   (disable plus-add1-arg1)))
+
+(prove-lemma numberp-is-integerp (rewrite)
+  (implies (numberp w)
+           (integerp w))
+  ((enable integerp)))
+
+(prove-lemma difference-idifference (rewrite)
+  (implies (and (numberp x)
+                (numberp y)
+                (leq x y))
+           (equal (difference y x)
+                  (idifference y x))))
+
+(prove-lemma cancel-constants-equal-lemma nil
+  (implies (and (numberp m) (numberp n))
+           (equal (equal (iplus m x) (iplus n y))
+                  (if (lessp m n)
+                      (equal (fix-int x) (iplus (difference n m) y))
+                    (equal (iplus (difference m n) x) (fix-int y))))))
+
+(prove-lemma cancel-constants-equal (rewrite)
+  (equal (equal (iplus (add1 i) x) (iplus (add1 j) y))
+         (if (lessp i j)
+             (equal (fix-int x) (iplus (difference j i) y))
+           (equal (iplus (difference i j) x) (fix-int y))))
+  ((use (cancel-constants-equal-lemma (m (add1 i)) (n (add1 j))))
+   (expand (difference (add1 i) (add1 j))
+           (difference (add1 j) (add1 i))
+           (lessp (add1 i) (add1 j)))
+   (disable-theory t)
+   (enable-theory ground-zero)))
+
+(prove-lemma ilessp-add1 (rewrite)
+  (implies (numberp y)
+           (equal (ilessp x (add1 y))
+                  (not (ilessp y x))))
+  ((enable-theory integer-defns)))
+
+(prove-lemma ilessp-add1-iplus (rewrite)
+  (implies (numberp y)
+           (equal (ilessp x (iplus (add1 y) z))
+                  (not (ilessp (iplus y z) x))))
+  ((enable-theory integer-defns)
+   (disable plus-iplus difference-idifference)))
+
+(prove-lemma cancel-constants-ilessp-lemma-1 nil
+  (implies (and (numberp m) (numberp n))
+           (equal (ilessp (iplus m x) (iplus n y))
+                  (if (lessp m n)
+                      (ilessp x (iplus (difference n m) y))
+                    (ilessp (iplus (difference m n) x) y)))))
+
+(prove-lemma cancel-constants-ilessp-lemma-2 nil
+  (implies (and (numberp m) (numberp n))
+           (equal (ilessp (iplus m x) (iplus n y))
+                  (if (lessp m n)
+                      (not (ilessp (iplus (sub1 (difference n m)) y) x))
+                    (ilessp (iplus (difference m n) x) y))))
+  ((use (cancel-constants-ilessp-lemma-1)
+        (ilessp-add1-iplus (y (sub1 (difference n m))) (z y) (x x)))
+   (disable ilessp-add1-iplus)))
+
+(prove-lemma cancel-constants-ilessp (rewrite)
+  (equal (ilessp (iplus (add1 i) x) (iplus (add1 j) y))
+         (if (lessp i j)
+             (not (ilessp (iplus (sub1 (difference j i)) y) x))
+           (ilessp (iplus (difference i j) x) y)))
+  ((use (cancel-constants-ilessp-lemma-2 (m (add1 i)) (n (add1 j))))
+   (expand (difference (add1 i) (add1 j))
+           (difference (add1 j) (add1 i))
+           (lessp (add1 i) (add1 j)))
+   (disable-theory t)
+   (enable-theory ground-zero)))
+
+(disable plus-iplus)
+(disable numberp-is-integerp)
+(disable difference-idifference)
+
+
+; ---------- Final DEFTHEORY event ----------
+
+;; I'll go ahead and include iplus-list and itimes-list and lemmas
+;; about them that were developed.
+
+;; I've left out ILESSP-TRICHOTOMY because I'm scared it will slow
+;; things down too much.  But it certainly represents useful
+;; information.
+
+(deftheory integers
+  (ileq idifference integerp-fix-int
+        integerp-iplus integerp-idifference integerp-ineg integerp-iabs
+        integerp-itimes fix-int-remover fix-int-fix-int fix-int-iplus
+        fix-int-idifference fix-int-ineg fix-int-iabs fix-int-itimes
+        ineg-iplus ineg-ineg ineg-fix-int
+        ineg-of-non-integerp ineg-0 iplus-left-id iplus-right-id iplus-0-left
+        iplus-0-right
+        commutativity2-of-iplus commutativity-of-iplus
+        associativity-of-iplus iplus-cancellation-1 iplus-cancellation-2
+        iplus-ineg1 iplus-ineg2 iplus-fix-int1 iplus-fix-int2
+        idifference-fix-int1 idifference-fix-int2
+        ;; iplus-fringe lessp-count-listp-cdr iplus-tree-rec iplus-tree
+        iplus-list
+        ;; eval$-iplus-tree-rec eval$-iplus-tree
+        eval$-list-append
+        ;; cancel-iplus
+        iplus-list-append
+        iplus-ineg3 iplus-ineg4
+        ;; iplus-list-eval$-fringe
+        ;; not-integerp-implies-not-equal-iplus 
+        ;; <<<disabled because of backchaining>>>
+        correctness-of-cancel-iplus
+        ilessp-fix-int-1 ilessp-fix-int-2
+        ;; make-cancel-iplus-inequality-1 cancel-iplus-ilessp-1
+        ;; <<< I omit the following two facts because they're naturals facts,
+        ;;    and hence I feel that it's up to naturals to "export"
+        ;;    them >>>
+        ;; lessp-difference-plus-arg1 lessp-difference-plus-arg1-commuted
+        iplus-cancellation-1-for-ilessp iplus-cancellation-2-for-ilessp
+        ;; correctness-of-cancel-iplus-ilessp-lemma iplus-tree-no-fix-int
+        ;; eval$-ilessp-iplus-tree-no-fix-int
+        ;; make-cancel-iplus-inequality-simplifier cancel-iplus-ilessp
+        correctness-of-cancel-iplus-ilessp
+        ;; itimes-zero1
+        itimes-0-left
+        ;; itimes-zero2
+        itimes-0-right
+        itimes-fix-int1 itimes-fix-int2 commutativity-of-itimes
+        itimes-distributes-over-iplus-proof itimes-distributes-over-iplus
+        commutativity2-of-itimes associativity-of-itimes equal-itimes-0
+        equal-itimes-1 equal-itimes-minus-1 itimes-1-arg1
+        quotient-remainder-uniqueness
+        ;; division-theorem-part1 division-theorem-part2 division-theorem-part3
+        division-theorem
+        ;; <<< Same comment as in angle braces above >>> 
+        ;; quotient-difference-lessp-arg2
+        ;; iquotient-iremainder-uniqueness
+        ;; division-theorem-for-truncate-to-neginf-part1
+        ;; division-theorem-for-truncate-to-neginf-part2
+        ;; division-theorem-for-truncate-to-neginf-part3
+        ;; division-theorem-for-truncate-to-neginf
+        ;; idiv-imod-uniqueness
+        ;; division-theorem-for-truncate-to-zero-part1
+        ;; division-theorem-for-truncate-to-zero-part2
+        ;; division-theorem-for-truncate-to-zero-part3
+        ;; division-theorem-for-truncate-to-zero iquo-irem-uniqueness
+        itimes-ineg-1 itimes-ineg-2 itimes-cancellation-1
+        itimes-cancellation-2 itimes-cancellation-3 integerp-iquotient
+        integerp-iremainder integerp-idiv integerp-imod integerp-iquo
+        integerp-irem iquotient-fix-int1 iquotient-fix-int2
+        iremainder-fix-int1 iremainder-fix-int2 idiv-fix-int1 idiv-fix-int2
+        imod-fix-int1 imod-fix-int2 iquo-fix-int1 iquo-fix-int2
+        irem-fix-int1 irem-fix-int2 fix-int-iquotient fix-int-iremainder
+        fix-int-idiv fix-int-imod fix-int-iquo fix-int-irem
+        ;; itimes-fringe
+        ;; itimes-tree-rec itimes-tree
+        itimes-list
+        ;; eval$-itimes-tree-rec
+        ;; eval$-itimes-tree make-cancel-itimes-equality
+        ;; cancel-itimes
+        itimes-list-append
+        ;; itimes-list-eval$-fringe
+        ;; integerp-eval$-itimes
+        ;; not-integerp-implies-not-equal-itimes 
+        ;; <<<disabled because of backchaining>>>
+        ;; itimes-list-eval$-delete itimes-list-bagdiff
+        ;; equal-itimes-list-eval$-list-delete
+        member-append;; <<< I'll go ahead and export this since it's
+        ;;     so fundamental if one has member around. >>>
+        ;; member-izerop-itimes-fringe correctness-of-cancel-itimes-hack-1
+        ;; eval$-make-cancel-itimes-equality 
+        ;; eval$-make-cancel-itimes-equality-1
+        equal-fix-int
+        ;; eval$-make-cancel-itimes-equality-2
+        ;; eval$-equal-itimes-tree-itimes-fringe-0
+        ;; izerop-eval-of-member-implies-itimes-list-0
+        subsetp;; <<< May as well have this enabled if it's going to
+        ;;     be imported here. >>>
+        ;; subsetp-implies-itimes-list-eval$-equals-0
+        ;; subbagp-subsetp <<<disabled because of backchaining>>>
+        ;; equal-0-itimes-list-eval$-bagint-1
+        ;; equal-0-itimes-list-eval$-bagint-2
+        ;; correctness-of-cancel-itimes-hack-2
+        ;; correctness-of-cancel-itimes-hack-3-lemma
+        ;; correctness-of-cancel-itimes-hack-3
+        correctness-of-cancel-itimes
+        ;; itimes-tree-no-fix-int eval$-itimes-tree-no-fix-int-1
+        ;; eval$-itimes-tree-no-fix-int-2 make-cancel-itimes-inequality
+        ;; cancel-itimes-ilessp eval$-make-cancel-itimes-inequality
+        ;; listp-bagint-with-singleton-implies-member itimes-list-eval$-list-0
+        ;; ilessp-itimes-right-positive
+        ;; correctness-of-cancel-itimes-ilessp-hack-1
+        ;; listp-bagint-with-singleton-member
+        ;; <<< Too obscure to be worthwhile >>>
+        ;; correctness-of-cancel-itimes-ilessp-hack-2-lemma
+        ;; correctness-of-cancel-itimes-ilessp-hack-2
+        ;; ilessp-trichotomy 
+        ;; <<<Slowed down CORRECTNESS-OF-CANCEL-ITIMES-ILESSP-FACTORS,
+        ;;                      which might never have even completed.>>>
+        ;; correctness-of-cancel-itimes-ilessp-hack-3-lemma-1
+        ;; correctness-of-cancel-itimes-ilessp-hack-3-lemma-2
+        ;; same-fix-int-implies-not-ilessp
+        ;; correctness-of-cancel-itimes-ilessp-hack-3
+        ;; ilessp-itimes-right-negative
+        ;; correctness-of-cancel-itimes-ilessp-hack-4
+        correctness-of-cancel-itimes-ilessp ilessp-strict
+        ;; cancel-ineg-aux
+        ;; cancel-ineg
+        eval$-list-cons eval$-list-nlistp eval$-litatom eval$-quote eval$-other
+        ;; eval$-cancel-ineg-aux-fn eval$-cancel-ineg-aux-is-its-fn 
+        ;; iplus-ineg-promote
+        iplus-x-y-ineg-x
+        ;; correctness-of-cancel-ineg-aux
+        correctness-of-cancel-ineg integerp-iplus-list
+        ;; eval$-cancel-iplus
+        eval$-iplus-list-delete eval$-iplus-list-bagdiff
+        ;; iplus-ineg5-lemma-1 iplus-ineg5-lemma-2 iplus-ineg5 iplus-ineg6
+        ;; eval$-iplus plus-ineg7
+        ;; <<<I'm not going to bother disabling functions below.>>>
+        ITIMES-TREE-INEG ITIMES-FACTORS
+        ITIMES--1 EQUAL-INEG-INEG ILESSP-INEG-INEG
+        FIX-INT-EVAL$-ITIMES-TREE-REC   ;may as well leave it enabled
+        EVAL$-ITIMES-TREE-INEG          ;may as well leave it enabled
+        INEG-EVAL$-ITIMES-TREE-INEG     ;may as well leave it enabled
+        IPLUS-EVAL$-ITIMES-TREE-INEG    ;may as well leave it enabled
+        ITIMES-EVAL$-ITIMES-TREE-INEG   ;may as well leave it enabled
+        IPLUS-OR-ITIMES-TERM CANCEL-ITIMES-FACTORS
+        CANCEL-ITIMES-FACTORS-EXPANDED
+        CANCEL-ITIMES-FACTORS-EXPANDED-CANCEL-ITIMES-FACTORS 
+        ;; EQUAL-ITIMES-LIST-EVAL$-LIST-DELETE-NEW-1
+        ;; EQUAL-ITIMES-LIST-EVAL$-LIST-DELETE-NEW-2
+        ;; ITIMES-ITIMES-LIST-EVAL$-LIST-DELETE
+        ;; EQUAL-ITIMES-LIST-EVAL$-LIST-BAGDIFF
+        MEMBERSHIP-OF-0-IMPLIES-ITIMES-LIST-IS-0 MEMBER-0-EVAL$-LIST
+        ;; ITIMES-LIST-EVAL$-FACTORS-LEMMA
+        ;; ITIMES-LIST-EVAL$-FACTORS-LEMMA-PRIME ITIMES-LIST-EVAL$-FACTORS
+        ;; IPLUS-OR-ITIMES-TERM-INTEGERP-EVAL$
+        ;; EVAL$-LIST-BAGINT-0
+        ;; EVAL$-LIST-BAGINT-0-IMPLIES-EQUAL
+        CORRECTNESS-OF-CANCEL-ITIMES-FACTORS
+        CANCEL-ITIMES-ILESSP-FACTORS
+        BAGINT-SINGLETON
+        ;; <<<A lot of these could be left enabled, in case the metalemmas were
+        ;;    disabled.  But in fact, if one had a reason to disable the 
+        ;;    metalemmas then probably one would want most of these 
+        ;;    disabled too.>>>
+        ;; IZEROP-ILESSP-0-RELATIONSHIP
+        ;; ILESSP-ITIMES-LIST-EVAL$-LIST-DELETE-HELPER-1
+        ;; ILESSP-ITIMES-LIST-EVAL$-LIST-DELETE-HELPER-2
+        ;; ILESSP-ITIMES-LIST-EVAL$-LIST-DELETE
+        ;; ILESSP-ITIMES-LIST-EVAL$-LIST-DELETE-PRIME-HELPER-1
+        ;; ILESSP-ITIMES-LIST-EVAL$-LIST-DELETE-PRIME-HELPER-2
+        ;; ILESSP-ITIMES-LIST-EVAL$-LIST-DELETE-PRIME
+        ;; ILESSP-0-ITIMES
+        ;; ILESSP-ITIMES-0
+        ILESSP-ITIMES-LIST-EVAL$-LIST-BAGDIFF
+        ;; ZERO-ILESSP-IMPLIES-NOT-EQUAL <<<not even a rewrite rule!>>>
+        ILESSP-ITIMES-LIST-EVAL$-LIST-BAGDIFF-COROLLARY-1
+        ;; ILESSP-ZERO-IMPLIES-NOT-EQUAL <<<not even a rewrite rule!>>>
+        MEMBER-0-ITIMES-FACTORS-YIELDS-0
+        MEMBER-0-ITIMES-FACTORS-YIELDS-0-ILESSP-CONSEQUENCE-1
+        MEMBER-0-ITIMES-FACTORS-YIELDS-0-ILESSP-CONSEQUENCE-2
+        ;; EVAL$-LIST-BAGINT-0-FOR-ILESSP <<<not even a rewrite rule!>>>
+        ;; EVAL$-LIST-BAGINT-0-IMPLIES-EQUAL-FOR-ILESSP-LEMMA 
+        ;; <<<not even a rewrite rule!>>>
+        ;; EQUAL-FIX-INT-TO-ILESSP <<<not even a rewrite rule!>>>
+        ;; EVAL$-LIST-BAGINT-0-IMPLIES-EQUAL-FOR-ILESSP
+        ILESSP-ITIMES-LIST-EVAL$-LIST-BAGDIFF-COROLLARY-2
+        CORRECTNESS-OF-CANCEL-ITIMES-ILESSP-FACTORS
+        DISJOIN-EQUALITIES-WITH-0
+        CANCEL-FACTORS-0 SOME-EVAL$S-TO-0
+        EVAL$-DISJOIN-EQUALITIES-WITH-0 SOME-EVAL$S-TO-0-APPEND
+        SOME-EVAL$S-TO-0-ELIMINATOR
+        ;; LISTP-CDR-FACTORS-IMPLIES-INTEGERP
+        CORRECTNESS-OF-CANCEL-FACTORS-0
+        CONJOIN-INEQUALITIES-WITH-0
+        CANCEL-FACTORS-ILESSP-0
+        ;;;;;; and now from the final two metalemmas
+        split-out-ineg-terms ;; function
+        ;; remove-inegs ;; function, disabled
+        ;; make-cancel-ineg-terms-equality ;; function
+        ;; iplus-or-ineg-term ;; function, disabled
+        ;; cancel-ineg-terms-from-equality ;; function, disabled
+        ;; CANCEL-INEG-TERMS-FROM-EQUALITY-expanded ;; function
+        ;; CANCEL-INEG-TERMS-FROM-EQUALITY-CANCEL-INEG-TERMS-FROM-\
+        ;;       EQUALITY-expanded
+        ;; harmless
+        ;; integerp-eval$-iplus-or-ineg-term 
+        ;; should be disabled, since iplus-or-ineg-term is
+        ;; eval$-iplus-list-car-remove-inegs ;; harmless
+        ;; eval$-iplus-list-cdr-remove-inegs ;; harmless
+        ;; minus-ineg ;; definitely should be disabled
+        ;; iplus-list-eval$-car-split-out-ineg-terms ;; harmless
+        correctness-of-cancel-ineg-terms-from-equality
+        ;; make-cancel-ineg-terms-inequality ;; function
+        ;; cancel-ineg-terms-from-inequality ;; function
+        ;; CANCEL-INEG-TERMS-FROM-INEQUALITY-expanded ;; function, disabled
+        ;; CANCEL-INEG-TERMS-FROM-INEQUALITY-CANCEL-INEG-TERMS-FROM-\
+        ;;       INEQUALITY-expanded
+        ;; harmless
+        correctness-of-cancel-ineg-terms-from-inequality
+        ;; plus-iplus
+        iplus-constants
+        ;; numberp-is-integerp
+        ;; difference-idifference
+        ;; cancel-constants-equal-lemma ;; nil lemma
+        cancel-constants-equal
+        ilessp-add1
+        ilessp-add1-iplus
+        ;; cancel-constants-ilessp-lemma-1 ;; nil lemma
+        ;; cancel-constants-ilessp-lemma-2 ;; nil lemma
+        cancel-constants-ilessp
+        )) 
+
+;;;  Added by Warren A. Hunt, Jr.   ---   Thu Sep 12 09:28:07 CDT 1991
+
+(enable eval$)

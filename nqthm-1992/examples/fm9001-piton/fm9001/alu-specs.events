@@ -1,0 +1,288 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    ALU-SPECS.EVENTS -- The high level specification of the ALU.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
+;;;   CVZBV is used to construct all of the values returned by the ALU
+;;;   specification V-ALU. 
+
+(defn cvzbv (carry overflow vector)
+  (cons carry (cons overflow (cons (v-zerop vector) vector))))
+
+(defn c  (cvzbv) (car cvzbv))
+(defn v  (cvzbv) (cadr cvzbv))
+(defn bv (cvzbv) (cdddr cvzbv))
+(defn n  (cvzbv) (v-negp (bv cvzbv)))
+(defn zb (cvzbv) (caddr cvzbv))
+
+(disable c)
+(disable v)
+(disable n)
+(disable zb)
+(disable bv)
+
+(prove-lemma boolp-n (rewrite)
+  (implies
+   (bvp (bv v))
+   (boolp (n v)))
+  ;;Hint
+  ((enable n)))
+
+(prove-lemma boolp-bvp-cvzbv (rewrite)
+  (and 
+   (equal (boolp (c (cvzbv c v bv)))
+          (boolp c))
+   (equal (boolp (v (cvzbv c v bv)))
+          (boolp v))
+   (boolp (zb (cvzbv c v bv)))
+   (equal (bvp (bv (cvzbv c v bv)))
+          (bvp bv)))
+  ;;Hint
+  ((enable c v zb bv)))
+
+(prove-lemma bvp-cvzbv ()
+  (implies
+   (and (boolp (c cvzbv))
+        (boolp (v cvzbv))
+        (boolp (zb cvzbv))
+        (bvp (bv cvzbv)))
+   (bvp cvzbv))
+  ;;Hint
+  ((enable c v zb bv)))
+
+
+;;;  Specification abbreviations for V-ALU.
+
+(defn cvzbv-v-ror (c a)
+  (cvzbv (if (nlistp a) c (nth 0 a)) f (v-ror a c)))
+
+(defn cvzbv-v-adder (c a b)
+  (cvzbv (v-adder-carry-out c a b)
+         (v-adder-overflowp c a b)
+         (v-adder-output    c a b)))
+
+(defn cvzbv-v-lsl (a)
+  (cvzbv-v-adder f a a))
+
+(defn cvzbv-v-subtracter (c a b)
+  (cvzbv (v-subtracter-carry-out c a b)
+         (v-subtracter-overflowp c a b)
+         (v-subtracter-output    c a b)))
+
+(defn cvzbv-inc (a)
+  (cvzbv-v-adder t a (nat-to-v 0 (length a))))
+
+(defn cvzbv-neg (a)
+  (cvzbv-v-subtracter f a (nat-to-v 0 (length a))))
+
+(defn cvzbv-dec (a)
+  (cvzbv-v-subtracter t (nat-to-v 0 (length a)) a))
+
+(defn cvzbv-v-not (a)
+  (cvzbv f f (v-not a)))
+
+(defn cvzbv-v-asr (a)
+  (cvzbv (if (listp a) (nth 0 a) f) f (v-asr a)))
+
+(defn cvzbv-v-lsr (a)
+  (cvzbv (if (listp a) (nth 0 a) f) f (v-lsr a)))
+
+;;;  V-ALU c a b op
+;;;
+;;;  The programmer's view of the ALU.
+
+(defn v-alu (c a b op)
+  (cond ((equal op #v0000) (cvzbv f f (v-buf a)))
+        ((equal op #v0001) (cvzbv-inc a))                   
+        ((equal op #v0010) (cvzbv-v-adder c a b))           
+        ((equal op #v0011) (cvzbv-v-adder f a b))           
+        ((equal op #v0100) (cvzbv-neg a))                   
+        ((equal op #v0101) (cvzbv-dec a))                   
+        ((equal op #v0110) (cvzbv-v-subtracter c a b))      
+        ((equal op #v0111) (cvzbv-v-subtracter f a b))      
+        ((equal op #v1000) (cvzbv-v-ror c a))               
+        ((equal op #v1001) (cvzbv-v-asr a))   
+        ((equal op #v1010) (cvzbv-v-lsr a))
+        ((equal op #v1011) (cvzbv f f (v-xor a b)))         
+        ((equal op #v1100) (cvzbv f f (v-or  a b)))
+        ((equal op #v1101) (cvzbv f f (v-and a b)))         
+        ((equal op #v1110) (cvzbv-v-not a))           
+        (t                 (cvzbv f f (v-buf a)))))
+
+(disable v-alu)
+
+(prove-lemma boolp-c-v-alu (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a)
+        (not (equal (length a) 0)))
+   (boolp (c (v-alu c a b op))))
+  ;;Hint
+  ((enable v-alu)
+   (disable cvzbv)))
+
+(prove-lemma boolp-v-v-alu (rewrite)
+  (implies
+   (and (boolp c)
+        (bvp a)
+        (not (equal (length a) 0)))
+   (boolp (v (v-alu c a b op))))
+  ;;Hint
+  ((enable v-alu)
+   (disable cvzbv)))
+
+(prove-lemma boolp-zb-v-alu (rewrite)
+  (boolp (zb (v-alu c a b op)))
+  ;;Hint
+  ((enable v-alu)
+   (disable cvzbv
+            v-adder-carry-out v-adder-overflowp v-adder-output
+            v-subtracter-carry-out v-subtracter-overflowp
+            v-subtracter-output)))
+
+(prove-lemma bvp-bv-v-alu (rewrite)
+  (implies
+   (bvp a)
+   (bvp (bv (v-alu c a b op))))
+  ;;Hint
+  ((enable v-alu)
+   (disable cvzbv
+            v-adder-carry-out v-adder-overflowp v-adder-output
+            v-subtracter-carry-out v-subtracter-overflowp
+            b-not)))
+
+(prove-lemma bvp-v-alu (rewrite)
+  (implies
+   (and (bvp a)
+        (boolp c)
+        (not (equal (length a) 0)))
+   (bvp (v-alu c a b op)))
+  ;;Hint
+  ((use (bvp-cvzbv (cvzbv (v-alu c a b op))))))
+
+(prove-lemma length-cvzbv-subtracter (rewrite)
+  (equal (length (cvzbv-v-subtracter c a b))
+         (add1 (add1 (add1 (length a))))))
+
+(prove-lemma length-cvzbv-adder (rewrite)
+  (equal (length (cvzbv-v-adder c a b))
+         (add1 (add1 (add1 (length a))))))
+  
+(prove-lemma length-v-alu (rewrite)
+  (equal (length (v-alu c a b op))
+         (add1 (add1 (add1 (length a)))))
+  ;;Hint
+  ((enable v-alu)
+   (disable cvzbv-v-subtracter)))
+
+(prove-lemma bvp-length-bv (rewrite)
+  (and (equal (length (bv x))
+              (difference (length x) 3))
+       (implies
+        (and (bvp x)
+             (leq 3 (length x)))
+        (bvp (bv x))))
+  ;;Hint
+  ((enable bv)))
+
+
+;;;  UNARY-OP-CODE-P op-code
+;;;
+;;;  Recognizes ALU op-codes which are unary operations on the A operand.  
+;;;  For unary ALU op-codes, the B operand is arbitrary.  We also define a
+;;;  "1-argument" version of V-ALU which is equivalent to V-ALU when the
+;;;  ALU op-code is unary. 
+
+(defn unary-op-code-p (op-code)
+  (or (equal op-code #v0000)            ;Move
+      (equal op-code #v0001)            ;Inc
+      (equal op-code #v0100)            ;Neg
+      (equal op-code #v0101)            ;Dec
+      (equal op-code #v1000)            ;ROR
+      (equal op-code #v1001)            ;ASR
+      (equal op-code #v1010)            ;LSR
+      (equal op-code #v1110)            ;Not
+      (equal op-code #v1111)            ;Move-15
+      ))
+
+(disable unary-op-code-p)
+
+;;;  V-ALU-1 op-code
+;;;
+;;;  The 1-arg ALU.
+
+(defn v-alu-1 (c a op-code)
+  (v-alu c a a op-code))
+
+(disable v-alu-1)
+
+(prove-lemma bvp-v-alu-1 (rewrite)
+  (implies
+   (and (bvp a)
+        (boolp c)
+        (not (equal (length a) 0)))
+   (bvp (v-alu-1 c a op)))
+  ;;Hint
+  ((use (bvp-cvzbv (cvzbv (v-alu c a a op))))
+   (enable v-alu-1)))
+
+(prove-lemma length-v-alu-1 (rewrite)
+  (equal (length (v-alu-1 c a op))
+         (add1 (add1 (add1 (length a)))))
+  ;;Hint
+  ((enable v-alu-1)))
+
+(prove-lemma unary-op-code-p->v-alu=v-alu-1 (rewrite)
+  (implies
+   (unary-op-code-p op-code)
+   (equal (v-alu c a b op-code)
+          (v-alu-1 c a op-code)))
+  ;;Hint
+  ((enable unary-op-code-p v-alu v-alu-1)))
+
+(disable unary-op-code-p->v-alu=v-alu-1)
+
+
+;;;    ALU-INC-OP
+;;;    ALU-DEC-OP
+;;;
+;;;    These abbreviations are used for those cases where the processor ALU is
+;;;    used for register pre-decrement and post-increment operations.
+
+(defn alu-inc-op () #v0001)
+
+(disable alu-inc-op)
+(disable *1*alu-inc-op)
+
+(prove-lemma bvp-length-alu-inc-op (rewrite)
+  (and
+   (equal (length (alu-inc-op)) 4)
+   (bvp (alu-inc-op)))
+  ;;Hint
+  ((enable alu-inc-op)))
+
+(defn alu-dec-op () #v0101)
+
+(disable alu-dec-op)
+(disable *1*alu-dec-op)
+
+(prove-lemma bvp-length-alu-dec-op (rewrite)
+  (and
+   (equal (length (alu-dec-op)) 4)
+   (bvp (alu-dec-op)))
+  ;;Hint
+  ((enable alu-dec-op)))
+
+(prove-lemma bv-v-alu-alu-inc-alu-dec (rewrite)
+  (and
+   (equal (bv (v-alu c a b (alu-inc-op)))
+          (v-inc a))
+   (equal (bv (v-alu c a b (alu-dec-op)))
+          (v-dec a)))
+  ;;Hint
+  ((enable bv v-alu v-inc v-dec alu-inc-op alu-dec-op)))

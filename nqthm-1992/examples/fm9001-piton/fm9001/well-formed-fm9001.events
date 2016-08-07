@@ -1,0 +1,43 @@
+;;;  Copyright (C) 1990-1994 Computational Logic, Inc.  All Rights
+;;;  Reserved.  See the file LICENSE in this directory for the
+;;;  complete license agreement.
+
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;;;
+;;;    WELL-FORMED-FM9001.EVENTS
+;;;
+;;;  These events guarantee that the FM9001 netlists are well formed.
+;;;
+;;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;;;  We first have to compile the definitions or this proof takes
+;;;  too long.
+
+(compile-uncompiled-defns* "a-weird-file-name")
+
+(prove-lemma chip-well-formed ()
+  (and (equal (top-level-predicate (chip-module$netlist))
+              T)
+       (equal (top-level-predicate (chip$netlist))
+              T))
+  ((disable top-level-predicate chip-module$netlist chip$netlist)))
+
+(prove-lemma chip-well-formed-after-indexed-names-removed ()
+  (and (equal (top-level-predicate (lisp-netlist (chip-module$netlist)))
+              T)
+       (equal (top-level-predicate (lisp-netlist (chip$netlist)))
+              T))
+  ((disable top-level-predicate lisp-netlist
+            chip-module$netlist chip$netlist)))
+
+
+;;  The "simple" version of the predicate does not permit tri-state
+;;  circuits, thus we can only check the "body" of the chip.
+
+(prove-lemma chip-well-formed-simple ()
+  (and (equal (top-level-predicate-simple (chip-module$netlist))
+              T)
+       (equal (top-level-predicate-simple
+               (lisp-netlist (chip-module$netlist)))
+              T))
+  ((disable top-level-predicate chip-module$netlist)))

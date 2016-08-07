@@ -1,0 +1,15 @@
+The files in this directory are the work of A. Flatau of Computational
+Logic, Inc.  They contain work found in Appendicies C, D, E, and F of
+
+@PhDThesis(Flatau-92,
+        key="Flatau",
+        author="A. Flatau",
+        title="A Verified Implementation of an Applicative
+               Language with Dynamic Storage Allocation",
+        school="University of Texas",
+        year="1992",
+        Note="Also available through Computational Logic, Inc.,
+              Suite 290, 1717 West Sixth Street, Austin, TX  78703.")
+
+  
+

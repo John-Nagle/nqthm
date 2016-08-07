@@ -1,0 +1,1231 @@
+
+; Copyright (C) 1995 by Ken Kunen.  All Rights Reserved.
+
+; This script is hereby placed in the public domain, and therefore unlimited
+; editing and redistribution is permitted.
+
+; NO WARRANTY
+
+; Ken Kunen PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT IS PROVIDED "AS
+; IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT
+; NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+; PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+; SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU ASSUME THE COST OF
+; ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+; IN NO EVENT WILL Ken Kunen BE LIABLE TO YOU FOR ANY DAMAGES, ANY LOST
+; PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES
+; ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT NOT
+; LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+; BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF SUCH
+; DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+
+
+
+; This script is described in Section 4.2 of our paper,
+; Non-Constructive Computational Mathematics.
+; It includes three items
+
+; ITEM 1: We show that induction on omega^2 is provable in PRA,
+; even though there are non-primitive-recursive functions definable
+; by recursion on omega^2
+; ITEM 2: We use eval$ and v&c$, but not ordinal induction, and
+; define the Ackermann function (and prove that the definition is correct).
+; ITEM 3: We define a function (next-twin-prime x) and show that either there
+; are no twin primes above x or next-twin-prime produces one.
+; This is a simple demonstration of the non-constructiveness of eval$ and v&C$
+
+(boot-strap nqthm)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;                       ITEM 1                               ;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; Represent ordinals below omega^2 as omega X omega, ordered lexically
+; Elements of omega X omega are represented as pairs (m . n)
+
+(defn ordp (p) (and 
+	(listp p)
+	(numberp (car p))
+	(numberp (cdr p)) ))
+
+(defn lexp (p1 p2) (or
+	(lessp (car p1) (car p2))
+	(and (equal (car p1) (car p2)) (lessp (cdr p1) (cdr p2))) ))
+
+; now let Q be any property of pairs:
+(dcl Q (p))
+
+; Assume Q is inductive -- that is:
+; NOT Q(p)  --> EXISTS r < p NOT Q(r)
+; Of course, to say this in the framework of PRA, we have to assume
+; we have a function which gives us an r
+
+(dcl g (p))
+
+(add-axiom Q-induction (rewrite) (implies
+	(and (ordp p) (not (Q p)))
+	(and (ordp (g p)) (lexp (g p) p) (not (Q (g p)))) ))
+
+; Now,  we show Q is true everywhere :   (implies (ordp p) (Q p))
+; by ordinary induction
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; First,  by ordinary induction on y (holding x fixed):
+; Let fy = (fy x y) <= y be least such that (not (Q (x . fy)))
+; fy = F if there is no such y
+
+(defn fy (x y)
+	(if (not (numberp y)) F
+	(if (equal y 0)
+		(if (Q (cons x y)) F y)
+	; else, y > 0:
+	(if (fy x (sub1 y))  ; if we have a value <= y-1
+		(fy x (sub1 y))  ; then use that value
+		(if (Q (cons x y)) F y)))))
+
+
+(prove-lemma Q-fails-at-x-fy (rewrite) (implies
+	(fy x y)
+	(not (Q (cons x (fy x y))))))
+
+(prove-lemma fy-is-a-number (rewrite) (implies
+	(fy x y)
+	(numberp (fy x y))))
+
+(prove-lemma fy-is-defined (rewrite) (implies
+	(and (not (Q (cons x y))) (numberp y))
+	(fy x y)))
+
+(prove-lemma fy-leq () (implies
+	(fy x y)
+	(leq (fy x y) y)))
+
+(prove-lemma fy-lessp (rewrite) (implies
+	(and (fy x y) (Q (cons x y)))
+	(lessp (fy x y) y))
+( ; hints
+(do-not-induct T)
+(use (fy-leq) (Q-fails-at-x-fy))
+(disable Q-fails-at-x-fy)
+))
+
+(prove-lemma Q-below-undefined-fy (rewrite) (implies
+	(and (not (fy x y)) (numberp y) (numberp y1) (leq y1 y))
+	(Q (cons x y1)))
+( ; hints
+(induct (fy x y))
+))
+
+(prove-lemma fy-is-first (rewrite) (implies
+	(and (fy x y) (numberp y1) (numberp y) (lessp y1 (fy x y)))
+	(Q (cons x y1))))
+
+; now, summarize what the Q-induction says for pairs:
+
+(prove-lemma form-of-g () (implies
+	(and 
+		(numberp x) (numberp y) (not (Q (cons x y)))
+		(equal x1 (car (g (cons x y))))
+		(equal y1 (cdr (g (cons x y)))) )
+	(and
+		(numberp x1) (numberp y1)
+		(equal (g (cons x y)) (cons x1 y1)))  ) 
+( ; hints
+(use (Q-induction (p (cons x y))))
+(disable Q-induction)
+))
+
+(prove-lemma g-is-below (rewrite) (implies
+	(and 
+		(numberp x) (numberp y) (not (Q (cons x y)))
+		(equal x1 (car (g (cons x y))))
+		(equal y1 (cdr (g (cons x y)))) )
+	(or
+		(lessp x1 x)
+		(and (equal x1 x) (lessp y1 y))) )
+( ; hints
+(use (Q-induction (p (cons x y))))
+(disable Q-induction)
+))
+
+(prove-lemma Q-fails-at-g-aux1 (rewrite) (implies
+	(and 
+		(not (Q (g (cons x y))))
+		(equal (g (cons x y)) (cons x1 y1)))
+	(not (Q (cons x1 y1)))))
+
+(prove-lemma Q-fails-at-g (rewrite) (implies
+	(and 
+		(numberp x) (numberp y) (not (Q (cons x y)))
+		(equal x1 (car (g (cons x y))))
+		(equal y1 (cdr (g (cons x y)))) )
+	(not (Q (cons x1 y1)))  )
+( ; hints
+(use (form-of-g) (Q-induction (p (cons x y))))
+(disable Q-induction)
+))
+
+(disable Q-fails-at-g-aux1)
+
+; Now, if Q fails at x,y then Q fails at x,fy.  If we
+; obtain x1,y1 from x,fy as above, we can't have 
+; (and (equal x1 x) (lessp y1 fy)), so we must have x1 < x
+
+(prove-lemma smaller-x () (implies
+	(and 
+		(numberp x) (numberp y) (not (Q (cons x y)))
+		(equal x1 (car (g (cons x (fy x y)))))
+		(equal y1 (cdr (g (cons x (fy x y)))))  )
+	(and
+		(numberp x1) (numberp y1)
+		(lessp x1 x)
+		(not (Q (cons x1 y1)))))
+( ; hints
+(do-not-induct T)
+(use 
+	(fy-is-defined) (Q-fails-at-x-fy)
+	(form-of-g (x x) (y (fy x y)))
+	(g-is-below (x x) (y (fy x y)))
+	(Q-fails-at-g (x x) (y (fy x y)))  )
+(disable  fy
+	q-induction g-is-below Q-fails-at-g fy-is-defined Q-fails-at-x-fy)
+))
+
+; It is immediate from this that Q can never fail
+
+(defn Q-holds-kludge (x y) (if
+	(and 
+		(numberp x) (numberp y) (not (Q (cons x y)))
+		(numberp (car (g (cons x (fy x y)))))
+		(lessp (car (g (cons x (fy x y)))) x)  )
+	(Q-holds-kludge 
+		(car (g (cons x (fy x y)))) 
+		(cdr (g (cons x (fy x y))))  )
+	0 ))
+
+(prove-lemma Q-holds (rewrite) (implies
+	(and (numberp x) (numberp y) )
+	(Q (cons x y)))
+( ; hints
+(induct (Q-holds-kludge x y))
+(use (smaller-x 
+	(x1 (car (g (cons x (fy x y)))))
+	(y1 (cdr (g (cons x (fy x y))))) ))
+))
+
+
+
+; Finally, re-expressing this in terms of pairs:
+(prove-lemma Q-is-true (rewrite) (implies (ordp p) (Q p)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;                       ITEM 2                               ;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; 1. We define qval (quick valuation).  This is a version of v&c$ which 
+;    resets the cost to 0.  One problem with v&c$ is that it explicitly 
+;    keeps track of the cost.  That makes proving theorems about
+;    v&c$ working correctly on specific terms needlessly complicated.
+; 2. We re-state the recursive definition of v&c$ in terms of qval.
+; 3. We show how to formalize double recursions, such as occur in the 
+;    definition of the Ackermann function.
+
+
+; Since v&c$ uses the value of F to signify non-termination:
+
+(defn reset (x) (if x  (cons (car x) 0)    F))
+(defn qval (term va) (reset (v&c$ T term va)))
+
+; va (a "variable assignment") is an association list which
+; assigns values to variables.
+; qval returns (val . 0) if the computation halts in the normal
+; way to return val; otherwise, qval returns F
+
+(defn qval-list (list-of-terms va) (if
+	(nlistp list-of-terms)
+	NIL
+	(cons 
+		(qval (car list-of-terms) va)
+		(qval-list (cdr list-of-terms) va))))
+
+; Now, unwind the v&c$ axioms so that they are statements about
+; qval and qval-list, and then disable qval and qval-list
+
+; first, the two cases for qval-list:
+
+(prove-lemma qval-list-empty (rewrite) (implies
+	(nlistp lst)
+	(equal (qval-list lst va) NIL)))
+
+(prove-lemma qval-list-non-empty (rewrite) (implies
+	(listp lst)
+	(equal (qval-list lst va) (cons
+		(qval (car lst) va)
+		(qval-list (cdr lst) va)))))
+
+; in proving the cases for qval, it will be useful to have:
+(prove-lemma same-F-membership () (iff
+	(member F (qval-list lst va))
+	(member F (v&c$ 'LIST lst va)) ))
+(prove-lemma same-strip-cars () (equal
+	(strip-cars (qval-list lst va))
+	(strip-cars (v&c$ 'LIST lst va)) ))
+
+(disable qval-list)
+
+; now, run down all the cases for qval:
+
+; for a variable name, look up in assoc list
+(prove-lemma qval-litatom (rewrite) (implies
+	(litatom term)  
+	(equal 
+		(qval term va)
+		(cons (cdr (assoc term va)) 0))))
+
+; for a constant, return that constant value:
+(prove-lemma qval-constant (rewrite) (implies
+	(and
+		(not (litatom term))
+		(nlistp term)  )  
+	(equal 
+		(qval term va)
+		(cons term 0))))
+
+; for a quoted expression, return the expression
+(prove-lemma qval-quote (rewrite) (equal
+	(qval (list 'quote object)  va ) 
+	(cons object 0)))
+
+; evaluating an (if ...):
+(prove-lemma qval-if (rewrite) (equal
+	(qval  (list 'if test thencase elsecase)  va )   
+	(if (qval test va)   ; if evaluation of test halts
+		(if (car (qval test va))   ; if test is true
+			(qval thencase va)     ; then evaluate the thencase
+			(qval elsecase va) )   ; else evaluate the elsecase
+		F) )  )
+
+; except for (if ...) and (quote ...) : if evaluation of some
+; arg doesn't halt, then qval doesn't halt.
+
+(prove-lemma qval-args-dont-halt-aux1 () (implies
+	(and
+		(not (equal fn 'quote))
+		(not (equal fn 'if))
+		(member F (v&c$ 'list args va))  )
+	(equal
+		(v&c$ T (cons fn args) va)
+		F ))
+( ; hint -- thanks to Boyer
+(use (v&c-apply$ 
+	(fn fn)  (args (v&c$ 'list args va))  ) )
+))
+
+(prove-lemma qval-args-dont-halt (rewrite) (implies
+	(and
+		(not (equal fn 'quote))
+		(not (equal fn 'if))
+		(member F (qval-list args va))  )
+	(equal
+		(qval (cons fn args) va)
+		F )) 
+( ; hints
+(use 
+	(qval-args-dont-halt-aux1) 
+	(same-F-membership (va va) (lst args)))
+))
+
+; for a SUBR (a basic built-in) other than "if": if evaluation of the args 
+; does halt, just use APPLY-SUBR on the value of args
+; STRIP-CARS applied to ( (val1 . 0) (val2 . 0) ... ) returns (val1 val2 ...)
+
+(prove-lemma qval-subr-aux1 () (implies
+	(and
+		(not (member F (v&c$ 'list args va)) )
+		(not (equal fn 'if))
+		(subrp fn))
+	(equal
+		(v&c$ T (cons fn args) va)
+		(cons
+			(apply-subr fn (strip-cars (v&c$ 'LIST args va)))
+			(add1 (sum-cdrs (v&c$ 'LIST args va))) ) ) )      
+( ; hints
+(use (v&c-apply$ (fn fn) (args (v&c$ 'LIST args va))))
+))
+
+; the following auxiliary is trivial, 
+; but the prover hangs on it:
+
+(prove-lemma qval-subr-aux2 (rewrite) 
+(IMPLIES (AND (EQUAL VVV (CONS UU ANYTHING))
+              A B C D E)
+         (EQUAL (CAR VVV) UU))
+)
+
+(prove-lemma qval-subr (rewrite) (implies
+	(and
+		(not (member F (qval-list args va)))
+		(not (equal fn 'if))
+		(subrp fn))
+	(equal
+		(qval (cons fn args) va)
+		(cons  ; cons the value with 0
+			(apply-subr fn (strip-cars (qval-list args va)))
+			0 )))
+( ; hints
+(use 
+	(qval-subr-aux1) 
+	(same-F-membership (va va) (lst args))
+	(same-strip-cars (va va) (lst args)))
+(do-not-induct T)
+(disable v&c$ subrp)
+(hands-off v&c$ subrp)
+))
+
+(disable qval-subr-aux2)
+
+; for a non-SUBR (a basic built-in) other than "quote": 
+; if evaluation of the args does halt, just evaluate 
+; the BODY of the function on the 
+; FORMALS of the function, paired with the value of the args
+
+(prove-lemma qval-non-subr-aux1 () (implies
+	(and
+		(not (equal fn 'quote))
+		(not (member F (v&c$ 'list args va)) )
+		(not (subrp fn)))
+	(equal
+		(v&c$ T (cons fn args) va)
+		(fix-cost
+			(v&c$ T (body fn)
+				(pairlist
+					(formals fn)
+					(strip-cars (v&c$ 'LIST args  va))))
+			(add1 
+				(sum-cdrs (v&c$ 'LIST args va))) ) ) )  
+( ; hints
+(use (v&c-apply$ (fn fn) (args (v&c$ 'LIST args va))))
+))
+
+; again, the prover hangs on a trivial point
+(prove-lemma qval-non-subr-aux2 (rewrite) 
+(IMPLIES
+       (AND
+        X1
+        (EQUAL V1 (CONS W X2))
+        X3 X4 X5 X6 X7)
+       (EQUAL (CAR V1) W))
+)
+
+(prove-lemma qval-non-subr (rewrite) (implies
+	(and
+		(not (member F (qval-list args va)))
+		(not (equal fn 'quote))
+		(not (subrp fn)))
+	(equal
+		(qval (cons fn args) va)
+		(qval (BODY fn)
+			(pairlist
+				(FORMALS fn)
+				(strip-cars (qval-list args  va))))) )
+( ; hints
+(use 
+	(qval-non-subr-aux1) 
+	(same-F-membership (va va) (lst args))
+	(same-strip-cars (va va) (lst args)))
+(do-not-induct T)
+(disable v&c$ subrp)
+(hands-off v&c$ subrp)
+))
+
+(disable qval-non-subr-aux2)
+
+; from now on, we need only the properties of qval and qval-list,
+; not how they were defined:
+
+(disable qval)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+; We illustrate the method by showing how to justify a double
+; recursion, such as the definition of the Ackermann function:
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;   Values of Ackermann Function
+;
+;    ---------------------
+;  3| 1   2   4  16  2^16
+;   |---------------------
+;  2| 1   2   4   8   16
+;   |---------------------
+;  1| 1   2   4   6   8
+;   |---------------------
+;  0| 1   2   4   5   6
+;   |_____________________
+;     0   1   2   3   4
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+; We can think of row 0 as given.  Row n+1 is obtained by
+; iterating the function on row n, starting with a 1 in column 0.
+
+(defn row0 (x) 
+	(if (zerop x) 1
+	(if (equal x 1) 2
+	(plus x 2))))
+(defn row1 (x) (if   (zerop x)   1   (row0 (row1 (sub1 x)))))
+(defn row2 (x) (if   (zerop x)   1   (row1 (row2 (sub1 x)))))
+(defn row3 (x) (if   (zerop x)   1   (row2 (row3 (sub1 x)))))
+
+; GOAL: define a function, ACKERMANN, and prove
+; (prove-lemma ackermann-works (rewrite) (equal (ackermann x y)
+; 	(if (zerop x) 1
+; 	(if (zerop y) (if (equal x 1) 2 (plus x 2))
+; 	(ackermann (ackermann (sub1 x) y) (sub1 y))  ))))
+
+; Without using ordinals and ord-lessp, we can't just use this
+; as a definition.  However, we can use EVAL$ to define
+; function whose body looks like this.  To simplify the work, we
+; phrase the defn of ack so that the body is as simple as possible
+
+(defn base (x y) (or (zerop x) (zerop y)))
+(defn base-fn (x y) (if (zerop y) (row0 x) 1))
+
+; intended defn of ack is now:
+;(defn ack (x y) (if (base x y) (base-fn x y)  (ack (ack (sub1 x) y) (sub1 y))))
+
+; instead, use eval$ :
+(defn ack (x y) (eval$ T
+ 	'(if (base x y) (base-fn x y)
+ 		(ack (ack (sub1 x) y) (sub1 y)  ))
+	(list (cons 'x x) (cons 'y y))    ))
+
+;;;;;;;;;;;;;;;;;;;;;;;  begin r-loop
+
+; *(body 'ack)
+;  '(IF (BASE X Y)
+;       (BASE-FN X Y)
+;       (ACK (ACK (SUB1 X) Y) (SUB1 Y)))
+; *(formals 'ack)
+;  '(X Y)
+; *(ack 3 1)
+;  6
+; *(ack 2 3)
+;  4
+; *(ack 4 2)
+;  16
+; *(qval '(ack x y) '( (x . 4) (y . 2) ))
+;  '(16 . 0)
+;;;;;;;;;;;;;;;;;;;;;;;  end r-loop
+
+; Now that we have arranged for ack to have the correct body and formals, 
+; we never use eval$ again.  We can define the official Ackermann function 
+; using qval, and then prove inductively that it works.
+; Since the formals will always be '(x y), we can simplify
+; some of the general notation:
+
+(defn assn (valx valy)  (list (cons 'x valx) (cons 'y valy)))
+(defn A (valx valy) (qval '(ack x y) (assn valx valy)))
+(defn ackermann (valx valy) (car (A valx valy)))
+
+; Proving that ackermann works involves proving first that (A valx valy)
+; holds (i.e., it is never F).
+
+; First, since qval-list will always be operating on lists of terms of
+; length two, let's concretely unwind that situation:
+
+(prove-lemma qval-list-1 (rewrite) (equal
+	(qval-list (list term) va)
+	(list (qval term va))))
+(prove-lemma qval-list-2 (rewrite) (equal
+	(qval-list (list term1 term2) va)
+	(list (qval term1 va) (qval term2 va) )))
+
+(disable qval-list-non-empty)
+
+; Now, analyze how qval works on sub-expressions of the body:
+;   (if (base x y) (base-fn x y) (ack (ack (sub1 x) y) (sub1 y)))
+
+(prove-lemma qval-on-x (rewrite) (equal
+	(qval 'x (assn valx valy))
+	(cons valx 0) ))
+
+(prove-lemma qval-on-y (rewrite) (equal
+	(qval 'y (assn valx valy))
+	(cons valy 0) ))
+
+(prove-lemma qval-on-sub1-x (rewrite) (equal
+	(qval '(sub1 x) (assn valx valy))
+	(cons (sub1 valx) 0)))
+
+(prove-lemma qval-on-sub1-y (rewrite) (equal
+	(qval '(sub1 y) (assn valx valy))
+	(cons (sub1 valy) 0)))
+
+(prove-lemma qval-on-base (rewrite) (equal
+	(qval '(base x y) (assn valx valy))
+	(cons (base valx valy) 0)))
+
+(prove-lemma qval-on-base-fn (rewrite) (equal
+	(qval '(base-fn x y) (assn valx valy))
+	(cons (base-fn valx valy) 0)))
+
+; on the whole body
+(prove-lemma qval-on-body (rewrite) (equal
+	(qval 
+		'(if (base x y) (base-fn x y) (ack (ack (sub1 x) y) (sub1 y)))
+		(assn valx valy))
+	(if (base valx valy)
+		(cons (base-fn valx valy) 0)
+		(qval
+			'(ack (ack (sub1 x) y) (sub1 y))
+			(assn valx valy) ) ) )   
+( ; hints
+(use (qval-on-base) (qval-on-base-fn)
+	(qval-if 
+		(test '(base x y))
+		(thencase '(base-fn x y))
+		(elsecase '(ack (ack (sub1 x) y) (sub1 y)))
+		(va (assn valx valy))) )
+(disable qval-if strip-cars qval-list-1 qval-list-2 base base-fn
+	qval-on-base qval-on-base-fn)
+))
+
+; Now on the ack expressions, we need two things:
+; 1. Unwind the (qval '(ack x y) (assn valx valy)) in
+;    the defn of (A valx valy) so we can prove thms about A
+; 2. Reduce qval of the two ack expressions in the body:
+;      (ack (sub1 x) y)       (ack (ack (sub1 x) y) (sub1 y))
+;    to a qval of (ack x y)
+
+; towards (2):
+
+(prove-lemma qval-of-ack-of-terms-aux1 (rewrite) (implies
+	(and (qval term1 va) (qval term2 va))
+	(equal
+		(qval (list 'ack term1 term2) va)
+		(qval 
+			'(if (base x y) (base-fn x y) (ack (ack (sub1 x) y) (sub1 y)))
+			(assn (car (qval term1 va)) (car (qval term2 va ))))) )  
+( ; hints
+(do-not-induct T)
+(use (qval-non-subr (fn 'ack) (args (list term1 term2)) (va va)))
+(disable qval-if base base-fn
+	qval-on-base qval-on-base-fn qval-non-subr)
+))
+
+; as a special case, for (ack x y):
+     
+(prove-lemma qval-of-ackxy-aux1 (rewrite) 
+	(equal
+		(qval '(ack x y) (assn valx valy))
+		(qval 
+			'(if (base x y) (base-fn x y) (ack (ack (sub1 x) y) (sub1 y)))
+			(assn valx valy) ) )   
+( ; hints
+(do-not-induct T)
+(use (qval-of-ack-of-terms-aux1 
+		(term1 'x) (term2 'y) (va (assn valx valy))))
+(disable qval-if strip-cars qval-of-ack-of-terms-aux1 )
+))
+
+; we can unwind the if expr later -- first, let's reduce the
+; (ack term1 term2).
+
+(prove-lemma qval-of-ack-of-terms (rewrite) (implies
+	(and (qval term1 va) (qval term2 va))
+	(equal
+		(qval (list 'ack term1 term2) va)
+		(qval '(ack x y) 
+			(assn (car (qval term1 va)) (car (qval term2 va ))))) ) 
+( ; hints
+(do-not-induct T)
+(use 
+	(qval-of-ack-of-terms-aux1)
+	(qval-of-ackxy-aux1 
+		(valx (car (qval term1 va)))
+		(valy (car (qval term2 va)))) )
+(disable qval-if strip-cars qval-of-ack-of-terms-aux1 qval-of-ackxy-aux1)
+))
+
+(disable qval-of-ack-of-terms-aux1)
+
+; Now, unwinding the if expr:
+
+(prove-lemma qval-of-ackxy (rewrite) (equal
+	(qval '(ack x y) (assn valx valy))
+	(if (base valx valy)
+		(cons (base-fn valx valy) 0)
+		(qval 
+			'(ack (ack (sub1 x) y) (sub1 y))
+			(assn valx valy))) )  
+( ; hints
+(use (qval-of-ackxy-aux1) (qval-on-body))
+(disable qval-of-ackxy-aux1 qval-if qval-on-body
+	base base-fn qval-non-subr qval-subr qval-list qval-list-1)
+))
+
+(disable qval-of-ackxy-aux1)
+
+; now, qval-of-ackxy would be simpler if we split it into
+; the two cases base/non-base
+
+(prove-lemma qval-of-ackxy-base (rewrite) (implies
+	(base valx valy)
+	(equal
+		(qval '(ack x y) (assn valx valy))
+		(cons (base-fn valx valy) 0) ))
+( ; hints
+(disable qval-non-subr base base-fn assn)
+))
+
+(prove-lemma qval-of-ackxy-non-base-aux1 (rewrite) (implies
+	(not (base valx valy))
+	(equal
+		(qval '(ack x y) (assn valx valy))
+		(qval 
+			'(ack (ack (sub1 x) y) (sub1 y))
+			(assn valx valy))) )  
+( ; hints
+(disable qval-non-subr base base-fn assn)
+))
+; we have to analyze this further
+
+(disable qval-of-ackxy)
+
+; Now, we have to reduce the two ack expressions in the body:
+;      (ack (sub1 x) y)       (ack (ack (sub1 x) y) (sub1 y))
+;         small                       big
+
+(prove-lemma qval-of-ack-small (rewrite) (equal
+	(qval '(ack (sub1 x) y)  (assn valx valy))
+	(qval '(ack x y) (assn (sub1 valx) valy)))  
+( ; hints
+(use (qval-of-ack-of-terms (term1 '(sub1 x)) (term2 'y) (va (assn valx valy))))
+(disable qval-non-subr base base-fn assn qval-of-ackxy qval-of-ack-of-terms)
+))
+
+(prove-lemma qval-of-ack-big (rewrite) (implies
+	(qval '(ack x y)  (assn (sub1 valx) valy))
+	(equal
+		(qval 
+			'(ack (ack (sub1 x) y) (sub1 y))
+			(assn valx valy))
+		(qval '(ack x y) (assn
+			(car (qval '(ack (sub1 x) y)  (assn valx valy)))
+			(sub1 valy)))) )    
+( ; hints
+(use (qval-of-ack-of-terms 
+	(term1 '(ack (sub1 x) y)) (term2 '(sub1 y)) (va (assn valx valy))))
+(disable qval-non-subr base base-fn assn qval-of-ackxy qval-of-ack-of-terms)
+))
+
+(disable qval-of-ack-of-terms)
+; we only need it for "small" and "big"
+
+; using these, we can analyze the non-base case
+
+(prove-lemma qval-of-ackxy-non-base (rewrite) (implies
+	(and
+		(not (base valx valy))
+		(qval '(ack x y)  (assn (sub1 valx) valy)))
+	(equal
+		(qval '(ack x y) (assn valx valy))
+		(qval '(ack x y) (assn
+			(car (qval '(ack x y)  (assn (sub1 valx) valy)))
+			(sub1 valy)))) )    
+( ; hints
+(use (qval-of-ackxy-non-base-aux1))
+(disable qval-non-subr base base-fn assn qval-of-ackxy-non-base-aux1)
+))
+
+(disable qval-of-ackxy-non-base-aux1)
+
+(disable assn)   
+; this is no longer needed, and it really slows things
+; down when assn is unwound
+
+; Now, let's prove : (A valx valy) by induction on (valx valy).
+; Then -- we can remove the (qval '(ack x y) ...) hypotheses
+
+(prove-lemma A-is-true-aux1 (rewrite) (implies
+	(base valx valy)
+	(A valx valy))  )
+
+; specifically, there is only a problem if valx or valy are non-zero
+(prove-lemma A-is-true-aux2 (rewrite) (implies
+    (zerop valx)
+    (A valx valy))
+)
+(prove-lemma A-is-true-aux3 (rewrite) (implies
+    (zerop valy)
+    (A valx valy))
+)
+
+; let's give a name to the x-value called in qval-of-ackxy-non-base
+(defn prev (valx valy) (car (qval '(ack x y)  (assn (sub1 valx) valy))))
+; this will make the induction simpler
+
+(prove-lemma A-is-true-aux4 (rewrite) (implies
+	(and
+		(not (base valx valy))
+		(A (sub1 valx) valy)
+		(A (prev valx valy) (sub1 valy)))
+	(A valx valy))  
+( ; hints
+(use (qval-of-ackxy-non-base))
+(disable base qval-of-ackxy-non-base qval-non-subr)
+))
+
+(disable A)  ; temporarily
+(disable prev) ; permanently
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; We have enough now to prove that (A valx valy) is true by double induction,
+; as in ITEM 1, above.
+; If (A valx valy) fails, then (A valx' valy') fails, where
+; (valy' valx') is lexically earlier than (valy valx).
+
+; First,  by ordinary induction on valx (holding valy fixed):
+; if (not (A valx valy)), there is a first-value, 
+; fx = (fx valx valy), such that: (not (A fx valy)) but (A (sub1 fx) valy)
+
+(defn fx (valx valy) 
+	(if (zerop valx) F
+	(if (and (not (A valx valy)) (A (sub1 valx) valy)) valx
+	(fx (sub1 valx) valy)  ) ) )
+
+(prove-lemma fx-is-first-1 (rewrite) (implies
+	(not (A valx valy))
+	(not (A (fx valx valy) valy))  )  )
+
+(prove-lemma fx-is-first-2 (rewrite) (implies
+	(not (A valx valy))
+	(A (sub1 (fx valx valy)) valy)) )
+
+; now, reexamine what A-is-true-aux4 says
+
+(prove-lemma A-is-true-aux5 (rewrite) (implies
+	(not (A valx valy))
+	(not (A (prev (fx valx valy) valy) (sub1 valy))) ))
+
+(defn A-is-true-kludge (valx valy) (if
+	(zerop valy) 0 
+	(A-is-true-kludge (prev (fx valx valy) valy) (sub1 valy))) )
+
+(prove-lemma A-is-true (rewrite) (A valx valy)
+( ; hints
+(induct (A-is-true-kludge valx valy))
+))
+
+(disable A-is-true-aux1)
+(disable A-is-true-aux2)
+(disable A-is-true-aux3)
+(disable A-is-true-aux4)
+(disable A-is-true-aux5)
+(disable fx)
+(disable fx-is-first-1)
+(disable fx-is-first-2)
+(disable A-is-true-kludge)
+
+; now, we do care what A is
+(enable A)
+; while we rephrase  qval-of-ackxy-base and  qval-of-ackxy-non-base 
+; in terms of A, using the fact that A is true:
+
+(prove-lemma A-base (rewrite) (implies (base valx valy)
+	(equal
+		(A valx valy)
+		(cons (base-fn valx valy) 0) ))  )
+
+(prove-lemma A-induction (rewrite) (implies (not (base valx valy))
+	(equal
+		(A valx valy)
+		(A
+            (car (A (sub1 valx) valy))
+            (sub1 valy)))) 
+( ; hints
+(use 
+	(A-is-true
+		(valx (sub1 valx)) (valy valy))
+	(qval-of-ackxy-non-base))
+(disable base assn qval-non-subr qval-if A-is-true qval-of-ackxy-non-base)
+))
+
+; Now, we can forget how A was defined; its car satisfies
+; the defn of the Ackermann function
+
+(disable A)
+
+; GOAL:
+(prove-lemma ackermann-works (rewrite) (equal (ackermann x y)
+	(if (zerop x) 1
+	(if (zerop y) (if (equal x 1) 2 (plus x 2))
+	(ackermann (ackermann (sub1 x) y) (sub1 y))  ))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;                       ITEM 3                               ;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+; GOAL:  define a function
+; (next-twin-prime x) and prove, that for each x
+; either:
+;   1. (next-twin-prime x) is some y > x such that y, y+2 are both prime
+; or
+;   2. (next-twin-prime x) = F, and 
+;      for all y > x, it isn't true that y and y+2 are both prime
+
+; First, define some primitive recursive functions
+
+; a divisor of x between 2 and top (inclusively), or,  F if there is none :
+(defn divisor (x top)  
+	(if (lessp top 2) F
+	(if (divisor x (sub1 top)) (divisor x (sub1 top))
+	(if (zerop (remainder x top)) top
+	F ))))
+
+(defn primep (x) (and
+	(lessp 1 x)
+	(not (divisor x (sub1 x)))))
+
+; y is the first part of a prime pair
+(defn fpp (y)   (and
+	(primep y)
+	(primep (add1 (add1 y)))))
+
+; intended -- by upwards recursion 
+; (defn next-twin-prime(x) (if (fpp (add1 x))
+; 	(add1 x)
+; 	(next-twin-prime (add1 x))))
+
+; obviously, this won't be accepted, but in Nqthm, one can do this with eval$ :
+
+(defn ntp (x) (eval$ T
+	'(if (fpp (add1 x))  (add1 x)  (ntp (add1 x)))
+	(list (cons 'x x)) ) )
+
+;;;;;;;;;;;;;;;;;;;;;;;  begin r-loop
+; 
+; *(formals 'ntp)
+;  '(X)
+; *(body 'ntp)
+;  '(IF (FPP (ADD1 X))
+;       (ADD1 X)
+;       (NTP (ADD1 X)))
+; *(ntp 8)
+;  11
+; *(ntp 19)
+;  29
+; *(formals 'fpp)
+;  '(Y)
+; *(body 'fpp)
+;  '(AND (PRIMEP Y)
+;        (PRIMEP (ADD1 (ADD1 Y))))
+; 
+;;;;;;;;;;;;;;;;;;;;;;;  end r-loop
+
+; Of course, this doesn't prove anything.  
+; We want to define next-twin-prime AND PROVE IT WORKS
+
+; Using the same trick as with the Ackermann function:
+(defn N (valx) (qval '(ntp x) (list (cons 'x valx))))
+
+
+; Now, we have to analyze qval on the body of ntp
+;  '(if (fpp (add1 x)) (add1 x) (ntp (add1 x)))
+; Fortunately, for a pure primitive recursive function, such as fpp.
+; the Nqthm built-ins REWRITE-V&C-APPLY$ and REWRITE-CAR-V&C-APPLY$
+; easily prove that v&c$ does the right thing; so:
+
+(prove-lemma qval-on-fpp (rewrite) (implies
+	(qval term va)
+	(equal
+		(qval (list 'fpp term) va)
+		(cons
+			(fpp (car (qval term va)))
+			0 )) )
+( ; hints
+(enable qval)
+))
+
+(disable fpp)
+
+; as with ack, we have to compare qval on an expression
+; (ntp term) with qval on the basic (ntp x)
+
+(prove-lemma qval-on-ntp-term (rewrite) (implies
+	(qval term va)
+	(equal
+		(qval (list 'ntp term) va)
+		(qval '(ntp x) (list (cons 'x (car (qval term va)))))))
+( ; hints
+(disable qval-list qval-if)
+))
+
+; we can rewrite this in terms of N
+
+(prove-lemma qval-on-ntp-term-N (rewrite) (implies
+	(qval term va)
+	(equal
+		(qval (list 'ntp term) va)
+		(N (car (qval term va))))) 
+( ; hints
+(disable qval-list qval-if)
+))
+
+; Now, the relevant term in the body is just (add1 x), so:
+
+(prove-lemma qval-on-ntp-add1 (rewrite) (equal
+	(qval '(ntp (add1 x)) (list (cons 'x valx)))
+	(N (add1 valx))) 
+( ; hints
+(disable qval-list qval-if)
+))
+
+; now, we unwind the defn of N:
+
+(prove-lemma unwind-1 (rewrite) (equal
+	(N valx)
+	(qval 
+		'(if (fpp (add1 x)) (add1 x) (ntp (add1 x)))
+		(list (cons 'x valx))) )
+( ; hints
+(disable qval-list qval-if)
+))
+
+(prove-lemma unwind-2 (rewrite) (equal
+	(qval '(fpp (add1 x)) va )
+	(cons
+		(fpp (add1 (cdr (assoc 'x va ))))
+		0 )) 
+( ; hints
+(use (qval-on-fpp (term '(add1 x)) ))
+(disable qval-list qval-non-subr qval-on-fpp)
+))
+
+(prove-lemma unwind-3 (rewrite) (equal
+	(qval '(if (fpp (add1 x)) (add1 x) (ntp (add1 x))) va)
+	(if 
+		(fpp (add1 (cdr (assoc 'x va ))))
+		(cons (add1 (cdr (assoc 'x va ))) 0)
+		(qval '(ntp (add1 x)) va)  ) )
+( ; hints
+(do-not-induct T)
+(disable qval-list N qval-non-subr)
+(hands-off N)
+))
+
+(prove-lemma unwind-4 (rewrite) (equal
+	(N valx)
+	(if 
+		(fpp (add1 valx))
+		(cons (add1 valx) 0)
+		(qval '(ntp (add1 x)) (list (cons 'x valx))  ) ) )
+( ; hints
+(do-not-induct T)
+(use (unwind-1) (unwind-3 (va (list (cons 'x valx)))))
+(disable unwind-1 qval-list qval-non-subr unwind-3 qval-if)
+))
+
+(prove-lemma unwind-5 (rewrite) (equal
+	(N valx)
+	(if 
+		(fpp (add1 valx))
+		(cons (add1 valx) 0)
+		(N (add1 valx)) )) 
+( ; hints
+(do-not-induct T)
+(use (unwind-4))
+(disable N qval-list qval-non-subr unwind-4 qval-if)
+))
+
+(disable unwind-1) (disable unwind-2) (disable unwind-3)
+(disable unwind-4) (disable unwind-5)
+
+; now, we can justify the upward recursion:
+
+(prove-lemma N-basis (rewrite) (implies
+	(fpp (add1 x))
+	(equal (N x) (cons (add1 x) 0))) 
+( ; hints
+(use (unwind-5 (valx x)))
+(disable N)
+))
+
+(prove-lemma N-induction (rewrite) (implies
+	(not (fpp (add1 x)))
+	(equal (N x) (N (add1 x))))
+( ; hints
+(use (unwind-5 (valx x)))
+(disable N N-basis)
+))
+
+; it might be useful to know the form of N
+
+(prove-lemma form-of-N (rewrite) (implies
+	(N x)   ; i.e., it's not F
+	(equal (N x) (cons (car (N x)) 0)))
+( ; hints
+(enable reset qval)
+(disable qval-non-subr)
+))
+
+
+(prove-lemma N-of-zero (rewrite) (implies
+	(zerop x)
+	(equal (N x) '(3 . 0) )) )
+
+(defn good (x) (and
+	(fpp (car (N x)))
+	(lessp x (car (N x)))))
+; so, the twin prime conjecture will imply that all x are good
+
+; we don't need the defn of N any more:
+(disable N)
+
+(prove-lemma N-of-fpp (rewrite) (implies
+	(fpp x)
+	(equal (N (sub1 x)) (cons x 0))) 
+( ; hints
+(enable fpp)
+))
+
+(prove-lemma N-of-non-fpp (rewrite) (implies
+	(and (not (fpp x)) (not (zerop x)))
+	(equal (N (sub1 x)) (N x)))
+( ; hints
+(use (N-induction (x (sub1 x))))
+(disable N-induction divisor primep)
+))
+
+(prove-lemma zero-is-good (rewrite) (implies
+	(zerop x)
+	(good x)))
+
+(prove-lemma good-goes-down-aux1 () (implies
+	(fpp x)
+	(good (sub1 x)))  
+( ; hints
+(enable fpp)
+))
+
+(prove-lemma good-goes-down-aux2 () (implies
+	(and (not (fpp x)) (not (zerop x)) (good x))
+	(good (sub1 x)))  
+( ; hints
+(use (N-of-non-fpp))
+(disable N-of-non-fpp N N-induction)
+))
+
+(prove-lemma good-goes-down (rewrite) (implies
+	(good x)
+	(good (sub1 x)))  
+( ; hints
+(use (good-goes-down-aux1) (good-goes-down-aux2))
+(disable N-of-non-fpp N N-induction N divisor good)
+))
+
+; Next, we prove that (fpp y) and x < y implies (good x)
+
+(defn good-below-kludge (y z) (if
+	(zerop z) 0
+	(good-below-kludge y (sub1 z))))
+
+(prove-lemma good-below-aux1 (rewrite) (equal
+	(difference (sub1 y) z)
+	(sub1 (difference y z))))
+
+(prove-lemma good-below-aux2 (rewrite) (implies
+	(fpp y) 
+	(good (difference y (add1 z)))) 
+( ; hints
+(induct (good-below-kludge y z))
+(do-not-induct T)
+(use (good-goes-down-aux1 (x y)))
+(disable good)
+))
+
+(disable good-below-aux1)
+(disable good-below-aux2)
+
+(prove-lemma good-below-aux3 (rewrite) (implies
+	(and (lessp x y) (numberp x))
+	(equal (difference y (add1 (sub1 (difference y x))))  x)))
+
+(prove-lemma good-below (rewrite) (implies
+	(and (fpp y) (lessp x y))
+	(good x))
+( ; hints
+(do-not-induct T)
+(use 
+	(good-below-aux3)
+	(good-below-aux2 (z (sub1 (difference y x)))))
+))
+
+(disable good-below-aux3)
+
+; now, every x is either good or not good.
+
+; if x is not good, there are no twin primes above x:
+
+(prove-lemma properties-of-bad-aux1 (rewrite) (implies
+	(and (not (good x))  (lessp x y))
+	(not (fpp y)))
+( ; hints
+(disable good)
+))
+
+; on the other hand, if x is good, then by the definition
+
+(prove-lemma properties-of-good-aux1 (rewrite) (implies
+	(good x)
+	(and
+		(fpp (car (N x)))
+		(lessp x (car (N x)))))  )
+
+; Now, we can define next-twin-prime as:
+
+(defn next-twin-prime (x) (if (good x) (car (N x)) F))
+
+(disable good-below)
+(disable good)
+
+; finally, GOAL:
+
+; EITHER
+;   1. (next-twin-prime x) is some y > x such that y, y+2 are both prime
+(prove-lemma properties-of-good (rewrite) (implies
+	(good x)
+	(and
+		(fpp (next-twin-prime x))
+		(lessp x (next-twin-prime x))))  )
+
+; OR
+;   2. (next-twin-prime x) = F, and 
+;      for all y > x, it isn't true that y and y+2 are both prime
+(prove-lemma properties-of-bad-1 (rewrite) (implies
+	(not (good x))
+	(equal (next-twin-prime x) F)))
+(prove-lemma properties-of-bad-2 (rewrite) (implies
+	(and (not (good x))  (lessp x y))
+	(not (fpp y))) )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;                       THE END                              ;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+

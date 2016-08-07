@@ -1,0 +1,1116 @@
+#|
+
+ Copyright (C) 1994 by Computational Logic, Inc.  All Rights Reserved.
+
+ This script is hereby placed in the public domain, and therefore unlimited
+ editing and redistribution is permitted.
+
+ NO WARRANTY
+
+ Computational Logic, Inc. PROVIDES ABSOLUTELY NO WARRANTY.  THE EVENT SCRIPT
+ IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
+ PERFORMANCE OF THE SCRIPT IS WITH YOU.  SHOULD THE SCRIPT PROVE DEFECTIVE, YOU
+ ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+ IN NO EVENT WILL Computational Logic, Inc. BE LIABLE TO YOU FOR ANY DAMAGES,
+ ANY LOST PROFITS, LOST MONIES, OR OTHER SPECIAL, INCIDENTAL OR CONSEQUENTIAL
+ DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THIS SCRIPT (INCLUDING BUT
+ NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES
+ SUSTAINED BY THIRD PARTIES), EVEN IF YOU HAVE ADVISED US OF THE POSSIBILITY OF
+ SUCH DAMAGES, OR FOR ANY CLAIM BY ANY OTHER PARTY.
+|#
+
+; The Correctness of a Piton Big Number Addition Program
+; J Strother Moore
+
+; This file corresponds to Chapter 3 of CLI Tech Report 22,
+; "Piton:  A Verified Assembly Level Language".
+
+(note-lib "piton" t)
+
+(enable plus-0)
+(enable commutativity-of-plus)
+(enable commutativity2-of-plus)
+(enable associativity-of-plus)
+
+(prove-lemma plus-add1-1 (rewrite)
+  (equal (plus (add1 x) y) (add1 (plus x y))))
+
+(prove-lemma plus-add1-2 (rewrite)
+  (equal (plus x (add1 y)) (add1 (plus x y))))
+
+(enable equal-plus-0)
+
+(enable times-0)
+
+(enable times-add1)
+
+(enable times-distributes-over-plus)
+
+(enable commutativity-of-times)
+
+(enable commutativity2-of-times)
+
+(enable associativity-of-times)
+
+(enable equal-times-0)
+
+(enable difference-elim)
+
+(prove-lemma difference-elim-rewrite1 (rewrite)
+  (implies (and (numberp x)
+		(not (lessp x y)))
+           (equal (plus y (difference x y)) x)))
+
+(enable lessp-remainder)
+
+(prove-lemma lessp-remainder-linear (rewrite)
+  (implies (not (zerop y))
+	   (lessp (remainder x y) y)))
+
+(enable remainder-quotient-elim)
+(enable plus-remainder-times-quotient)
+(enable lessp-quotient)
+
+(prove-lemma lessp-quotient-linear (rewrite)
+   (implies (and (not (zerop x))
+		 (not (equal y 1)))
+	    (lessp (quotient x y) x)))
+
+(enable not-lessp-quotient)
+
+(prove-lemma not-lessp-times (rewrite)
+  (implies (not (zerop x))
+	   (not (lessp (times x y) y))))
+
+(defn nat->bign (n base size)
+  (if (zerop size)
+      nil
+      (cons (tag 'nat (remainder n base))
+	    (nat->bign (quotient n base) base (sub1 size)))))
+
+(defn bign->nat (a base)
+  (if (nlistp a)
+      0
+      (plus (untag (car a))
+	    (times base (bign->nat (cdr a) base)))))
+      
+(defn bignp (a base)
+ (if (nlistp a)
+     (equal a nil)
+     (and (listp (car a))
+	  (equal (type (car a)) 'nat)
+	  (numberp (untag (car a)))
+	  (lessp (untag (car a)) base)
+	  (equal (cddr (car a)) nil)
+	  (bignp (cdr a) base))))
+
+(prove-lemma bignp-nat->bign (rewrite)
+  (implies (not (zerop base))
+	   (bignp (nat->bign n base size) base)))
+
+(prove-lemma length-nat->bign (rewrite)
+  (implies (not (zerop base))
+	   (equal (length (nat->bign n base size))
+		  (fix size))))
+
+(prove-lemma lessp-quotient-times (rewrite)
+  (implies (lessp n (times b e))
+	   (equal (lessp (quotient n b) e)
+		  t)))
+
+(prove-lemma bign->nat->bign (rewrite)
+  (implies (and (numberp n)
+		(lessp 1 base)
+		(lessp n (exp base size)))
+	   (equal (bign->nat (nat->bign n base size) base)
+		  n)))
+
+(defn tv->nat (c)
+  (if c 1 0))
+
+(defn big-add-array (a b c base)
+  (if (nlistp a)
+      nil
+      (cons (tag 'nat (remainder (plus (untag (car a))
+				       (untag (car b))
+				       (tv->nat c))
+				 base))
+	    (big-add-array (cdr a)
+			   (cdr b)
+			   (not (lessp (plus (untag (car a))
+					     (untag (car b))
+					     (tv->nat c))
+				       base))
+			   base))))
+
+(defn big-add-carry-out (a b c base)
+  (if (nlistp a)
+      (bool c)
+      (big-add-carry-out (cdr a)
+			 (cdr b)
+			 (not (lessp (plus (untag (car a))
+					   (untag (car b))
+					   (tv->nat c))
+				     base))
+			 base)))
+
+(enable difference-x-x)
+
+(prove-lemma remainder-carryout1 (rewrite)
+  (implies (and (lessp i base)
+		(lessp j base)
+		(not (lessp (add1 (plus i j)) base)))
+	   (equal (remainder (add1 (plus i j)) base)
+		  (difference (add1 (plus i j)) base)))
+  ((expand (remainder (add1 (plus i j)) base)
+	   (REMAINDER (DIFFERENCE (PLUS I J) (SUB1 BASE)) 
+                                 BASE))))
+
+(prove-lemma remainder-carryout0 (rewrite)
+  (implies (and (lessp i base)
+		(lessp j base)
+		(not (lessp (plus i j) base)))
+	   (equal (remainder (plus i j) base)
+		  (difference (plus i j) base)))
+  ((expand (remainder (plus i j) base)
+	   (REMAINDER (DIFFERENCE (PLUS I J) BASE) 
+                                   BASE))))
+
+(prove-lemma interpretation-of-big-add-results ()
+  (implies (and (bignp a base)
+		(bignp b base)
+		(equal (length a) (length b))
+		(numberp base)
+		(lessp 1 base))
+	   (equal (bign->nat
+		   (append (big-add-array a b c base)
+			   (list (tag 'nat
+				      (bool-to-nat
+				       (untag (big-add-carry-out a b c base))))))
+		   base)
+		  (plus (bign->nat a base)
+			(bign->nat b base)
+			(tv->nat c))))
+  ((disable lessp)))
+
+; The above theorem is just about all of the mathematical content of
+; this exercise.  It remains relate the functions big-add-array and big-add-carry-out
+; to a Piton program.
+
+
+
+(disable tv->nat)
+
+(prove-lemma equal-lessp-n-1 (rewrite) (equal (lessp n 1)
+					      (zerop n)))
+
+(defn big-add-array-loop (i a-array b-array n c base)
+  (if (zerop (sub1 n))
+      (put (tag 'nat
+		(remainder (plus (untag (get i a-array))
+				 (untag (get i b-array))
+				 (tv->nat c))
+			   base))
+	   i
+	   a-array)
+      (big-add-array-loop (add1 i)
+			  (put (tag 'nat
+				    (remainder (plus (untag (get i a-array))
+						     (untag (get i b-array))
+						     (tv->nat c))
+					       base))
+			       i
+			       a-array)
+			  b-array
+			  (sub1 n)
+			  (not (lessp (plus (untag (get i a-array))
+					    (untag (get i b-array))
+					    (tv->nat c))
+				      base))
+			  base)))
+
+(defn big-add-carry-out-loop (i a-array b-array n c base)
+  (if (zerop (sub1 n))
+      (bool (not (lessp (plus (untag (get i a-array))
+			      (untag (get i b-array))
+			      (tv->nat c))
+			base)))
+      (big-add-carry-out-loop (add1 i)
+			      (put (tag 'nat (remainder (plus (untag (get i a-array))
+							      (untag (get i b-array))
+							      (tv->nat c))
+							base))
+				   i
+				   a-array)
+			      b-array
+			      (sub1 n)
+			      (not (lessp (plus (untag (get i a-array))
+						(untag (get i b-array))
+						(tv->nat c))
+					  base))
+			      base)))
+
+(defn nth-cdr (i a)
+  (if (zerop i) a (nth-cdr (sub1 i) (cdr a))))
+
+(prove-lemma get-is-car-nth-cdr (rewrite)
+  (equal (get i a) (car (nth-cdr i a))))
+
+(enable length-put)
+
+(prove-lemma nth-cdr-add1 (rewrite)
+  (equal (nth-cdr (add1 i) x)
+	 (cdr (nth-cdr i x))))
+
+(prove-lemma nth-cdr-put-at (rewrite)
+  (implies (lessp i (length a))
+	   (equal (nth-cdr i (put val i a))
+		  (cons val (cdr (nth-cdr i a))))))
+
+(defn hint1 (i a b c base)
+  (if (lessp i (length a))
+      (hint1 (add1 i)
+	     (put (tag 'nat
+		       (remainder (plus (untag (get i a))
+					(untag (get i b))
+					(tv->nat c))
+				  base))
+		  i
+		  a)
+	     b
+	     (not (lessp (plus (untag (get i a))
+			       (untag (get i b))
+			       (tv->nat c))
+			 base))
+	     base)
+      t)
+  ((lessp (difference (length a) i))))
+
+(prove-lemma listp-nth-cdr (rewrite)
+  (equal (listp (nth-cdr i a))
+	 (lessp i (length a))))
+
+(prove-lemma nth-cdr-put-before (rewrite)
+  (implies (and (lessp j i)
+		(lessp j (length a)))
+	   (equal (nth-cdr i (put val j a))
+		  (nth-cdr i a))))
+
+(prove-lemma difference-equal-1 (rewrite)
+  (implies (and (lessp i (length a))
+		(not (lessp i (sub1 (length a)))))
+           (equal (difference (length a) i) 1)))
+
+(prove-lemma big-add-array-loop-on-list-of-length-1 (rewrite)
+  (equal (big-add-array-loop i a b 1 c base)
+	 (put (tag 'nat
+		   (remainder (plus (untag (get i a))
+				    (untag (get i b))
+				    (tv->nat c))
+			      base))
+	      i
+	      a)))
+
+(enable equal-length-0)
+
+(prove-lemma equal-length-1 (rewrite)
+  (equal (equal (length a) 1)
+	 (and (listp a)
+	      (nlistp (cdr a)))))
+
+(prove-lemma nlistp-cdr-nth-cdr (rewrite)
+  (equal (listp (cdr (nth-cdr i a)))
+	 (lessp i (sub1 (length a)))))
+
+(prove-lemma big-add-array-on-list-of-length-1 (rewrite)
+  (implies (and (listp a)
+		(nlistp (cdr a)))
+	   (equal (big-add-array a b c base)
+		  (list (tag 'nat
+			     (remainder (plus (untag (car a))
+					      (untag (car b))
+					      (tv->nat c))
+					base)))))
+  ((expand (big-add-array a b c base))))
+
+; The following lemma is intended only for use in the inductive step
+; of mathematical-big-add-v-big-add-array-loop-generalized, where we
+; replace i by (add1 i) and need to transform the lhs difference to
+; the rhs sub1.
+
+(prove-lemma difference-add1-new (rewrite)
+  (equal (difference (length a) (add1 i))
+	 (sub1 (difference (length a) i))))
+
+(prove-lemma length-big-add-array-loop (rewrite)
+  (implies (and (lessp i (length a))
+		(not (lessp (length a) (plus i n))))
+	   (equal (length (big-add-array-loop i a b n c base))
+		  (length a)))
+  ((induct (big-add-array-loop i a b n c base))))
+
+(prove-lemma car-nth-cdr-put (rewrite)
+  (implies (and (numberp i)
+		(numberp j))
+	   (equal (car (nth-cdr i (put val j a)))
+		  (if (equal i j) val (car (nth-cdr i a))))))
+
+(prove-lemma car-nth-cdr-big-add-array-loop (rewrite)
+  (implies (and (numberp k)
+		(numberp i)
+		(lessp k i)) 
+	   (equal (car (nth-cdr k (big-add-array-loop i a b n c base)))
+		  (car (nth-cdr k a))))
+  ((induct (big-add-array-loop i a b n c base))))
+
+
+(prove-lemma equal-nth-cdr-nil nil
+  (implies (bignp a base)
+	   (equal (equal nil (nth-cdr i a))
+		  (equal (fix i) (length a)))))
+
+(prove-lemma equal-cddr-nth-cdr-nil (rewrite)
+  (implies (bignp a base)
+	   (equal (equal nil (cddr (nth-cdr i a)))
+		  (equal (add1 (add1 i))(length a))))
+  ((use (equal-nth-cdr-nil (i (add1 (add1 i)))))))
+
+(prove-lemma bignp-put (rewrite)
+  (implies (and (numberp i)
+		(lessp i (length a))
+		(bignp a base)
+		(numberp val)
+		(lessp val base))
+	   (bignp (put (list 'nat val) i a) base)))
+
+(prove-lemma cons-car-cdr-hack (rewrite)
+  (equal (equal (cons a (cdr x)) x)
+	 (and (listp x)
+	      (equal a (car x)))))
+
+(prove-lemma big-add-array-is-big-add-array-loop-generalized nil
+  (implies
+   (and (numberp i)
+	(lessp i (length a))
+	(bignp a base)
+	(numberp base)
+	(lessp 1 base))
+   (equal (big-add-array (nth-cdr i a)
+			 (nth-cdr i b)
+			 c
+			 base)
+	  (nth-cdr i
+		   (big-add-array-loop i a b (difference (length a) i) c base))))
+  ((disable difference)
+   (induct (hint1 i a b c base))))
+
+(prove-lemma big-add-array-is-big-add-array-loop (rewrite)
+  (implies
+   (and (listp a)
+	(bignp a base)
+	(numberp base)
+	(lessp 1 base))
+   (equal (big-add-array a b c base)
+	  (big-add-array-loop 0 a b (length a) c base)))
+  ((use (big-add-array-is-big-add-array-loop-generalized (i 0)))))
+
+(prove-lemma big-add-carry-out-on-list-of-length-1 (rewrite)
+  (implies (and (listp a)
+		(nlistp (cdr a)))
+	   (equal (big-add-carry-out a b c base)
+		  (bool (not (lessp (plus (untag (car a))
+					  (untag (car b))
+					  (tv->nat c))
+				    base)))))
+  ((expand (big-add-carry-out a b c base))))
+
+(prove-lemma big-add-carry-out-is-big-add-carry-out-loop-generalized nil
+  (implies
+   (and (numberp i)
+	(lessp i (length a)))
+   (equal (big-add-carry-out (nth-cdr i a)
+			     (nth-cdr i b)
+			     c
+			     base)
+	  (big-add-carry-out-loop i a b (difference (length a) i) c base)))
+  ((disable difference)
+   (induct (hint1 i a b c base))))
+
+(prove-lemma big-add-carry-out-is-big-add-carry-out-loop (rewrite)
+  (implies
+   (listp a)
+   (equal (big-add-carry-out a b c base)
+	  (big-add-carry-out-loop 0 a b (length a) c base)))
+  ((use (big-add-carry-out-is-big-add-carry-out-loop-generalized (i 0)))))
+
+(DEFN BIG-ADD-PROGRAM NIL
+  '(BIG-ADD (A B N)                  ; formals
+	    NIL                      ; temporaries
+                                     ; body
+	    (PUSH-CONSTANT (BOOL F)) ; Push the input carry flag for
+                                     ; the first ADD-NAT-WITH-CARRY
+            (PUSH-LOCAL A)           ; Push the address A
+   (DL LOOP ()                       ; This is the top level loop
+	    (FETCH))                 ; Fetch from A
+	    (PUSH-LOCAL B)           ; Fetch from B
+	    (FETCH)
+	    (ADD-NAT-WITH-CARRY)     ; Add the elements
+	    (PUSH-LOCAL A)           ; Deposit sum in A
+	    (DEPOSIT)                ; (but leave carry flag for next round)
+	    (PUSH-LOCAL N)           ; Decrement N by 1
+            (SUB1-NAT)
+	    (SET-LOCAL N)            ; (but leave N on the stack)
+            (TEST-NAT-AND-JUMP ZERO DONE) ; If N=0, go to DONE    
+	    (PUSH-LOCAL B)           ; Increment B by 1
+	    (PUSH-CONSTANT (NAT 1))
+	    (ADD-ADDR)
+	    (POP-LOCAL B)
+	    (PUSH-LOCAL A)           ; Increment A by 1
+	    (PUSH-CONSTANT (NAT 1))
+	    (ADD-ADDR)
+	    (SET-LOCAL A)            ; (but leave A on the stack)
+	    (JUMP LOOP)              ; goto loop
+   (DL DONE ()
+            (RET))))
+
+(DEFN BIG-ADD-LOOP-CLOCK (N)
+  (IF (ZEROP N)
+      0
+      (IF (EQUAL N 1)
+	  11
+	  (PLUS 19 (BIG-ADD-LOOP-CLOCK (SUB1 N))))))
+
+; The following clock function includes one tick for the CALL.  That is,
+; BIG-ADD-CLOCK is the amount of time it takes to execute a CALL of BIG-ADD,
+; not just the body of BIG-ADD.
+
+(DEFN BIG-ADD-CLOCK (N)
+  (PLUS 3 (BIG-ADD-LOOP-CLOCK N)))
+
+; The concept of value in the defs.events is at odds with the
+; use of the term in the report.
+
+(defn array (name segment)
+  (cdr (assoc name segment)))
+
+(defn put-array (a name segment)
+  (put-assoc a name segment))
+
+(disable booleanp)
+
+(defn tv (b) (equal b 't))
+
+(enable assoc-put-assoc-2)
+
+(disable get-is-car-nth-cdr)
+
+(prove-lemma p-step1-opener (rewrite)
+  (equal (p-step1 (cons opcode operands) p)
+	 (if (p-ins-okp (cons opcode operands) p)
+	     (p-ins-step (cons opcode operands) p)
+	     (p-halt p (x-y-error-msg 'p opcode))))
+
+  ((disable p-ins-okp p-ins-step)))
+
+(disable p-step1)
+
+(prove-lemma p-opener (rewrite)
+  (and (equal (p s 0) s)
+       (equal (p (p-state pc ctrl temp prog data max-ctrl max-temp word-size psw)
+		 (add1 n))
+	      (p (p-step (p-state pc ctrl temp prog data max-ctrl max-temp word-size psw))
+		 n)))
+  ((disable p-step)))
+
+(disable p)
+
+(prove-lemma bignp-implies-p-objectp-get (rewrite)
+  (implies (and (bignp a (exp 2 word-size))
+		(lessp i (length a)))
+	   (and (listp (get i a))
+		(equal (cddr (get i a)) nil)
+		(equal (car (get i a)) 'nat)
+		(numberp (cadr (get i a)))
+		(lessp (cadr (get i a)) (exp 2 word-size)))))
+
+(prove-lemma booleanp-not-f (rewrite)
+  (implies (and (booleanp c)
+		(not (equal c 'f)))
+	   (equal (equal c 't) t))
+  ((enable booleanp)))
+
+(prove-lemma lessp-1-base (rewrite)
+  (implies (not (zerop word-size))
+	   (lessp 1 (exp 2 word-size))))
+
+(prove-lemma assoc-put-assoc-2-new (rewrite)
+  (implies (not (equal a b))
+	   (equal (assoc a (put-assoc val b segment))
+		  (assoc a segment))))
+
+(enable definedp-put-assoc)
+
+; ??? I am here.  The db is here.  The comment above is wrong.  Since then
+; I have changed the theorem by eliminating the hyp (equal p (p-state ...)).
+; I see no alternative to simply starting the proof of the thm below over again.
+; That is what I have done.  The comment above remains just as a reminder of where
+; I was.  It should be deleted when I start afresh.
+
+(prove-lemma booleanp-not-f-tv->nat (rewrite)
+  (implies (and (booleanp c)
+		(not (equal c 'f)))
+	   (equal (tv->nat c) 1))
+  ((enable tv->nat)))
+
+(defn big-add-loop-correct-hint (A B I DATA-SEGMENT C word-size)
+  (if (and (definedp a data-segment)
+	   (lessp i (length (array a data-segment))))
+      (if (zerop (sub1 (difference (length (array a data-segment)) i)))
+	  t
+	  (big-add-loop-correct-hint
+	   a
+	   b
+	   (add1 i)
+	   (put-assoc 
+	    (put (tag 'nat
+		      (remainder (plus (untag (get i (array a data-segment)))
+				       (untag (get i (array b data-segment)))
+				       (bool-to-nat c))
+				 (exp 2 word-size)))
+		 i
+		 (array a data-segment))
+	    a
+	    data-segment)
+	   (if (lessp (plus (untag (get i (array a data-segment)))
+			    (untag (get i (array b data-segment)))
+			    (bool-to-nat c))
+		      (exp 2 word-size))
+	       'F
+	       'T)
+	   word-size))
+      t)
+  ((lessp (difference (length (array a data-segment)) i))))
+
+(enable put-assoc-put-assoc)
+
+; I have proved 2 of the 3 cases of this.  I think the remaining case is
+; trivial.  I will add it as an axiom and proceed.  The proof takes about
+; 3 hours, judging from the two cases I did.
+
+(prove-lemma big-add-loop-correct-generalized nil
+  (implies (and (lessp (length (array a data-segment)) (exp 2 word-size))
+		(not (zerop word-size))
+		(listp ctrl-stk)
+		(bignp (array a data-segment) (exp 2 word-size))
+                (bignp (array b data-segment) (exp 2 word-size))
+		(not (lessp max-temp-stk-size
+			    (add1 (add1 (add1 (length temp-stk))))))
+		(equal (definition 'big-add prog-segment)
+		       (big-add-program))
+                (definedp a data-segment)
+		(definedp b data-segment)
+		(not (equal a b))
+		(numberp i)
+		(lessp i n)
+		(equal n (length (array a data-segment)))
+		(equal n (length (array b data-segment)))
+		(booleanp c))
+	   (equal (p (p-state '(pc (big-add . 2))
+			      (cons (list
+				     (list (cons 'a (list 'addr (cons a i)))
+					   (cons 'b (list 'addr (cons b i)))
+					   (cons 'n (list 'nat (difference n i))))
+				     ret-pc)
+				    ctrl-stk)
+			      (cons (list 'addr (cons a i))
+				    (cons (list 'bool c)
+					  temp-stk))
+			      prog-segment
+			      data-segment
+			      max-ctrl-stk-size
+			      max-temp-stk-size
+			      word-size
+			      'run)
+		     (big-add-loop-clock (difference n i)))
+		  (p-state ret-pc
+			   ctrl-stk
+			   (cons (big-add-carry-out-loop i
+							 (array a data-segment)
+							 (array b data-segment)
+							 (difference n i)
+							 (tv c)
+							 (exp 2 word-size))
+				 temp-stk)
+			   prog-segment
+			   (put-assoc (big-add-array-loop i
+							  (array a data-segment)
+							  (array b data-segment)
+							  (difference n i)
+							  (tv c)
+							  (exp 2 word-size))
+				      a
+				      data-segment)
+			   max-ctrl-stk-size
+			   max-temp-stk-size
+			   word-size
+			   'run)))
+  ((induct (big-add-loop-correct-hint A B I DATA-SEGMENT C word-size))))
+
+(prove-lemma big-add-loop-correct (rewrite)
+  (implies (and (lessp (length (array a data-segment)) (exp 2 word-size))
+		(not (zerop word-size))
+		(listp ctrl-stk)
+		(bignp (array a data-segment) (exp 2 word-size))
+                (bignp (array b data-segment) (exp 2 word-size))
+		(not (lessp max-temp-stk-size
+			    (add1 (add1 (add1 (length temp-stk))))))
+		(equal (definition 'big-add prog-segment)
+		       (big-add-program))
+                (definedp a data-segment)
+		(definedp b data-segment)
+		(not (equal a b))
+		(not (zerop n))
+		(equal n (length (array a data-segment)))
+		(equal n (length (array b data-segment)))
+		(booleanp c))
+	   (equal (p (p-state '(pc (big-add . 2))
+			      (cons (list
+				     (list (cons 'a (list 'addr (cons a 0)))
+					   (cons 'b (list 'addr (cons b 0)))
+					   (cons 'n (list 'nat n)))
+				     ret-pc)
+				    ctrl-stk)
+			      (cons (list 'addr (cons a 0))
+				    (cons (list 'bool c)
+					  temp-stk))
+			      prog-segment
+			      data-segment
+			      max-ctrl-stk-size
+			      max-temp-stk-size
+			      word-size
+			      'run)
+		     (big-add-loop-clock n))
+		  (p-state ret-pc
+			   ctrl-stk
+			   (cons (big-add-carry-out-loop 0
+							 (array a data-segment)
+							 (array b data-segment)
+							 n
+							 (tv c)
+							 (exp 2 word-size))
+				 temp-stk)
+			   prog-segment
+			   (put-assoc (big-add-array-loop 0
+							  (array a data-segment)
+							  (array b data-segment)
+							  n
+							  (tv c)
+							  (exp 2 word-size))
+				      a
+				      data-segment)
+			   max-ctrl-stk-size
+			   max-temp-stk-size
+			   word-size
+			   'run)))
+  ((disable p-step1-opener)
+   (use (big-add-loop-correct-generalized (i 0)))))
+
+(defn big-add-input-conditionp (a b n p0)
+  (and (definedp a (p-data-segment p0))
+       (definedp b (p-data-segment p0))
+       (not (equal a b))
+       (bignp (array a (p-data-segment p0)) (exp 2 (p-word-size p0)))
+       (bignp (array b (p-data-segment p0)) (exp 2 (p-word-size p0)))
+       (equal n (length (array a (p-data-segment p0))))
+       (equal n (length (array b (p-data-segment p0))))
+       (not (lessp (p-max-ctrl-stk-size p0)
+		   (plus 5 (p-ctrl-stk-size (p-ctrl-stk p0)))))
+       (not (lessp (p-max-temp-stk-size p0)
+		   (plus 3 (length (p-temp-stk p0)))))
+       (not (zerop n))
+       (lessp n (exp 2 (p-word-size p0)))
+       (listp (p-ctrl-stk p0))))
+
+(prove-lemma not-zerop-wordsize-hack (rewrite)
+  (implies (and (lessp n (exp 2 word-size))
+		(not (zerop n)))
+	   (and (equal (numberp word-size) t)
+		(not (equal word-size 0)))))
+
+(prove-lemma big-add-correct nil
+  (implies (and (equal p0 (p-state pc
+				   ctrl-stk
+				   (append (list (tag 'nat n)
+						 (tag 'addr (cons b 0))
+						 (tag 'addr (cons a 0)))
+					   temp-stk)
+				   prog-segment
+				   data-segment
+				   max-ctrl-stk-size
+				   max-temp-stk-size
+				   word-size
+				   'run))
+		(equal (p-current-instruction p0) '(call big-add))
+		(equal (definition 'big-add prog-segment)
+		       (big-add-program))
+                (big-add-input-conditionp a b n p0))
+	   (equal (p p0
+		     (big-add-clock n))
+		  (p-state (add1-addr pc)
+			   ctrl-stk
+			   (push (big-add-carry-out (array a data-segment)
+						    (array b data-segment)
+						    f
+						    (exp 2 word-size))
+				 temp-stk)
+			   prog-segment
+			   (put-array (big-add-array (array a data-segment)
+						     (array b data-segment)
+						     f
+						     (exp 2 word-size))
+				      a
+				      data-segment)
+			   max-ctrl-stk-size
+			   max-temp-stk-size
+			   word-size
+			   'run))))
+
+; The above thm is not useful as a rewrite rule because p0 occurs
+; in the lhs and pc, ctrl-stk, etc., are all free vars.  So to make it
+; a rewrite rule we actually substitute (p-state pc ...) for p0 into the
+; lhs.  In addition, the append in that initial state is going to be
+; conses in applications, so we expand it in the lhs.  In addition,
+; the tags are expanded to lists.
+
+(prove-lemma big-add-correct-rewrite-version (rewrite)
+  (implies (and (equal p0 (p-state pc
+				   ctrl-stk
+				   (append (list (tag 'nat n)
+						 (tag 'addr (cons b 0))
+						 (tag 'addr (cons a 0)))
+					   temp-stk)
+				   prog-segment
+				   data-segment
+				   max-ctrl-stk-size
+				   max-temp-stk-size
+				   word-size
+				   'run))
+		(equal (p-current-instruction p0) '(call big-add))
+		(equal (definition 'big-add prog-segment)
+		       (big-add-program))
+                (big-add-input-conditionp a b n p0))
+	   (equal (p (p-state pc
+			      ctrl-stk
+			      (cons (list 'nat n)
+				    (cons (list 'addr (cons b 0))
+					  (cons (list 'addr (cons a 0))
+						temp-stk)))
+			      prog-segment
+			      data-segment
+			      max-ctrl-stk-size
+			      max-temp-stk-size
+			      word-size
+			      'run)
+		     (big-add-clock n))
+		  (p-state (add1-addr pc)
+			   ctrl-stk
+			   (push (big-add-carry-out (array a data-segment)
+						    (array b data-segment)
+						    f
+						    (exp 2 word-size))
+				 temp-stk)
+			   prog-segment
+			   (put-array (big-add-array (array a data-segment)
+						     (array b data-segment)
+						     f
+						     (exp 2 word-size))
+				      a
+				      data-segment)
+			   max-ctrl-stk-size
+			   max-temp-stk-size
+			   word-size
+			   'run)))
+  ((use (big-add-correct))
+   (disable big-add-clock big-add-input-conditionp)))
+
+(disable not-zerop-wordsize-hack)
+
+;  That says all we need to say about BIG-ADD except for how we connect
+; this thm to our FM8502 correctness result.  The question is: what has
+; to be true about a state p in order for the hyp of
+
+#|
+(IMPLIES (AND (PROPER-P-STATEP P0)
+              (P-LOADABLEP P0)
+              (EQUAL (P-WORD-SIZE P0) 32)
+              (EQUAL PN (P P0 N))
+              (NOT (ERRORP (P-PSW PN)))
+              (EQUAL TS (TYPE-SPECIFICATION (P-DATA-SEGMENT PN))))
+         (EQUAL (P-DATA-SEGMENT PN)
+                (DISPLAY-M-DATA-SEGMENT
+                  (FM8502 (LOAD P0) (FM8502-CLOCK P0 N))
+                  TS
+                  (LINK-TABLES P0))))
+|#
+
+; to be true?
+
+; Let us first identify a state that is suitable for running BIG-ADD.
+
+(defn main-program nil
+  '(main nil nil
+	 (push-constant (addr (bna . 0)))
+	 (push-constant (addr (bnb . 0)))
+	 (push-global n)
+	 (call big-add)
+	 (pop-global c)
+	 (ret)))
+
+(defn system-initial-state (a b)
+  (p-state '(pc (main . 0))
+	   '((nil (pc (main . 0))))
+	   nil
+	   (list (main-program)
+		 (big-add-program))
+	   (list (cons 'bna a)
+		 (cons 'bnb b)
+		 (cons 'n (list (tag 'nat (length a))))
+		 (cons 'c (list (tag 'nat 0))))
+	   10
+	   8
+	   32
+	   'run))
+
+; This state takes the following number of clock ticks:
+
+(defn system-initial-state-clock (a b)
+  (plus 5 (big-add-clock (length a))))
+
+; The condition under which big-add-initial-state produces a acceptable state for
+; the abstract computation to work is
+
+(disable exp)
+(disable *1*exp)
+
+(defn system-initial-state-okp (a b)
+  (and (bignp a (exp 2 32))
+       (bignp b (exp 2 32))
+       (equal (length a) (length b))
+       (not (zerop (length a)))
+       (lessp (length a) (exp 2 32))))  
+
+; We prove that system-initial-state-okp lives up to the above claim:
+
+(prove-lemma restructure-system-initial-state-clock (rewrite)
+  (equal (system-initial-state-clock a b)
+	 (plus 3 (big-add-clock (length a)) 2)))
+
+(disable system-initial-state-clock)
+
+(disable plus-add1-2)
+(disable commutativity-of-plus)
+
+(prove-lemma p-plus (rewrite)
+  (equal (p p (plus i j))
+	 (p (p p i) j))
+  ((enable p)
+   (disable p-step)))
+
+(prove-lemma system-correct (rewrite)
+  (implies (system-initial-state-okp a b)
+           (equal (p (system-initial-state a b) (system-initial-state-clock a b))
+		  (p-state '(pc (main . 5))
+			   '((nil (pc (main . 0))))
+			   nil
+			   (list (main-program)
+				 (big-add-program))
+			   (list (cons 'bna (big-add-array a b f (exp 2 32)))
+				 (cons 'bnb b)
+				 (cons 'n (list (tag 'nat (length a))))
+				 (cons 'c (list (big-add-carry-out a b f (exp 2 32)))))
+			   10 8 32 'halt)))
+  ((disable big-add-clock)))
+			 
+; Furthermore, if system-initial-state-okp is true then the initial state is
+; proper-p-state and its word size is 32, as required by our FM8502 correctness
+; result.
+
+(prove-lemma bignp-implies-all-p-objectps (rewrite)
+  (implies (and (bignp a base)
+		(equal base (exp 2 (p-word-size p))))
+	   (all-p-objectps a p)))
+
+
+(prove-lemma initial-correctness-conditions (rewrite)
+  (implies (system-initial-state-okp a b)
+	   (and (proper-p-statep (system-initial-state a b))
+		(equal (p-word-size (system-initial-state a b)) 32)))
+  ((enable *1*exp)))
+
+; In addition, the final state is not an error and its type-specification is
+; easily computed from the input:
+
+(defn nat-lst (n) 
+  (if (zerop n) nil (cons 'nat (nat-lst (sub1 n)))))
+
+(prove-lemma type-lst-big-add-array (rewrite)
+  (EQUAL (TYPE-LST (BIG-ADD-ARRAY A B c base))
+	 (nat-lst (length a))))
+
+(prove-lemma type-lst-bignp (rewrite)
+  (implies (bignp a base)
+	   (equal (type-lst a)
+		  (nat-lst (length a)))))
+
+(prove-lemma car-big-add-carry-out (rewrite)
+  (equal (car (big-add-carry-out a b c base)) 'bool)
+  ((disable big-add-carry-out-is-big-add-carry-out-loop)))
+
+(prove-lemma final-correctness-conditions (rewrite)
+  (implies (system-initial-state-okp a b)
+	   (and (not (errorp (p-psw (p (system-initial-state a b)
+				       (system-initial-state-clock a b)))))
+		(equal (type-specification
+			(p-data-segment
+			 (p (system-initial-state a b)
+			    (system-initial-state-clock a b))))
+                       (list (cons 'bna (nat-lst (length a)))
+			     (cons 'bnb (nat-lst (length a)))
+			     (cons 'n (list 'nat))
+			     (cons 'c (list 'bool))))))
+  ((disable system-initial-state restructure-system-initial-state-clock
+	    big-add-carry-out-is-big-add-carry-out-loop
+	    big-add-array-is-big-add-array-loop)))
+
+; This leaves only the question, is the system-initial-state loadable?  That all depends on
+; how much room you take up with the data.  It is certainly loadable for some
+; values of a and b and some load addresses.  Below we use the load address 0.
+
+(prove-lemma loadable-for-bigns-up-to-length-1000 (rewrite)
+  (implies (and (system-initial-state-okp a b)
+		(lessp (length a) 1000))
+	   (p-loadablep (system-initial-state a b) 0))
+  ((enable *1*exp)
+   (disable lessp plus-add1-1)))
+  
+
+
+; Oh, there is one more thing we might ask, which is whether there are
+; any system-initial-state-okps.  There are.
+
+(prove-lemma example-is-system-initial-state-okp nil
+  (system-initial-state-okp '((NAT 246838082)
+			       (NAT 3116233281)
+			       (NAT 42632655)
+			       (NAT 0))
+			     '((NAT 3579363592)
+			       (NAT 3979696680)
+			       (NAT 7693250)
+			       (NAT 0)))
+  ((enable *1*exp)))
+
+		  
+(prove-lemma type-specification-hack (rewrite)
+ (implies (system-initial-state-okp a b)
+	  (equal (type-lst b) (nat-lst (length b)))))
+
+; We need to refer to the link tables for a state without knowing
+; the actual data, just the size of the data.  So we define the
+; function below which constructs the link tables from a generic
+; state of the right size.  This will turn out to be EQUAL to the
+; link table for any state of that size.
+
+(defn big-zero (n)
+  (if (zerop n)
+      nil
+      (cons '(nat 0) (big-zero (sub1 n)))))
+
+; We link for load address 0.
+
+(defn system-link-tables (n m)
+  (link-tables (system-initial-state (big-zero n) (big-zero m)) 0))
+  
+(prove-lemma length-big-zero (rewrite)
+  (equal (length (big-zero n)) (fix n)))
+
+(prove-lemma link-tables-length (rewrite)
+  (equal (link-tables (system-initial-state a b) 0)
+	 (system-link-tables (length a) (length b)))
+  ((disable plus-add1-1)))
+
+(prove-lemma system-initial-state-okp-length-hack (rewrite)
+  (implies (system-initial-state-okp a b)
+	   (equal (length b) (length a))))
+
+(defn display-answers (m-state n)
+  (let ((alist 
+	 (display-fm9001-data-segment m-state
+				 (list (cons 'bna (nat-lst n))
+				       (cons 'bnb (nat-lst n))
+				       (cons 'n   (list 'nat))
+				       (cons 'c   (list 'bool)))
+				 (system-link-tables n n))))
+    (list (cdr (assoc 'bna alist))
+	  (cadr (assoc 'c alist)))))
+
+(prove-lemma type-big-add-carry-out (rewrite)
+  (equal (type (big-add-carry-out a b c base))
+         'bool))
+
+(prove-lemma eliminate-piton nil
+  (implies (and (system-initial-state-okp a b)
+		(lessp (length a) 1000))
+	   (equal
+            (display-answers
+	     (fm9001 (load (system-initial-state a b) nil 0)
+		     (fm9001-clock (system-initial-state a b)
+				   (system-initial-state-clock a b)))
+	     (length a))
+	    (list (big-add-array a b f (exp 2 32))
+		  (big-add-carry-out a b f (exp 2 32)))))
+  ((use (top-goal (p0 (system-initial-state a b))
+		  (load-addr 0)
+                  (boot-lst nil)
+                  (n (system-initial-state-clock a b))
+		  (pn (p (system-initial-state a b)
+			 (system-initial-state-clock a b)))
+		  (ts (type-specification
+		       (p-data-segment
+			(p (system-initial-state a b)
+			   (system-initial-state-clock a b)))))))
+   (disable-theory t)
+   (enable-theory ground-zero)
+   (enable display-answers initial-correctness-conditions
+           loadable-for-bigns-up-to-length-1000
+           final-correctness-conditions
+           system-correct
+           p-psw-p-state
+           *1*errorp
+           p-data-segment-p-state
+           type-specification
+           area-type-specification
+           TYPE-LST-BIG-ADD-ARRAY
+           type-lst
+           type-tag
+           type-big-add-carry-out
+           type-specification-hack
+           link-tables-length
+           system-initial-state-okp-length-hack)))
+
+(prove-lemma clock-for-concrete-data nil
+             (equal (let ((A '((NAT 246838082)
+                               (NAT 3116233281)
+                               (NAT 42632655)
+                               (NAT 0)))
+                          (B '((NAT 3579363592)
+                            (NAT 3979696680)
+                            (NAT 7693250)
+                            (NAT 0))))
+                      (FM9001-CLOCK (SYSTEM-INITIAL-STATE A B)
+                                    (SYSTEM-INITIAL-STATE-CLOCK A B)))
+                    190))
+                      
+
